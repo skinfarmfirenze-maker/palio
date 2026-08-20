@@ -7476,7 +7476,7 @@ function playerThirdLapHandicap(horse) {
 // Il tetto rigido dei 30 (1°–2°) è garantito a parte, dal clamp in updateRace.
 const LEADER_GAP_SOFT = 12;
 const LEADER_GAP_MAX = 30;
-const LEADER_BRAKE_FLOOR = 0.6;
+const LEADER_BRAKE_FLOOR = 0.85;   // molla del leader MOLTO morbida (max −15%): quasi impercettibile. Il muro rigido a GAP_MAX resta il vero tappo anti-fuga.
 // HANDICAP DI POSIZIONE del GIOCATORE: se è 2°, 3°, 4°, 5° o 6° la velocità cala
 // di 0,02 per posizione (2°=−0,02 · 3°=−0,04 · 4°=−0,06 · 5°=−0,08 · 6°=−0,10).
 // 1° e dal 7° in giù: nessuna penalità. Posizione = quanti cavalli hanno più
