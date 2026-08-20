@@ -7449,7 +7449,7 @@ function tierSpeedMult(horse) { return TIER_SPEED[horse.horseTier] || 1; }
 // Frazione di palii in cui il giocatore è "favorito" (handicap tolti). Regola il
 // win rate MEDIO verso ~4%: alzala per farlo vincere più spesso, abbassala per meno.
 // (È la manopola da tarare sui dati reali del win rate in admin.)
-const WIN_FAVORE_PROB = 0.04;   // tasso medio di vittoria del giocatore ≈ 4% (richiesto)
+const WIN_FAVORE_PROB = 0.02;   // tasso medio di vittoria del giocatore ≈ 2% (richiesto)
 function playerThirdLapHandicap(horse) {
   if (!horse.player) return 1;
   if (state.playerFavored) return 1.03;   // giornata di favore: niente handicap + un filo di spinta
