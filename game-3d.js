@@ -7477,6 +7477,21 @@ function playerThirdLapHandicap(horse) {
 const LEADER_GAP_SOFT = 12;
 const LEADER_GAP_MAX = 30;
 const LEADER_BRAKE_FLOOR = 0.6;
+// HANDICAP DI POSIZIONE del GIOCATORE: se è 2°, 3°, 4°, 5° o 6° la velocità cala
+// di 0,02 per posizione (2°=−0,02 · 3°=−0,04 · 4°=−0,06 · 5°=−0,08 · 6°=−0,10).
+// 1° e dal 7° in giù: nessuna penalità. Posizione = quanti cavalli hanno più
+// progress (distanza cumulativa). Silenzioso, come gli altri handicap.
+function playerPositionHandicap(player) {
+  if (!player || state.mode !== "race") return 1;
+  let ahead = 0;
+  for (const h of state.horses) {
+    if (h === player || h.isRincorsa) continue;
+    if ((h.progress || 0) > (player.progress || 0)) ahead += 1;
+  }
+  const pos = ahead + 1;                       // 1 = primo
+  if (pos < 2 || pos > 6) return 1;
+  return 1 - 0.02 * (pos - 1);                 // 2°:0.98 … 6°:0.90
+}
 function leaderBrakeMult(horse) {
   if (!horse) return 1;
   let refProg = null;                                          // posta della Contrada che insegue
@@ -10584,7 +10599,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player);
+  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
