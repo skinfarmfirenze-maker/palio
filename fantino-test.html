@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>Fantino del Palio — banco di prova</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;font-family:system-ui}
+  html,body{background:#bfa982}
+  #hud{position:fixed;top:6px;left:8px;color:#fff;background:#0009;padding:5px 9px;border-radius:5px;font-size:12px;z-index:9}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="hud">…</div>
+<script type="module">
+import * as THREE from "three";
+import { buildFantino, CONTRADE } from "./fantino-lab.js";
+
+const qp = new URLSearchParams(location.search);
+const contradaId = qp.get("c") || "leocorno";
+const contrada = CONTRADE.find((c) => c.id === contradaId) || CONTRADE[7];
+const ZOOM = parseFloat(qp.get("zoom") || "1");
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.setScissorTest(true);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfa982);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb99a72, 1.9));
+const sun = new THREE.DirectionalLight(0xfff4dc, 1.5);
+sun.position.set(3, 7, 4); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.left = -3; sun.shadow.camera.right = 3;
+sun.shadow.camera.top = 4; sun.shadow.camera.bottom = 0;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xe8ddff, 0.55); fill.position.set(-4, 2.5, -3); scene.add(fill);
+const front = new THREE.DirectionalLight(0xffffff, 0.5); front.position.set(0.5, 1.2, 5); scene.add(front);
+
+const floor = new THREE.Mesh(new THREE.CircleGeometry(6, 48), new THREE.MeshStandardMaterial({ color: 0xd9bd83, roughness: 1 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = 1.36; floor.receiveShadow = true; scene.add(floor);
+
+const fantino = buildFantino(contrada, {});
+scene.add(fantino);
+window.__f = fantino; window.__render = () => render();
+
+// Riferimento: il "dorso" del cavallo, per vedere se la seduta è credibile.
+if (qp.get("dorso") !== "0") {
+  // CAVALLO VERO: il GLB del gioco (assets/horses/horse_master.glb), portato nello
+  // spazio del modello con l'INVERSA esatta della catena d'integrazione di
+  // game-3d.js — pivot (scala da bbox ×2, centrato, piedi a trimY −0.75), jockey
+  // spostato di (fantinoSu+trimY, fantinoAvanti)=( −0.27, +0.30 ), wrap fantino
+  // ×1.8 ancorato a y1.78 z+0.20. Così qui si vede ESATTAMENTE il gioco.
+  const { GLTFLoader } = await import("https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js");
+  new GLTFLoader().load("assets/horses/horse_master.glb", (gltf) => {
+    const inner = gltf.scene;
+    inner.traverse((o) => {
+      if (o.isMesh) {
+        o.material = o.material.clone();
+        if (o.material.color) o.material.color.set(0x6b4a2a);
+        if ("metalness" in o.material) o.material.metalness = 0;
+        if ("roughness" in o.material) o.material.roughness = 1.0;
+        o.receiveShadow = true;
+      }
+    });
+    const size = new THREE.Box3().setFromObject(inner).getSize(new THREE.Vector3());
+    const scala = (1.7 / Math.max(1, size.y)) * 2;          // HORSE_GLB.altezzaTarget × boost
+    const pivot = new THREE.Group();
+    pivot.scale.setScalar(scala);
+    pivot.add(inner);
+    pivot.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(pivot);
+    const c = bb.getCenter(new THREE.Vector3());
+    pivot.position.set(-c.x, -bb.min.y - 0.75, -c.z);       // trimY −0.75, come in gioco
+    // inversa del wrap fantino: horse-space → spazio del modello
+    const inv = new THREE.Group();
+    inv.scale.setScalar(1 / 1.8);
+    inv.position.set(0, (1.8 * 1.78 - 1.51) / 1.8, -0.50 / 1.8);
+    inv.add(pivot);
+    scene.add(inv);
+    render();
+  });
+}
+
+// Quattro viste in un unico canvas: fronte, tre quarti, profilo, retro.
+const VISTE = [
+  { nome: "fronte", ang: 0 },
+  { nome: "3/4", ang: -0.85 },
+  { nome: "profilo", ang: -Math.PI / 2 },
+  { nome: "retro", ang: Math.PI },
+];
+const VISO = qp.get("viso") === "1";
+let target = VISO ? new THREE.Vector3(0, 2.36, 0.25) : new THREE.Vector3(0, 2.06, 0.06);
+if (qp.get("mira")) { const [mx, my, mz] = qp.get("mira").split(",").map(Number); target = new THREE.Vector3(mx, my, mz); }
+const RAG = 1.65 / ZOOM;
+
+function render() {
+  const w = innerWidth / 2, h = innerHeight / 2;
+  VISTE.forEach((v, i) => {
+    const x = (i % 2) * w, y = innerHeight - (Math.floor(i / 2) + 1) * h;
+    renderer.setViewport(x, y, w, h);
+    renderer.setScissor(x, y, w, h);
+    const cam = new THREE.PerspectiveCamera(30, w / h, 0.1, 60);
+    cam.position.set(target.x + Math.sin(v.ang) * RAG, target.y + (VISO ? 0.03 : 0.22), target.z + Math.cos(v.ang) * RAG);
+    cam.lookAt(target);
+    renderer.render(scene, cam);
+  });
+}
+render();
+import("./fantino-lab.js").then((m) => { m.texturaStemma.onEmblema = () => render(); });
+setTimeout(render, 900); setTimeout(render, 2000);
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); render(); });
+document.getElementById("hud").textContent =
+  `${contrada.name} — fronte / tre quarti / profilo / retro`;
+</script>
+</body>
+</html>

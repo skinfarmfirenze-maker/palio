@@ -1,0 +1,24 @@
+# === Palio — .gitignore ===
+
+# Dipendenze / build
+node_modules/
+.next/
+
+# Vercel + segreti (token, variabili d'ambiente)
+.vercel
+.env*
+
+# 🔴 DATI UTENTE / BACKUP — MAI su GitHub (account, pwHash, dati economici)
+full-db-backup.json
+albo-backup.json
+*backup*.json
+*-backup.json
+
+# Materiale di lavoro / dev (non serve nel repo pubblicabile)
+INFO/
+*.bak
+game-3d.js.bak
+
+# Sistema
+.DS_Store
+.Rhistory

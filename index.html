@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Palio 3D — La Corsa in Piazza</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="sceneRoot"></div>
+
+    <!-- Schermata menu -->
+    <section id="screenMenu" class="screen active">
+      <div class="panel menu-panel">
+        <p class="kicker">Prototipo 3D</p>
+        <h1>Palio della Piazza</h1>
+        <p class="lede">
+          Una corsa equestre ispirata all'atmosfera storica senese.
+          Scegli la tua contrada fittizia e conquista la Mossa.
+        </p>
+        <div class="menu-actions">
+          <button id="playButton" class="btn btn-primary" type="button">Gioca</button>
+          <button id="alboButton" class="btn btn-ghost" type="button">🏆 Albo delle Vittorie</button>
+        </div>
+        <div class="controls-hint">
+          <div class="ctrl-row"><strong>Mossa:</strong> <kbd>A</kbd>/<kbd>L</kbd> gira &nbsp; <kbd>M</kbd>/<kbd>Spazio</kbd> velocità (1=indietro · 2=fermo · 3-5 avanti)</div>
+          <div class="ctrl-row"><strong>Gara:</strong> <kbd>M</kbd> accelera &nbsp; <kbd>Spazio</kbd> rallenta &nbsp; <kbd>A</kbd>/<kbd>L</kbd> sterza</div>
+          <div class="ctrl-row"><kbd>Invio</kbd> avanti/salta &nbsp; <kbd>↑</kbd><kbd>↓</kbd> scegli &nbsp; <kbd>C</kbd> cambia camera</div>
+          <div class="ctrl-row"><strong>Controller:</strong> levetta sx guida · <kbd>X</kbd> marcia su / Invio · <kbd>O</kbd> marcia giù · levetta dx di lato</div>
+        </div>
+      </div>
+      <!-- Sostegno al gioco: sempre in basso a destra sulla home. -->
+      <div class="home-support">
+        <button id="donateBtn" class="support-btn support-donate" type="button">💛 Dona per migliorare il gioco</button>
+        <button id="suggestBtn" class="support-btn support-suggest" type="button">💡 Dacci un consiglio per migliorare il gioco</button>
+      </div>
+    </section>
+
+    <!-- Schermata selezione contrada -->
+    <section id="screenSelect" class="screen">
+      <div class="panel select-panel">
+        <h2>Scegli la tua contrada</h2>
+        <div id="contradaGrid" class="contrada-grid"></div>
+        <div class="select-actions">
+          <button id="backToMenuButton" class="btn btn-ghost" type="button">Indietro</button>
+          <button id="startMossaButton" class="btn btn-primary" type="button">và... e torna vincitore</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Schermata risultati -->
+    <section id="screenResults" class="screen">
+      <div class="panel results-panel">
+        <div id="winnerBanner" class="winner-banner">
+          <div class="winner-drappellone" id="winnerDrappellone">
+            <span class="winner-flag" id="winnerFlag"></span>
+          </div>
+          <div class="winner-text">
+            <div class="winner-kicker">Vince il Palio</div>
+            <div class="winner-name" id="winnerName"></div>
+            <div class="winner-prize">Si aggiudica il drappellone</div>
+          </div>
+        </div>
+        <h2>Ordine d'arrivo</h2>
+        <p id="resultSummary" class="result-summary"></p>
+        <ol id="finalRanking" class="final-ranking"></ol>
+        <div class="select-actions">
+          <button id="changeContradaButton" class="btn btn-ghost" type="button">Cambia contrada</button>
+          <button id="replayButton" class="btn btn-primary" type="button">Corri di nuovo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cornice della mini-cam rincorsa: l'interno è trasparente, Three.js
+         disegna la seconda camera direttamente sul canvas nella stessa area. -->
+    <div id="rincorsaWatcher" class="rincorsa-watcher">
+      <div class="rw-cam-label">◉ RINCORSA &nbsp;<span id="rwName"></span></div>
+      <div class="rw-bottom-bar">
+        <span class="rw-status" id="rwStatus"></span>
+        <span class="rw-timer" id="rwTimer"></span>
+      </div>
+    </div>
+
+    <!-- HUD di gara -->
+    <div id="hud" class="hud">
+      <div class="hud-corner hud-top-left">
+        <div class="hud-label">Posizione</div>
+        <div class="hud-value" id="hudRank">1/10</div>
+      </div>
+      <div class="hud-corner hud-top-right">
+        <div class="hud-label">Giro</div>
+        <div class="hud-value" id="hudLap">1/3</div>
+      </div>
+      <div class="hud-corner hud-bottom-left">
+        <div class="hud-label">Andatura</div>
+        <div class="hud-value" id="hudSpeed">3/5</div>
+        <div class="hud-label hud-sub">Stamina <span id="hudStaminaText"></span></div>
+        <div class="bar bar-stamina"><div class="bar-fill" id="staminaFill"></div></div>
+        <div class="hud-label hud-sub">Nervosismo <span id="hudRiskText"></span></div>
+        <div class="bar bar-risk"><div class="bar-fill" id="riskFill"></div></div>
+        <div class="hud-label hud-sub">Nerbate <span id="hudNerbateText"></span></div>
+        <div class="nerbate-pips" id="nerbatePips">
+          <span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span><span class="pip"></span>
+        </div>
+      </div>
+      <ol id="leaderboard" class="leaderboard"></ol>
+      <button id="camButton" class="cam-button" type="button" aria-label="Cambia camera">C</button>
+      <div id="raceMessage" class="race-message"></div>
+    </div>
+
+    <div id="speedVignette" class="speed-vignette"></div>
+
+    <!-- HUD della rincorsa (visibile solo se il giocatore è di rincorsa) -->
+    <div id="rincorsaHud" class="rincorsa-hud">
+      <div id="rincorsaStatus" class="rincorsa-status aspetta">ASPETTA</div>
+    </div>
+
+    <!-- Mini-mappa di gara -->
+    <canvas id="minimap" width="88" height="88"></canvas>
+
+    <!-- Controlli touch (telefono/iPad, solo orizzontale) -->
+    <!-- SINISTRA (croce di 4 frecce): ▲▼ andatura · ◀▶ scorrimento laterale (spariscono in corsa).
+         DESTRA: ◀▶ CURVA (sterzo, usabile anche in corsa) + tasto NERBO sopra. -->
+    <div id="touchControls" class="touch-controls">
+      <button class="touch-btn touch-gait touch-gait-up" type="button" data-touch="gaitUp" aria-label="Aumenta andatura">▲</button>
+      <button class="touch-btn touch-gait touch-gait-down" type="button" data-touch="gaitDown" aria-label="Riduci andatura">▼</button>
+      <button class="touch-btn touch-lat touch-lat-left" type="button" data-touch="latLeft" aria-label="Scorri a sinistra">◀</button>
+      <button class="touch-btn touch-lat touch-lat-right" type="button" data-touch="latRight" aria-label="Scorri a destra">▶</button>
+      <button class="touch-btn touch-steer touch-steer-left" type="button" data-touch="left" aria-label="Curva a sinistra">◀</button>
+      <button class="touch-btn touch-steer touch-steer-right" type="button" data-touch="right" aria-label="Curva a destra">▶</button>
+      <button class="touch-btn touch-nerb" type="button" data-touch="nerb" aria-label="Nerbata">NERBO</button>
+    </div>
+
+    <!-- Import map: gli addon di Three (GLTFLoader, SkeletonUtils) importano il
+         modulo col nome nudo "three" — qui lo si risolve sulla STESSA URL già
+         usata da game-3d.js, così esiste una sola istanza del motore. -->
+    <script type="importmap">
+      { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+    </script>
+    <!-- Import dinamico con cache-busting: ogni ricarica prende SEMPRE l'ultima
+         versione di game-3d.js (niente più codice vecchio in cache). -->
+    <script type="module">
+      import("./game-3d.js?v=" + Date.now());
+    </script>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fantino GLB — banco di prova</title>
+<style>
+  html,body{margin:0;height:100%;background:#d8c9a8;overflow:hidden;font-family:system-ui}
+  #info{position:fixed;top:8px;left:8px;background:#0008;color:#fff;padding:6px 10px;border-radius:6px;font-size:12px;white-space:pre;z-index:9}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="info">carico…</div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js";
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xd8c9a8);
+const camera = new THREE.PerspectiveCamera(40, innerWidth/innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x664422, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2d0, 1.6); sun.position.set(3,6,4); scene.add(sun);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4,40), new THREE.MeshStandardMaterial({color:0xcaa96f}));
+floor.rotation.x = -Math.PI/2; scene.add(floor);
+
+const qp = new URLSearchParams(location.search);
+const RAW = qp.get("raw") === "1";           // ?raw=1 → nessuna posa/ricolora, modello com'è
+
+// COLORI DI PROVA (Istrice: rosso/blu/bianco)
+const COLS = { primario:"#e23b3b", secondario:"#1b4fa0", liste:"#f2ead6", casco:"#e23b3b" };
+// Ricolora PER NOME MATERIALE (il modello Quaternius ha materiali separati).
+// Capelli scuri (naturali) sotto lo ZUCCHINO (calotta contrada aggiunta a parte).
+const MAT_COL = { Shirt:COLS.primario, UnderShirt:COLS.secondario, Detail:COLS.liste, Pants:COLS.secondario, Hair:"#2b2019" };
+
+// CAVALLO GLB (come nel gioco) per la seduta reale.
+let horseBackY = 2.0, horseReady=false;
+new GLTFLoader().load("./assets/horses/horse_master.glb", (g)=>{
+  const h=g.scene;
+  const box0=new THREE.Box3().setFromObject(h); const sz=box0.getSize(new THREE.Vector3());
+  const scala=(1.7/Math.max(1,sz.y))*2;
+  const piv=new THREE.Group(); piv.scale.setScalar(scala); piv.rotation.y=0; piv.add(h);
+  piv.updateMatrixWorld(true);
+  const bb=new THREE.Box3().setFromObject(piv); const c=bb.getCenter(new THREE.Vector3());
+  piv.position.set(-c.x, -bb.min.y, -c.z);
+  const qpm = new URLSearchParams(location.search).get("manto") || "#6b4a2a";
+  h.traverse(o=>{ if(o.isMesh){ o.material=o.material.clone(); o.material.metalness=0; o.material.roughness=0.85; if(o.material.color) o.material.color.set(qpm); }});
+  scene.add(piv);
+  horseBackY = (bb.max.y - bb.min.y) * 0.52; horseReady=true;
+  if(window._seatJockey) window._seatJockey(horseBackY);
+});
+
+// POSA (ossa KayKit: il nome ha il PUNTO — UpperArm.L, non UpperArmL).
+const POSE = {
+  "Torso":    [ 0.42, 0, 0],
+  "Abdomen":  [ 0.22, 0, 0],
+  "Neck":     [-0.25, 0, 0],
+  "Head":     [-0.15, 0, 0],
+  "UpperLeg.L":[ 0, 0, 1.4], "UpperLeg.R":[ 0, 0,-1.4],
+  "LowerLeg.L":[ 0, 0,-1.6], "LowerLeg.R":[ 0, 0, 1.6],
+  // Braccia TESE IN AVANTI verso la testa del cavallo (come reggesse le briglie):
+  // spalla giù+avanti, gomito quasi dritto.
+  "UpperArm.L":[ 0,-0.9,-1.15],  "UpperArm.R":[ 0, 0.9, 1.15],
+  "LowerArm.L":[ 0,-0.15, 0],    "LowerArm.R":[ 0, 0.15, 0],
+};
+
+new GLTFLoader().load("./assets/jockeys/jockey_master.glb", (gltf)=>{
+  const model = gltf.scene;
+  if(!RAW){
+    // ricolora per nome materiale
+    model.traverse(o=>{
+      if(!o.isMesh) return;
+      const mats = Array.isArray(o.material)?o.material:[o.material];
+      mats.forEach(m=>{ if(m && m.name && MAT_COL[m.name] && m.color) m.color.set(MAT_COL[m.name]); });
+    });
+    // posa
+    model.traverse(o=>{ if(o.isBone && POSE[o.name]){ const p=POSE[o.name]; o.rotation.set(p[0],p[1],p[2]); }});
+    // ZUCCHINO: sfera aggiunta al MODELLO (non all'osso: le ossa hanno scala enorme)
+    // alla posizione-mondo della testa, dimensionata sull'altezza del modello.
+    // ZUCCHINO: calotta nei colori contrada che COPRE i capelli. Aggiunta al MODELLO
+    // (non all'osso: scala enorme) alla posizione LOCALE della testa (misurata).
+    let head=null; model.traverse(o=>{ if(o.name==="Head") head=o; });
+    if(head){
+      model.updateMatrixWorld(true);
+      const hp = model.worldToLocal(head.getWorldPosition(new THREE.Vector3()));  // ~ (0,2,0.08)
+      const zg = new THREE.Group(); zg.position.set(hp.x, hp.y+0.30, hp.z+0.06); model.add(zg);
+      const R = 0.48;   // calotta che copre la SOMMITÀ della testa (cupola aperta sotto)
+      const dome = new THREE.Mesh(new THREE.SphereGeometry(R,20,16,0,Math.PI*2,0,Math.PI*0.68),
+        new THREE.MeshStandardMaterial({color:COLS.casco, roughness:0.5}));
+      dome.scale.set(1,0.98,1.06); zg.add(dome);
+      // lista sulla calotta (colore liste), dal davanti alla nuca
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(R*0.26,0.05,R*2.05),
+        new THREE.MeshStandardMaterial({color:COLS.liste})); stripe.position.y=R*0.02; zg.add(stripe);
+    }
+    // NERBO nella mano SINISTRA (FistL): frusta scura. Aggiunto al MODELLO alla pos locale.
+    let fistL=null; model.traverse(o=>{ if(o.name==="FistL") fistL=o; });
+    if(fistL){
+      model.updateMatrixWorld(true);
+      const fp = model.worldToLocal(fistL.getWorldPosition(new THREE.Vector3()));
+      const ng = new THREE.Group(); ng.position.copy(fp); model.add(ng);
+      const nerbo = new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.03,1.0,7),
+        new THREE.MeshStandardMaterial({color:0x1e130c, roughness:0.85}));
+      nerbo.position.set(0,-0.4,0.1); nerbo.rotation.x=0.5; ng.add(nerbo);
+    }
+  }
+
+  // scala + seduta
+  const box = new THREE.Box3().setFromObject(model);
+  const size = box.getSize(new THREE.Vector3());
+  const scala = 1.7/size.y;
+  const pivot = new THREE.Group();
+  pivot.scale.setScalar(scala);
+  pivot.add(model);
+  pivot.updateMatrixWorld(true);
+  const bb = new THREE.Box3().setFromObject(pivot);
+  const c = bb.getCenter(new THREE.Vector3());
+  const seatDrop = RAW?0:0.15, seatFwd = RAW?0:0.45;   // 0.15 = alzato (prima 0.40 sprofondava)
+  const seat = (backY) => pivot.position.set(-c.x, -bb.min.y + backY - seatDrop, -c.z + seatFwd);
+  window._seatJockey = seat;
+  seat(RAW ? 0 : horseBackY);
+  scene.add(pivot);
+
+  document.getElementById("info").textContent = "modello caricato\nmateriali: "+[...new Set([].concat(...(function(){const a=[];model.traverse(o=>{if(o.isMesh){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>a.push(m&&m.name))}});return a;})()))].join(", ")+"\nscala: "+scala.toFixed(4);
+  window._model = model;
+}, undefined, (e)=>{ document.getElementById("info").textContent = "ERRORE: "+(e && e.message); });
+
+const angParam = qp.get("ang");
+let t = angParam !== null ? (parseFloat(angParam) * Math.PI / 180) : 0;
+function loop(){
+  if (angParam === null) t += 0.005;
+  const r=6.5;
+  camera.position.set(Math.sin(t)*r, 2.4, Math.cos(t)*r);
+  camera.lookAt(0,1.6,0);
+  renderer.render(scene,camera);
+  requestAnimationFrame(loop);
+}
+loop();
+addEventListener("resize",()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+</script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>Le 17 livree — fantini del Palio</title>
+<style>
+  html,body{margin:0;height:100%;background:#bfa982;overflow:hidden;font-family:system-ui}
+  #eti{position:fixed;inset:0;pointer-events:none;z-index:5}
+  .n{position:absolute;color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px #000a;transform:translateX(-50%)}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="eti"></div>
+<script type="module">
+import * as THREE from "three";
+import { buildFantino, CONTRADE } from "./fantino-lab.js";
+
+const qp = new URLSearchParams(location.search);
+const RETRO = qp.get("retro") === "1";   // ?retro=1 → tutte viste da dietro (stemmi)
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setScissorTest(true);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfa982);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb99a72, 1.9));
+const sun = new THREE.DirectionalLight(0xfff4dc, 1.5); sun.position.set(3, 7, 4); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xe8ddff, 0.55); fill.position.set(-4, 2.5, -3); scene.add(fill);
+const front = new THREE.DirectionalLight(0xffffff, 0.5); front.position.set(0.5, 1.2, 5); scene.add(front);
+
+// Un fantino per Contrada, ciascuno nella sua cella.
+const fantini = CONTRADE.map((c) => {
+  const f = buildFantino(c, {});
+  f.visible = false;
+  scene.add(f);
+  return f;
+});
+
+const COL = 6, RIG = 3;
+const target = new THREE.Vector3(0, 2.06, 0.06);
+const eti = document.getElementById("eti");
+
+function render() {
+  const w = innerWidth / COL, h = innerHeight / RIG;
+  eti.innerHTML = "";
+  fantini.forEach((f, i) => {
+    const cx = i % COL, cy = Math.floor(i / COL);
+    if (cy >= RIG) return;
+    const x = cx * w, y = innerHeight - (cy + 1) * h;
+    renderer.setViewport(x, y, w, h);
+    renderer.setScissor(x, y, w, h);
+    fantini.forEach((o) => { o.visible = false; });
+    f.visible = true;
+    const ang = RETRO ? Math.PI : -0.7;
+    const cam = new THREE.PerspectiveCamera(30, w / h, 0.1, 60);
+    cam.position.set(target.x + Math.sin(ang) * 1.55, target.y + 0.18, target.z + Math.cos(ang) * 1.55);
+    cam.lookAt(target);
+    renderer.render(scene, cam);
+    const lab = document.createElement("div");
+    lab.className = "n";
+    lab.style.left = `${x + w / 2}px`;
+    lab.style.top = `${cy * h + 8}px`;
+    lab.textContent = CONTRADE[i].name;
+    eti.appendChild(lab);
+  });
+}
+render();
+import("./fantino-lab.js").then((m) => { m.texturaStemma.onEmblema = () => render(); });
+setTimeout(render, 900); setTimeout(render, 2000);
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); render(); });
+</script>
+</body>
+</html>

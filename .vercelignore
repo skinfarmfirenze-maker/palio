@@ -1,0 +1,32 @@
+# File da NON pubblicare su Vercel (restano solo in locale).
+# Il sito è statico: servono soltanto index.html, game-3d.js, style.css.
+
+# Dati privati — NON devono finire online
+*.xlsx
+Lead Milano - Dermatologi e Medicina Estetica.xlsx
+
+# Materiale di lavoro / prompt / backup
+*.md
+*.bak
+game-3d.js.bak
+.Rhistory
+.DS_Store
+node_modules
+
+# Token locale creato dal link Vercel — mai online
+.env*
+.vercel
+INFO/
+
+# Script di deploy — non online
+*.sh
+
+# Stemmi Contrada: pubblicazione APPROVATA dall'utente 2026-08-20 (rischio suo).
+# fantino-lab.js e assets/stemmi/ SERVONO al gioco → si pubblicano.
+# Restano escluse solo le pagine di PROVA (dev-only):
+fantino-test.html
+fantini-tutti.html
+jockey-q-test.html
+jockey-test.html
+# I sorgenti delle bandiere (materiale di lavoro) NON servono online:
+assets/stemmi/bandiere-src/
