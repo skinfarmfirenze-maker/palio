@@ -7477,6 +7477,7 @@ function playerThirdLapHandicap(horse) {
 const LEADER_GAP_SOFT = 12;
 const LEADER_GAP_MAX = 30;
 const LEADER_BRAKE_FLOOR = 0.85;   // molla del leader MOLTO morbida (max −15%): quasi impercettibile. Il muro rigido a GAP_MAX resta il vero tappo anti-fuga.
+const LEADER_BRAKE_SOFT = 3;       // la molla del leader parte GIÀ da un piccolo vantaggio e sale gradualissima fino a GAP_MAX → nessun "inchioda" a inizio 2° giro (soglia SUA, non tocca la spinta di coda).
 // HANDICAP DI POSIZIONE del GIOCATORE: 1°=−0,04 · 2°=−0,04 · 3°=−0,02 · 4°=−0,02.
 // Dal 5° in giù: nessuna penalità. Posizione = quanti cavalli hanno più progress
 // (distanza cumulativa). Silenzioso.
@@ -7500,8 +7501,8 @@ function leaderBrakeMult(horse) {
   else return 1;                                               // dal 3° in giù: nessun freno
   if (refProg == null) return 1;
   const gap = horse.progress - refProg;
-  if (gap <= LEADER_GAP_SOFT) return 1;
-  const t = clamp((gap - LEADER_GAP_SOFT) / (LEADER_GAP_MAX - LEADER_GAP_SOFT), 0, 1);
+  if (gap <= LEADER_BRAKE_SOFT) return 1;
+  const t = clamp((gap - LEADER_BRAKE_SOFT) / (LEADER_GAP_MAX - LEADER_BRAKE_SOFT), 0, 1);
   return lerp(1, LEADER_BRAKE_FLOOR, t);
 }
 
