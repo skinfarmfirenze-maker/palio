@@ -11118,7 +11118,7 @@ function updateRace(dt, time) {
     // scatti. Il distacco può superare i 30 in coda, ma senza teletrasporti.
   }
 
-  // ── LIMITE SORPASSI: max 3 sorpassi (e 3 subìti) per GIRO ──────────────────
+  // ── LIMITE SORPASSI: max 2 sorpassi (e 2 subìti) per GIRO ──────────────────
   // Realismo: sul rettilineo NON si possono passare 4-5 Contrade tutte d'un fiato.
   // A ogni inizio giro si fotografa la posizione in classifica; chi ha già
   // guadagnato/perso 3 posizioni nel giro non passa (né si fa passare) oltre:
@@ -11146,7 +11146,7 @@ function updateRace(dt, time) {
       if (!bloccabile(A) || !bloccabile(B)) continue;
       const bGained = startIdx[B.id] - (i + 1);       // posizioni guadagnate da B nel giro
       const aLost = i - startIdx[A.id];               // posizioni perse da A nel giro
-      if (bGained >= 3 || aLost >= 3) {               // B ha già passato 3, oppure A ne ha già persi 3
+      if (bGained >= 2 || aLost >= 2) {               // B ha già passato 2, oppure A ne ha già persi 2
         const cap = A.progress - MARGINE;             // B resta in scia ad A, non lo passa
         if (B.progress > cap) { B.progress = cap; placeHorse(B, time); }
       }
