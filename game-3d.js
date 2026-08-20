@@ -12994,6 +12994,7 @@ const STAT_FINAL_JOCKEY = {
   // "Bruschelli" = Trecciolino (Gigi/Luigi Bruschelli), come indicato dall'utente.
   trecciolino: { mossa: 4, terzo: 4, curva: 3, difesa: 2 },
   cianchino: { curva: 2, fedelta: 2, terzo: 4 },
+  aceto: { mossa: 3 },   // −1 sulla mossa (era 4)
 };
 const STAT_FINAL_HORSE = {};
 function applyFinalCorrections() {
