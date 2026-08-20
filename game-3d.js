@@ -4031,8 +4031,11 @@ function recordPalioRun() {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((srv) => {
-        if (srv && !srv._error && !srv._nostore && !alboVuoto(srv)) {   // ignora le risposte del backend VUOTO
-          globalAlbo = normalizeAlbo(srv);
+        // Risposta SNELLA { ok, totalePalii }: aggiorna SOLO il totale dal server,
+        // conservando contrada/cavallo/fantino locali (non riletti per risparmiare comandi).
+        if (srv && srv.ok && typeof srv.totalePalii === "number") {
+          globalAlbo = normalizeAlbo(globalAlbo || {});
+          globalAlbo.totalePalii = srv.totalePalii;
           try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
         }
       })
@@ -4045,22 +4048,32 @@ function recordPalioRun() {
       localStorage.setItem("palio.playerRuns", String(n));
     }
   } catch (e) { /* niente */ }
-  // +1 al conteggio palii dell'ACCOUNT loggato (per la sezione admin).
+  // +1 al conteggio palii dell'ACCOUNT (per l'admin). BATCH: il conteggio LOCALE
+  // sale subito di 1 (profilo sempre giusto), ma si INVIA al server solo ogni 5
+  // palii — un HINCRBY con n=5 invece di 5 chiamate → 1/5 dei comandi. Se l'invio
+  // fallisce (offline) il pending viene ripristinato e riparte al prossimo giro.
   try {
     const acc = getAccount();
     if (acc && acc.email) {
-      fetch(ACCOUNT_API, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "palio", email: acc.email }),
-      })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((srv) => {
-          if (srv && srv.ok && typeof srv.palii === "number") {
-            acc.palii = srv.palii;
-            setAccount(acc);   // aggiorna la copia locale del conteggio
-          }
+      acc.palii = (Number(acc.palii) || 0) + 1;
+      setAccount(acc);
+      let pend = (parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0) + 1;
+      localStorage.setItem("palio.acctPending", String(pend));
+      if (pend >= 5) {
+        const n = pend;
+        localStorage.setItem("palio.acctPending", "0");
+        fetch(ACCOUNT_API, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "palio", email: acc.email, n }),
         })
-        .catch(() => { /* offline */ });
+          .then((r) => (r.ok ? r.json() : null))
+          .then((srv) => {
+            if (srv && srv.ok && typeof srv.palii === "number") { acc.palii = srv.palii; setAccount(acc); }
+          })
+          .catch(() => {   // offline: rimetti i palii nel pending, si riproveranno
+            try { const cur = parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0; localStorage.setItem("palio.acctPending", String(cur + n)); } catch (e) { /* niente */ }
+          });
+      }
     }
   } catch (e) { /* niente */ }
 }
@@ -4072,7 +4085,20 @@ function loadVictoryAlbo() {
 }
 // Scarica l'albo GLOBALE dal server e lo rende la fonte di verità (mirror in
 // localStorage come cache/fallback). Silenzioso se offline o store non configurato.
-async function fetchGlobalAlbo() {
+async function fetchGlobalAlbo(force) {
+  // CACHE 45s per-device (anche fra reload): l'albo GET faceva 4 letture a OGNI
+  // caricamento pagina; con i giocatori che rientrano in massa e i redeploy che
+  // ricaricano tutti, era il grosso delle letture. Il contatore intanto sale già
+  // in locale a ogni palio, quindi 45s di ritardo sul sync globale vanno benissimo.
+  try {
+    if (!force) {
+      const ts = parseInt(localStorage.getItem("palio.alboTs") || "0", 10) || 0;
+      if (Date.now() - ts < 45000) {
+        const a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY));
+        if (a && typeof a === "object") { globalAlbo = normalizeAlbo(a); return globalAlbo; }
+      }
+    }
+  } catch (e) { /* cache illeggibile: si legge dal server */ }
   try {
     const res = await fetch(ALBO_API, { cache: "no-store" });
     if (!res.ok) return null;
@@ -4080,7 +4106,7 @@ async function fetchGlobalAlbo() {
     if (!raw || raw._nostore || raw._error) return null;   // store non pronto: resta sul locale
     const a = normalizeAlbo(raw);
     globalAlbo = a;
-    try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(a)); } catch (e) { /* niente */ }
+    try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(a)); localStorage.setItem("palio.alboTs", String(Date.now())); } catch (e) { /* niente */ }
     return a;
   } catch (e) { return null; }   // niente rete/API: si resta sul fallback locale
 }
@@ -4105,8 +4131,13 @@ function recordVictoryToAlbo(winner) {
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((srv) => {
-        if (srv && !srv._error && !srv._nostore && !alboVuoto(srv)) {   // non farti azzerare dalla replica vuota
-          globalAlbo = normalizeAlbo(srv);
+        // Risposta SNELLA { ok, contrada/cavallo/fantino: {id:nuovoTot} }: fondi SOLO
+        // i campi incrementati, senza rileggere (né azzerare) il resto dell'albo.
+        if (srv && srv.ok) {
+          globalAlbo = normalizeAlbo(globalAlbo || {});
+          ["contrada", "cavallo", "fantino"].forEach((cat) => {
+            if (srv[cat]) Object.keys(srv[cat]).forEach((k) => { globalAlbo[cat][k] = srv[cat][k]; });
+          });
           try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
         }
       })
@@ -4136,9 +4167,9 @@ function fetchAlboGlobale(cb, tentativi) {
           globalAlbo = normalizeAlbo(srv);
           try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
           if (cb) cb(globalAlbo);
-        } else if (n < 6) { setTimeout(() => fetchAlboGlobale(cb, n + 1), 220); }   // risposta vuota: ritenta
+        } else if (n < 2) { setTimeout(() => fetchAlboGlobale(cb, n + 1), 260); }   // risposta vuota: ritenta poche volte
       })
-      .catch(() => { if (n < 6) setTimeout(() => fetchAlboGlobale(cb, n + 1), 220); });
+      .catch(() => { if (n < 2) setTimeout(() => fetchAlboGlobale(cb, n + 1), 260); });
   } catch (e) { /* niente */ }
 }
 function openAlboVittorie() {
@@ -8349,6 +8380,7 @@ function startMossa(fromTratta = false) {
   state.rincorsaWait = 0;                          // attesa cumulativa della rincorsa
   state.canapiCaos = Math.random() < 0.67;         // ~2/3 dei palii: VERO casino ai canapi nei primi 25s
   state.caosSide = Math.random() < 0.7 ? 1 : -1;   // stringono da un lato: di solito interno (+1)
+  state.caosPushers = [];                          // 2 contrade dal CENTRO che si sfilano dietro e spingono forte (elette pigramente nel casino)
   // Quante volte QUESTO Mossiere è disposto a chiamare "tutti fuori" (TETTO, non
   // obiettivo: se non c'è casino non li chiama affatto). 2 palii su 5 ne concede
   // UNO SOLO → dopo quella prima uscita la rincorsa fianca senza altre chiamate.
@@ -9352,10 +9384,26 @@ function updateMossa(dt, time) {
       // (già cresciuto) le riallinea come sempre. Domina su posta/rivalità/spinte.
       if (state.canapiCaos && tension && (state.rincorsaWait || 0) < 25) {
         const side = state.caosSide || 1;
-        laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
-        const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
-        progGoal = frontLine - back;                                   // vanno anche dietro
-        turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
+        // ELEZIONE PIGRA: le prime 2 AI vicine al CENTRO diventano le "spingitrici".
+        if (!state.caosPushers) state.caosPushers = [];
+        const pl = horse.postLane ?? horse.slotLane ?? horse.mossaLane ?? 0;
+        if (state.caosPushers.length < 2 && Math.abs(pl) < AI_LANE_LIMIT * 0.5
+            && state.caosPushers.indexOf(horse.id) === -1) {
+          state.caosPushers.push(horse.id);
+        }
+        if (state.caosPushers.indexOf(horse.id) !== -1) {
+          // DUE CONTRADE DAL CENTRO: si spostano DECISE sul lato, si SFILANO DIETRO
+          // e SPINGONO FORTE (shove laterale marcato) contro chi trovano.
+          const back = (Math.sin(time * 0.45 + horse.phase * 1.3) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 1.4);
+          progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
+          laneGoal = clamp(side * (AI_LANE_LIMIT - 0.3) + side * (2.8 + agg * 1.2), -AI_LANE_LIMIT - 3, AI_LANE_LIMIT + 3); // spinta forte verso il lato
+          turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
+        } else {
+          laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
+          progGoal = frontLine - back;                                   // vanno anche dietro
+          turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
+        }
       }
 
       // ── NERVOSISMO OLTRE SOGLIA: è QUESTO l'effetto vero dell'agitazione.
@@ -12802,12 +12850,41 @@ function applyAcceptedHorses(map) {
     if (TRATTA_HORSE_NAMES.indexOf(nm) < 0) TRATTA_HORSE_NAMES.push(nm);
   });
 }
-function fetchAcceptedHorses(cb) {
+// ── CACHE elenchi che cambiano di RADO (cavalli/fantini accettati, override stat):
+// stanno uguali finché l'admin non tocca qualcosa, ma prima venivano riletti dal
+// server a OGNI caricamento pagina (~8-10 comandi a load). Ora si leggono al più
+// una volta ogni ACCEPTED_TTL_MS; per il resto si applicano dalla cache locale.
+const ACCEPTED_TTL_MS = 10 * 60 * 1000;   // 10 minuti
+function bustAcceptedCache() {   // l'admin ha cambiato qualcosa → forza riletture fresche
+  ["palio.cache.horses", "palio.cache.jockeys", "palio.cache.overrides"].forEach((k) => {
+    try { localStorage.removeItem(k); } catch (e) { /* niente */ }
+  });
+}
+function cachedAccepted(key, action, extra, applyFn, pick, always, cb) {
+  const done = () => { if (always) always(); if (cb) cb(); };
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const c = JSON.parse(raw);
+      if (c && (Date.now() - (c.t || 0)) < ACCEPTED_TTL_MS) { if (c.d) applyFn(c.d); done(); return; }
+    }
+  } catch (e) { /* cache illeggibile: si rilegge dal server */ }
   fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "acceptedHorses" }) })
+    body: JSON.stringify(Object.assign({ action }, extra || {})) })
     .then((r) => r.json())
-    .then((d) => { if (d && d.ok) applyAcceptedHorses(d.horses || {}); if (cb) cb(); })
-    .catch(() => { if (cb) cb(); });
+    .then((d) => {
+      if (d && d.ok) {
+        const payload = pick(d);
+        try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: payload })); } catch (e) { /* niente */ }
+        applyFn(payload);
+      }
+      done();
+    })
+    .catch(() => { done(); });
+}
+function fetchAcceptedHorses(cb) {
+  cachedAccepted("palio.cache.horses", "acceptedHorses", null,
+    (p) => applyAcceptedHorses(p || {}), (d) => d.horses || {}, null, cb);
 }
 // Fantini proposti e accettati → aggiunti a JOCKEYS con stat deterministiche dal nome.
 // Statistiche FISSE per alcuni fantini accettati (impostate a mano). {m,d,t,f,c,ing}.
@@ -12849,11 +12926,8 @@ function applyAcceptedJockeys(map) {
   });
 }
 function fetchAcceptedJockeys(cb) {
-  fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "accepted", kind: "jockey" }) })
-    .then((r) => r.json())
-    .then((d) => { if (d && d.ok) applyAcceptedJockeys(d.items || {}); if (cb) cb(); })
-    .catch(() => { if (cb) cb(); });
+  cachedAccepted("palio.cache.jockeys", "accepted", { kind: "jockey" },
+    (p) => applyAcceptedJockeys(p || {}), (d) => d.items || {}, null, cb);
 }
 // OVERRIDE STAT decisi dall'admin (approva/cambia i voti): li applica a roster/fantini.
 const HORSE_STAT_MAP = { potenza: "potenza", turn: "turns", turns: "turns", stamina: "stamina", calma: "calma" };
@@ -12894,11 +12968,10 @@ function applyFinalCorrections() {
   });
 }
 function fetchStatOverrides(cb) {
-  fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "statOverrides" }) })
-    .then((r) => r.json())
-    .then((d) => { if (d && d.ok) applyStatOverrides(d); applyFinalCorrections(); if (cb) cb(); })
-    .catch(() => { applyFinalCorrections(); if (cb) cb(); });
+  cachedAccepted("palio.cache.overrides", "statOverrides", null,
+    (p) => applyStatOverrides(p || {}),
+    (d) => ({ horse: d.horse || {}, jockey: d.jockey || {} }),
+    applyFinalCorrections, cb);
 }
 
 // Novità fatte GRAZIE ALLE RICHIESTE dei giocatori (solo migliorie vere e visibili;
@@ -13884,7 +13957,7 @@ function maybeOpenAdmin() {
     fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "proposalDecide", kind, adminKey, name, decision, tier }) })
       .then((r) => r.json())
-      .then((d) => { if (d && d.ok) loadProposals(kind, boxId); })
+      .then((d) => { if (d && d.ok) { bustAcceptedCache(); loadProposals(kind, boxId); } })
       .catch(() => { /* niente */ });
   };
   const loadProposals = (kind, boxId) => {
@@ -13931,7 +14004,7 @@ function maybeOpenAdmin() {
     fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "setStatOverride", adminKey, kind, name, stat, value }) })
       .then((r) => r.json())
-      .then((d) => { if (msgEl) { msgEl.style.color = d && d.ok ? "#9fe3a6" : "#e8896f"; msgEl.textContent = d && d.ok ? "✓" : "errore"; } })
+      .then((d) => { if (d && d.ok) bustAcceptedCache(); if (msgEl) { msgEl.style.color = d && d.ok ? "#9fe3a6" : "#e8896f"; msgEl.textContent = d && d.ok ? "✓" : "errore"; } })
       .catch(() => { if (msgEl) { msgEl.style.color = "#e8896f"; msgEl.textContent = "offline"; } });
   };
   // Riga input+salva per una stat (riusata cavalli/fantini). Mostra il NOSTRO valore
@@ -14059,7 +14132,7 @@ function maybeOpenAdmin() {
           fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "setHorseTier", adminKey, name, tier }) })
             .then((r) => r.json())
-            .then((d) => { if (msgEl) { msgEl.style.color = d && d.ok ? "#9fe3a6" : "#e8896f"; msgEl.textContent = d && d.ok ? "Applicato ✓" : "Errore"; } })
+            .then((d) => { if (d && d.ok) bustAcceptedCache(); if (msgEl) { msgEl.style.color = d && d.ok ? "#9fe3a6" : "#e8896f"; msgEl.textContent = d && d.ok ? "Applicato ✓" : "Errore"; } })
             .catch(() => { if (msgEl) { msgEl.style.color = "#e8896f"; msgEl.textContent = "Offline"; } });
         }));
       })
