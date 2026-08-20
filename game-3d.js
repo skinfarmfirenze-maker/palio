@@ -7441,7 +7441,7 @@ function tierSpeedMult(horse) { return TIER_SPEED[horse.horseTier] || 1; }
 // Frazione di palii in cui il giocatore è "favorito" (handicap tolti). Regola il
 // win rate MEDIO verso ~4%: alzala per farlo vincere più spesso, abbassala per meno.
 // (È la manopola da tarare sui dati reali del win rate in admin.)
-const WIN_FAVORE_PROB = 0.06;
+const WIN_FAVORE_PROB = 0.04;   // tasso medio di vittoria del giocatore ≈ 4% (richiesto)
 function playerThirdLapHandicap(horse) {
   if (!horse.player) return 1;
   if (state.playerFavored) return 1.03;   // giornata di favore: niente handicap + un filo di spinta
@@ -9382,7 +9382,8 @@ function updateMossa(dt, time) {
       // della rincorsa TUTTE stringono da un lato (di solito interno), si vanno
       // addosso, ARRETRANO e si GIRANO completamente. Dopo i 25s il settle qui sopra
       // (già cresciuto) le riallinea come sempre. Domina su posta/rivalità/spinte.
-      if (state.canapiCaos && tension && (state.rincorsaWait || 0) < 25) {
+      if (state.canapiCaos && tension && (state.rincorsaWait || 0) < 25
+          && (state.tuttiFuoriCount || 0) === 0 && (state.falseStartCount || 0) === 0) {   // solo PRIMA del 1° "tutti fuori"/mossa falsa
         const side = state.caosSide || 1;
         // ELEZIONE PIGRA: le prime 2 AI vicine al CENTRO diventano le "spingitrici".
         if (!state.caosPushers) state.caosPushers = [];
