@@ -3585,6 +3585,14 @@ function createEntrants() {
   removeRaceHorses();
   const entrants = pickRaceContrade();
   state.horses = entrants.map((contrada, index) => createHorse(contrada, index, index === 0));
+  // DOPO SAN MARTINO: garantiamo che ALMENO 6 su 10 restino ESTERNE (verso sinistra)
+  // lungo il rettilineo del Palazzo, per poi CHIUDERE STRETTO il Casato. Marchiamo
+  // 7 dei 9 AI come "casatoWide" (mescolati, così cambiano ogni palio).
+  {
+    const ai = state.horses.filter((h) => !h.player);
+    for (let i = ai.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); const t = ai[i]; ai[i] = ai[j]; ai[j] = t; }
+    ai.forEach((h, i) => { h.casatoWide = i < 7; });
+  }
 }
 
 function createDemoHorses() {
@@ -10727,6 +10735,16 @@ function updateAiHorse(horse, dt, time) {
     if (aheadCurve > 0.42 && (horse.cornerPhase ?? 0) >= -0.1) {
       const entryBlend = clamp((aheadCurve - 0.42) / 0.15, 0, 1) * clamp(1 - sample.curve / 0.5, 0, 1);
       lineGoal += -innerSign * 3.1 * entryBlend;
+    }
+    // DOPO SAN MARTINO → CASATO: le contrade "casatoWide" (≥6/10) restano ESTERNE
+    // (verso −innerSign, cioè sinistra) lungo il rettilineo del Palazzo, così poi
+    // possono CHIUDERE STRETTO il Casato (l'apice interno lo fa il resto del sistema,
+    // o la linea registrata di Mario Rossi). Rilascia poco prima del Casato.
+    if (horse.casatoWide && NARROW_READY && horse.progress > SM_OUT + 3 && horse.progress < CAS_IN - 2) {
+      const zin = clamp((horse.progress - (SM_OUT + 3)) / 8, 0, 1);
+      const zout = clamp((CAS_IN - 2 - horse.progress) / 8, 0, 1);
+      const esterno = -innerSign * TRACK_HALF_WIDTH * 0.72;
+      lineGoal = lerp(lineGoal, esterno, 0.75 * zin * zout);
     }
     // USCITA LARGA ESTESA: finché exitWide dura (dopo l'apice, anche sul dritto
     // che segue), tira il bersaglio verso lo steccato esterno.
