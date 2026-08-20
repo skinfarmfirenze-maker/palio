@@ -11138,7 +11138,11 @@ function updateRace(dt, time) {
     const inCurvaLibera = (prog) => {
       if (!NARROW_READY) return false;
       const p = positiveMod(prog, track.length || 1);
-      return (p >= SM_IN && p <= SM_OUT) || (p >= CAS_IN && p <= CAS_OUT);
+      // RISTRETTA: libera solo il CUORE centrale di ogni curva (~50%), non tutto lo
+      // span. 25% di margine per lato → entrata e uscita tornano sotto il limite.
+      const smI = (SM_OUT - SM_IN) * 0.25;
+      const casI = (CAS_OUT - CAS_IN) * 0.25;
+      return (p >= SM_IN + smI && p <= SM_OUT - smI) || (p >= CAS_IN + casI && p <= CAS_OUT - casI);
     };
     const bloccabile = (h) => h && !h.finishTime && !h.caduto && !h.scosso && !h.isRincorsa && !inCurvaLibera(h.progress);
     for (let i = 0; i < rk.length - 1; i += 1) {
