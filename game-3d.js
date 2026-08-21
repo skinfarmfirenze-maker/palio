@@ -2857,7 +2857,7 @@ const HORSE_GLB = {
   // alla seduta viene sommato trimY, così il fantino SCENDE insieme al cavallo
   // quando lo affondo. Con trimY -0.18 dava +0.30 (seduta buona di prima); con
   // -0.75 dà -0.27 → il fantino segue il cavallo abbassato.
-  fantinoSu: 0.48,
+  fantinoSu: 0.92,   // MISURATO dalla chat fantini sul cavallo ANIMATO (morph: dorso oscilla y1.63–2.23, medio ~1.98): a 0.48 sprofondava di ~0.4. Tarato INSIEME al fantino-lab con le gambe sul barile vero.
   fantinoAvanti: 0.60,   // lo porta in avanti, sulla groppa/garrese (non sul posteriore) — tarato dalla chat Fantini
   gltf: null, clip: null, scala: 1, pronto: false, fallito: false,
   registrati: [],       // { horse, mixer } — un mixer per cavallo

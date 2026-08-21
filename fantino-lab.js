@@ -887,13 +887,13 @@ export function buildFantino(contrada, opts = {}) {
   // ── GAMBE ──────────────────────────────────────────────────────────────────
   // A pelo il ginocchio sta ALTO e stretto al costato e il piede resta libero.
   [-1, 1].forEach((sign) => {
-    const xAnca = sign * 0.095, xCav = sign * 0.234;
+    const xAnca = sign * 0.117, xCav = sign * 0.242;
     const path = [
-      V3(xAnca, 1.795, -0.068),          // dentro il bacino
-      V3(sign * 0.162, 1.758, 0.024),
-      V3(sign * 0.222, 1.672, 0.128),    // ginocchio alto, FUORI dal fianco del barile
-      V3(sign * 0.232, 1.572, 0.116),
-      V3(xCav, 1.478, 0.066),            // caviglia sotto la pancia del barile
+      V3(xAnca, 1.795, -0.068),          // dentro il bacino (fianco 0.155)
+      V3(sign * 0.142, 1.758, 0.024),
+      V3(sign * 0.167, 1.672, 0.128),    // ginocchio, dove il barile è stretto (fianco 0.24)
+      V3(sign * 0.192, 1.572, 0.116),    // coscia sul fianco che si allarga (0.28)
+      V3(xCav, 1.478, 0.066),            // caviglia sulla pancia gonfia (0.43)
     ];
     const profile = (t) => {
       const r = rampa(t, [[0, 0.070], [0.35, 0.058], [0.55, 0.050], [0.80, 0.040], [1, 0.032]]) * B;
@@ -917,7 +917,7 @@ export function buildFantino(contrada, opts = {}) {
       rx: 0.037, ry: 0.030, rz: 0.070,
       colorFn: (v) => (v.y < -0.010 ? new THREE.Color("#0d0c0b") : nero),
     }), mat);
-    scarpa.position.set(xCav, 1.446, 0.098);   // il piede resta FUORI dal fianco, visibile
+    scarpa.position.set(sign * 0.262, 1.446, 0.098);   // piede in fuori, appoggiato sulla pancia
     scarpa.rotation.x = -0.30;
     scarpa.castShadow = true;
     rider.add(scarpa);
