@@ -25,6 +25,8 @@ export const LIV = {
   verde:      "#16833F",
   arancio:    "#E07A24",
   rosaAntico: "#C87F8E",
+  rossoRosa:  "#D6486A",   // Valdimontone: rosso virato al rosa, per non confonderlo con la Chiocciola
+  rossoAcceso: "#DC2A33",  // Chiocciola: accanto al giallo il rosso base si spegne, qui è alzato per pareggiare la Giraffa
   celeste:    "#5AB0E0",
   azzurro:    "#1E7BC4",
   blu:        "#1B4FA0",
@@ -35,7 +37,7 @@ export const LIV = {
 export const CONTRADE = [
   { id: "aquila", name: "Aquila", colors: [LIV.gialloOro, LIV.gialloOro, LIV.nero], silkStripe: LIV.turchino },
   { id: "bruco", name: "Bruco", colors: [LIV.verde, LIV.giallo, LIV.turchino] },
-  { id: "chiocciola", name: "Chiocciola", colors: [LIV.rosso, LIV.giallo, LIV.turchino] },
+  { id: "chiocciola", name: "Chiocciola", colors: [LIV.rossoAcceso, LIV.giallo, LIV.turchino] },
   { id: "civetta", name: "Civetta", colors: [LIV.nero, LIV.rosso, LIV.bianco] },
   { id: "drago", name: "Drago", colors: [LIV.rosaAntico, LIV.verde, LIV.giallo] },
   { id: "giraffa", name: "Giraffa", colors: [LIV.rosso, LIV.bianco, LIV.bianco] },
@@ -50,7 +52,7 @@ export const CONTRADE = [
   { id: "selva", name: "Selva", colors: [LIV.verde, LIV.arancio, LIV.bianco] },
   { id: "tartuca", name: "Tartuca", colors: [LIV.giallo, LIV.turchino, LIV.turchino] },
   { id: "torre", name: "Torre", colors: [LIV.cremisi, LIV.cremisi, LIV.bianco], silkStripe: LIV.blu },
-  { id: "valdimontone", name: "Valdimontone", colors: [LIV.rosso, LIV.giallo, LIV.bianco] },
+  { id: "valdimontone", name: "Valdimontone", colors: [LIV.rossoRosa, LIV.giallo, LIV.bianco] },
 ];
 
 // ══ 1. MOTORE GEOMETRICO ══════════════════════════════════════════════════════
