@@ -13780,7 +13780,7 @@ function updateAccountChip() {
 // non a scopo di lucro", poi un tutorial info-grafico dei comandi (PC / controller /
 // telefono). Compare solo dopo il signup, mai al login.
 // ── CONSIGLI iniziali (popup skippabili, una tantum per dispositivo) ──────────
-const TIPS_VERSION = "2";   // bumpa per rimostrarli a tutti
+const TIPS_VERSION = "3";   // bumpa per rimostrarli a tutti
 const GAME_TIPS = [
   ["🫁", "Attenzione alla stamina dei cavalli!", "Il fiato del cavallo ti deve bastare 3 giri: non sparare tutto subito."],
   ["🌀", "Attenzione alle curve!", "Se le prendi a 3-4-5 il cavallo non gira, a meno che non ti allarghi molto."],
@@ -13790,23 +13790,27 @@ const GAME_TIPS = [
 function showGameTips(onDone) {
   if (document.getElementById("gameTips")) { if (onDone) onDone(); return; }
   let i = 0;
+  // Su TELEFONO, come primo consiglio: gioca da PC (lo schermo del telefono sacrifica la grafica).
+  const tips = IS_TOUCH_DEVICE
+    ? [["💻", "Meglio da PC!", "Vi consigliamo di giocare da PC — ancora meglio con un controller collegato. Lo schermo del telefono sacrifica la grafica."]].concat(GAME_TIPS)
+    : GAME_TIPS;
   const ov = document.createElement("div");
   ov.id = "gameTips";
   ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;flex-direction:column;align-items:center;"
-    + "justify-content:center;gap:16px;padding:26px 20px;text-align:center;color:#f3e7cf;font-family:inherit;"
+    + "justify-content:center;gap:16px;padding:20px;text-align:center;color:#f3e7cf;font-family:inherit;overflow-y:auto;"
     + "background:radial-gradient(1100px 700px at 50% -8%,#3a2a17 0%,#17110a 60%,#0d0906 100%)";
   document.body.appendChild(ov);
   const close = () => { ov.remove(); if (onDone) onDone(); };
   const render = () => {
-    const [ic, t, d] = GAME_TIPS[i];
+    const [ic, t, d] = tips[i];
     ov.innerHTML =
-      `<div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#f0cb35;opacity:.9">Consiglio ${i + 1}/${GAME_TIPS.length}</div>`
+      `<div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#f0cb35;opacity:.9">Consiglio ${i + 1}/${tips.length}</div>`
       + `<div style="font-size:clamp(46px,12vw,74px);line-height:1">${ic}</div>`
       + `<div style="font-size:clamp(20px,4.4vw,32px);font-weight:800;color:#f7edd6;max-width:min(560px,92vw)">${t}</div>`
       + `<div style="font-size:clamp(14px,2.8vw,18px);opacity:.85;max-width:min(480px,88vw);line-height:1.5">${d}</div>`
-      + `<button type="button" id="gtNext" style="margin-top:6px;font:inherit;font-size:16px;font-weight:800;padding:12px 40px;border-radius:11px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer">${i < GAME_TIPS.length - 1 ? "Avanti ›" : "Ho capito!"}</button>`
+      + `<button type="button" id="gtNext" style="margin-top:6px;font:inherit;font-size:16px;font-weight:800;padding:12px 40px;border-radius:11px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer">${i < tips.length - 1 ? "Avanti ›" : "Ho capito!"}</button>`
       + `<button type="button" id="gtSkip" style="font:inherit;font-size:13px;background:none;border:none;color:#f3e7cf;opacity:.6;cursor:pointer;text-decoration:underline">Salta</button>`;
-    ov.querySelector("#gtNext").addEventListener("click", () => { i += 1; if (i >= GAME_TIPS.length) close(); else render(); });
+    ov.querySelector("#gtNext").addEventListener("click", () => { i += 1; if (i >= tips.length) close(); else render(); });
     ov.querySelector("#gtSkip").addEventListener("click", close);
   };
   render();
