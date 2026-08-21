@@ -3963,17 +3963,12 @@ function brucoFallActive() {
   }
   return cur >= base && cur < base + 1000;
 }
-// FINESTRA 100 palii: AI più CATTIVE verso il GIOCATORE che corre — le rivali lo
-// nerbano/gli vengono addosso e MOLTE PIÙ contrade lo parano per non farlo vincere.
+// AI più CATTIVE verso il GIOCATORE che corre — le rivali lo nerbano/gli vengono
+// addosso e MOLTE PIÙ contrade lo parano per non farlo vincere. Attivo FINO al
+// palio 9000 (contatore globale); cur>0 così offline (contatore ignoto) non frena.
 function aggroVsPlayerActive() {
   const cur = palliGlobali();
-  let base;
-  try { base = parseInt(localStorage.getItem("palio.aggroBase") || "", 10); } catch (e) { base = NaN; }
-  if (!Number.isFinite(base)) {
-    base = cur;
-    try { localStorage.setItem("palio.aggroBase", String(base)); } catch (e) { /* niente */ }
-  }
-  return cur >= base && cur < base + 100;
+  return cur > 0 && cur < 9000;
 }
 // FINESTRA 1800 palii: i BOMBOLONI escono solo alle Contrade che hanno una rivale
 // (Bruco, Drago, Giraffa, Selva non ne hanno → niente bombolone in questa finestra).
