@@ -4,6 +4,10 @@
 # Dati privati — NON devono finire online
 *.xlsx
 Lead Milano - Dermatologi e Medicina Estetica.xlsx
+# 🔴 BACKUP DB (account con pwHash!): MAI online (erano finiti pubblici, corretto 21/08)
+*backup*.json
+full-db-backup.json
+albo-backup.json
 
 # Materiale di lavoro / prompt / backup
 *.md
@@ -30,3 +34,10 @@ jockey-q-test.html
 jockey-test.html
 # I sorgenti delle bandiere (materiale di lavoro) NON servono online:
 assets/stemmi/bandiere-src/
+
+# ── Alleggerimento spazio (21/08): asset MORTI, zero riferimenti nel codice ──
+# Modelli di prova Quaternius (15M!): il gioco usa fantino-lab.js, non questi.
+assets/jockeys/quaternius/
+# Tracciato di lavoro (dev-only):
+pista-tracciato.html
+pista-tracciato.svg

@@ -4192,6 +4192,12 @@ function fetchAlboGlobale(cb, tentativi) {
   } catch (e) { /* niente */ }
 }
 function openAlboVittorie() {
+  // Dalle 21:00 del 21 ago (fase DEMO): albo momentaneamente RIMOSSO per tutti,
+  // Mario Rossi compreso. Nasconde anche il bottone del menu.
+  if (typeof DEMO_CLOSE_AT !== "undefined" && Date.now() >= DEMO_CLOSE_AT) {
+    const b = document.getElementById("alboButton"); if (b) b.style.display = "none";
+    return;
+  }
   renderAlboVittorie(loadVictoryAlbo());   // subito col dato LOCALE (istantaneo)
   fetchAlboGlobale((a) => { if (document.getElementById("alboOverlay")) renderAlboVittorie(a); });
 }
@@ -13466,6 +13472,8 @@ const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
 const MESI_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 function fmtDataIt(ts) { const d = new Date(ts); return d.getDate() + " " + MESI_IT[d.getMonth()] + " alle " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 function ensurePasswordGate() {
+  // Dalle 21 del 21 ago: albo vittorie momentaneamente RIMOSSO per tutti (anche Mario Rossi).
+  if (Date.now() >= DEMO_CLOSE_AT) { const ab = document.getElementById("alboButton"); if (ab) ab.style.display = "none"; }
   // Mario Rossi (sviluppatore) entra SEMPRE.
   if (isMarioRossi(getAccount())) { ensureAccountGate(); return; }
   // Dalle 21:00 del 21 ago 2026: DEMO chiusa a tutti tranne gli sviluppatori,
