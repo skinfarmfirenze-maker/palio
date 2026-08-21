@@ -6552,6 +6552,8 @@ function campaignAccordiScreen(spectate) {
         else if (spectate) {
           btn = mkBtn(`Para · ${cost}`);
           btn.addEventListener("click", () => {
+            // Parare = rinunciare a vincere: chi monta un BOMBOLONE rifiuta spesso (75%).
+            if (h.horseTier === "bombolone" && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
             spendBudget(myId, cost);
             cmp.accordi.push({ helper: h.id, para: cmp.rival.id, sponsor: myId, amount: cost, prepaid: true });
             render();
@@ -6575,8 +6577,13 @@ function campaignAccordiScreen(spectate) {
               onConferma: (sel) => {
                 const c = accordoCostSel(j, sel);
                 if (c > contradaBudget(myId)) return;
-                // I soldi si scalano SUBITO (prepaid). Rimborso a fine palio se non vinci.
-                if (Math.random() < 0.7) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }   // rifiuto 30%
+                // RIFIUTO: base 30%. Ma chi monta un BOMBOLONE dice spesso NO alle
+                // proposte che lo fanno PERDERE (lasciami vincere/passare, para, ecc.):
+                // con quel cavallo vuole correre per vincere → accetta solo il 25%.
+                const PERDENTI = ["vinci", "passa", "interno", "para", "paraInterno", "curvaAddosso", "paraRallenta", "paraCanapi"];
+                const perdente = sel.some((id) => PERDENTI.indexOf(id) >= 0);
+                const pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.25 : 0.7;
+                if (Math.random() < pAccetta) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }
                 else h._accRefused = true;
                 render();
               },
