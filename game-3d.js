@@ -6037,7 +6037,7 @@ function openAstaRincorsa() {
     aiCd: 2 + Math.random() * 3,
     chiusa: false,
   };
-  if (state.messageTimer <= 0) showMessage(`Ora si sa chi è di rincorsa: ${rin.name} tratta la mossa`, 2.4, "good");
+  /* (rimossa la scritta "ora si sa chi è di rincorsa") */
 }
 
 // Rilancio. PREPAGATO: i denari si scalano subito e tornano a chi viene scavalcato.
@@ -7555,17 +7555,29 @@ function playerPositionHandicap(player) {
   if (pos === 4) return 0.98;   // −0,02
   return 1;
 }
+// −0,01 al GIOCATORE per TUTTO il primo giro di Piazza, a prescindere (zavorra dichiarata).
+function playerFirstLapMult(player) {
+  if (!player || state.mode !== "race") return 1;
+  return (Math.floor(Math.max(0, player.progress) / track.length) === 0) ? 0.99 : 1;
+}
 function leaderBrakeMult(horse) {
   if (!horse) return 1;
+  let target = 1;
   let refProg = null;                                          // posta della Contrada che insegue
   if (horse.id === state.leaderBrakeId) refProg = state.leaderBrakeSecondProg;   // 1° ← distacco sul 2°
   else if (horse.id === state.secondBrakeId) refProg = state.secondBrakeThirdProg; // 2° ← distacco sul 3°
-  else return 1;                                               // dal 3° in giù: nessun freno
-  if (refProg == null) return 1;
-  const gap = horse.progress - refProg;
-  if (gap <= LEADER_BRAKE_SOFT) return 1;
-  const t = clamp((gap - LEADER_BRAKE_SOFT) / (LEADER_GAP_MAX - LEADER_BRAKE_SOFT), 0, 1);
-  return lerp(1, LEADER_BRAKE_FLOOR, t);
+  if (refProg != null) {
+    const gap = horse.progress - refProg;
+    if (gap > LEADER_BRAKE_SOFT) {
+      const t = clamp((gap - LEADER_BRAKE_SOFT) / (LEADER_GAP_MAX - LEADER_BRAKE_SOFT), 0, 1);
+      target = lerp(1, LEADER_BRAKE_FLOOR, t);
+    }
+  }
+  // SMOOTHING TEMPORALE: il freno entra ed esce GRADUALE (come un vero freno che
+  // stringe piano), non a scatti frame-per-frame → il rallentamento non si "vede".
+  // Ease ~0,5s (alpha 0.035/frame a 60fps).
+  horse._lbSmooth = lerp(horse._lbSmooth ?? 1, target, 0.035);
+  return horse._lbSmooth;
 }
 
 // ── RUBBER-BAND, l'altra metà: SPINTA alle ultime DUE Contrade ────────────────
@@ -10739,7 +10751,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player);
+  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -13140,6 +13152,8 @@ const STAT_FINAL_JOCKEY = {
   trecciolino: { mossa: 4, terzo: 4, curva: 3, difesa: 2 },
   cianchino: { curva: 2, fedelta: 2, terzo: 4 },
   aceto: { mossa: 3 },   // −1 sulla mossa (era 4)
+  Grido: { terzo: 4 },              // era 5
+  "Tittìa": { mossa: 5, terzo: 4 }, // mossa 5, terzo 4
 };
 const STAT_FINAL_HORSE = {};
 function applyFinalCorrections() {
