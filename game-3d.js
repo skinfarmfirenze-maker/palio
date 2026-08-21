@@ -447,12 +447,16 @@ scene.fog = new THREE.FogExp2(0xc3aa8c, 0.0040);
 const camera = new THREE.PerspectiveCamera(64, 1, 0.1, 1200);
 // Seconda camera per la mini-cam rincorsa (top-left durante la mossa).
 const rincorsaMiniCam = new THREE.PerspectiveCamera(78, 240 / 150, 0.3, 500);
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+// TELEFONO: boost FPS → niente antialias/ombre e pixelRatio più basso (rilevo il
+// touch qui, prima che IS_TOUCH_DEVICE sia definito più sotto).
+const _touchBoot = (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches)
+  && (navigator.maxTouchPoints || 0) > 0;
+const renderer = new THREE.WebGLRenderer({ antialias: !_touchBoot, powerPreference: "high-performance" });
 // TETTO 1.5 (era 2): su un Retina 2x significa il 44% di pixel in MENO da
 // disegnare a ogni frame — è la prima causa di laptop rovente, e a queste
-// dimensioni di scena la differenza di nitidezza non si nota.
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-renderer.shadowMap.enabled = true;
+// dimensioni di scena la differenza di nitidezza non si nota. Su TELEFONO 1.25.
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, _touchBoot ? 1.25 : 1.5));
+renderer.shadowMap.enabled = !_touchBoot;   // niente ombre su telefono (grosso risparmio GPU)
 // PCF semplice al posto del PCFSoft: bordi ombra un filo più netti, parecchio
 // lavoro GPU in meno su una scena con centinaia di caster.
 renderer.shadowMap.type = THREE.PCFShadowMap;

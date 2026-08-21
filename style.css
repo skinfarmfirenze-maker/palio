@@ -975,3 +975,27 @@ textarea {
 @media (max-width: 720px) {
   .albo-cols { grid-template-columns: 1fr; }
 }
+
+/* ---- Avviso "gira il telefono in orizzontale": solo su touch in PORTRAIT ---- */
+#rotateHint { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotateHint {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    color: #f3e7cf;
+    font-family: inherit;
+    padding: 24px;
+    background: radial-gradient(1100px 700px at 50% -10%, #3a2a17 0%, #17110a 62%, #0d0906 100%);
+  }
+  #rotateHint .rh-emoji { font-size: 64px; animation: rhSpin 2.4s ease-in-out infinite; }
+  #rotateHint .rh-title { font-size: 28px; font-weight: 800; color: #f0cb35; }
+  #rotateHint .rh-sub { font-size: 16px; opacity: 0.85; }
+}
+@keyframes rhSpin { 0%, 55%, 100% { transform: rotate(0deg); } 78% { transform: rotate(90deg); } }
