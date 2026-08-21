@@ -6917,11 +6917,11 @@ function refreshHorseVoteUI(animate) {
     card.classList.toggle("inrun", inRun.has(name));  // nei 10 che correrebbero ora (per voti)
     const badge = card.querySelector(".hv-votes");
     if (badge) {
-      const ai = aiVotesRevealed(hv, name);            // SOLO i voti dei Capitani (gli altri 9)
+      const total = aiVotesRevealed(hv, name) + (voted ? 1 : 0);   // Capitani AI + il TUO voto (flag del giocatore)
       const prev = badge.textContent;
-      badge.textContent = ai;
-      badge.classList.toggle("hot", ai > 0);
-      if (animate && String(ai) !== prev) {            // piccolo "pop" quando arriva un voto
+      badge.textContent = total;
+      badge.classList.toggle("hot", total > 0);
+      if (animate && String(total) !== prev) {            // piccolo "pop" quando arriva un voto
         badge.classList.add("bump");
         setTimeout(() => badge.classList.remove("bump"), 200);
       }
