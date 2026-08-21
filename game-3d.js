@@ -10438,6 +10438,9 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
     target.nerbSide = (side >= 0) ? 1 : -1;      // lato verso cui spinge per 4s
   } else {
     target.nerbSlowT = NERBATA_SLOW_DUR;
+    // Il GIOCATORE che nerba NON deve rallentare: il colpo azzera ogni rallentamento
+    // che stava subendo (es. la rivale che lo frusta di rimando) — rallenta SOLO il colpito.
+    if (isHuman(attacker)) attacker.nerbSlowT = 0;
   }
   target.collisionFlash = Math.max(target.collisionFlash || 0, 0.7);
   // (rimossa la scritta "X nerba Y": troppo ripetitiva a schermo)
@@ -10884,15 +10887,32 @@ function updateAiHorse(horse, dt, time) {
   // all'AGGRESSIVITÀ del fantino) frusta un cavallo accanto per rallentarlo —
   // molto più spesso se è un RIVALE. Stessa arma/regole del giocatore.
   if (state.mode === "race" && puoNerbare(horse) && (horse.nerbate ?? 0) > 0 && (horse.nerbataCd || 0) <= 0) {
-    const dx = vicinoDiLato(horse, 1, "race");
-    const sx = vicinoDiLato(horse, -1, "race");
-    if (dx || sx) {
-      const bestCand = dx && sx
-        ? (rivalIntensity(horse.id, dx.id) >= rivalIntensity(horse.id, sx.id) ? dx : sx)
-        : (dx || sx);
-      const rivalBonus = rivalIntensity(horse.id, bestCand.id) > 0 ? 2.4 : 1;
-      if (Math.random() < dt * (0.10 + (horse.aggression || 0.5) * 0.35) * rivalBonus) {
-        tiraNerbata(horse, bestCand === dx ? 1 : -1, "race");
+    // ── MOLESTATORE (fino a palio 9000): quando è ACCANTO al GIOCATORE parte una
+    // RAFFICA di 3-4 nerbate di fila (una a ogni ricarica), soprattutto la RIVALE.
+    horse.harassCd = Math.max(0, (horse.harassCd || 0) - dt);
+    const plAccanto = player && !player.finishTime && horse !== player && !player.scosso && !player.caduto
+      && Math.abs((player.progress || 0) - (horse.progress || 0)) < 3.2
+      && Math.abs((player.lane || 0) - (horse.lane || 0)) < 3.4;
+    if (plAccanto && aggroVsPlayerActive() && (horse.harassLeft || 0) <= 0 && (horse.harassCd || 0) <= 0 && !horse.friendlyToPlayer) {
+      const vsRiv = rivalIntensity(horse.id, player.id) > 0 || rivalIntensity(player.id, horse.id) > 0;
+      if (Math.random() < dt * (vsRiv ? 0.55 : 0.12)) horse.harassLeft = 3 + (Math.random() < 0.5 ? 1 : 0);   // 3-4 colpi
+    }
+    if ((horse.harassLeft || 0) > 0 && plAccanto) {
+      horse.harassLeft -= 1;
+      if (horse.harassLeft <= 0) horse.harassCd = 12;   // pausa prima di un'altra raffica
+      tiraNerbata(horse, Math.sign((player.lane || 0) - (horse.lane || 0)) || 1, "race", player);
+    } else {
+      if ((horse.harassLeft || 0) > 0 && !plAccanto) horse.harassLeft = 0;   // giocatore sfilato: raffica finita
+      const dx = vicinoDiLato(horse, 1, "race");
+      const sx = vicinoDiLato(horse, -1, "race");
+      if (dx || sx) {
+        const bestCand = dx && sx
+          ? (rivalIntensity(horse.id, dx.id) >= rivalIntensity(horse.id, sx.id) ? dx : sx)
+          : (dx || sx);
+        const rivalBonus = rivalIntensity(horse.id, bestCand.id) > 0 ? 2.4 : 1;
+        if (Math.random() < dt * (0.10 + (horse.aggression || 0.5) * 0.35) * rivalBonus) {
+          tiraNerbata(horse, bestCand === dx ? 1 : -1, "race");
+        }
       }
     }
   }
@@ -11304,7 +11324,14 @@ function updateRace(dt, time) {
     const r = getRanking();
     if (r[0] && r[1] && !r[0].finishTime) {
       const cap = r[1].progress + LEADER_GAP_MAX;
-      if (r[0].progress > cap) { r[0].progress = Math.max(r[0].prevProgress ?? cap, cap); placeHorse(r[0], time); }
+      if (r[0].progress > cap) {
+        // NIENTE INCHIODATA: il tetto non blocca più di colpo (si vedeva il primo
+        // "frenare a muro" appena sforava). Ora è una MOLLA: si recupera solo una
+        // frazione dell'eccesso per frame (ease esponenziale) → rientro invisibile.
+        const excess = r[0].progress - cap;
+        r[0].progress -= excess * clamp(dt * 2.0, 0, 0.35);
+        placeHorse(r[0], time);
+      }
     }
     // MURO 1°–3° ≤ 9 dal SECONDO GIRO in poi: il 1° e il 2° non possono staccarsi
     // di più di 9 dal 3° in classifica. NON si inchioda sul tetto: quando si sfora,
