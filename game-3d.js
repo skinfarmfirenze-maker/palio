@@ -2858,7 +2858,7 @@ const HORSE_GLB = {
   // quando lo affondo. Con trimY -0.18 dava +0.30 (seduta buona di prima); con
   // -0.75 dà -0.27 → il fantino segue il cavallo abbassato.
   fantinoSu: 0.48,
-  fantinoAvanti: 0.30,   // lo porta in avanti, sul garrese (non sulla coda)
+  fantinoAvanti: 0.60,   // lo porta in avanti, sulla groppa/garrese (non sul posteriore) — tarato dalla chat Fantini
   gltf: null, clip: null, scala: 1, pronto: false, fallito: false,
   registrati: [],       // { horse, mixer } — un mixer per cavallo
 };
@@ -5256,8 +5256,14 @@ function ensureCampaignStyle() {
     .cmp-stats{gap:16px;margin:8px 0}
     .cmp-stat b{font-size:26px}
     .cmp-list{max-height:72vh !important;gap:3px !important;margin:6px 0 !important}
-    .cmp-row{padding:4px 9px !important;font-size:11.5px !important;gap:7px !important;border-radius:8px !important}
-    .cmp-row-flag{width:18px !important;height:18px !important}
+    .cmp-row{padding:5px 10px !important;font-size:12px !important;gap:8px !important;border-radius:8px !important}
+    .cmp-row-flag{width:20px !important;height:20px !important}
+    /* Accordi su telefono: le due colonne si IMPILANO e i controlli vanno a tutta
+       larghezza, con checkbox grandi da toccare (prima erano microscopiche e affiancate). */
+    .cmp-cols{flex-direction:column !important;gap:12px !important;align-items:stretch !important}
+    .cmp-ctrl{min-width:0 !important;width:100% !important;align-items:stretch !important}
+    .cmp-ctrl label{font-size:13px !important;line-height:1.3 !important;gap:10px !important;padding:5px 2px}
+    .cmp-ctrl input[type=checkbox]{width:20px !important;height:20px !important;flex:0 0 auto;margin-top:0}
   }
   `;
   document.head.appendChild(st);
@@ -6433,6 +6439,7 @@ function campaignAccordiScreen(spectate) {
     };
 
     const cols = document.createElement("div");
+    cols.className = "cmp-cols";
     cols.style.cssText = "display:flex;gap:16px;margin-top:14px;align-items:flex-start;text-align:left" + (spectate ? ";justify-content:center" : "");
 
     // ── COLONNA SINISTRA: PROPOSTE RICEVUTE (solo PLAY) ──────────────────────
@@ -6491,6 +6498,7 @@ function campaignAccordiScreen(spectate) {
         } else {
           // PLAY: PRIMA si clicca la CIFRA, POI compaiono le finalità da spuntare.
           const ctrl = document.createElement("div");
+          ctrl.className = "cmp-ctrl";
           ctrl.style.cssText = "display:flex;flex-direction:column;gap:4px;flex:0 0 auto;align-items:flex-end;min-width:240px";
           const openBtn = mkBtn(`Proponi · ${cost}`);
           const obiettivi = ACCORDO_OBIETTIVI.filter((o) => !o.rivalOnly || rivalRunning);   // "marca la rivale" solo se corre
