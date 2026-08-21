@@ -3963,6 +3963,18 @@ function brucoFallActive() {
   }
   return cur >= base && cur < base + 1000;
 }
+// FINESTRA 100 palii: AI più CATTIVE verso il GIOCATORE che corre — le rivali lo
+// nerbano/gli vengono addosso e MOLTE PIÙ contrade lo parano per non farlo vincere.
+function aggroVsPlayerActive() {
+  const cur = palliGlobali();
+  let base;
+  try { base = parseInt(localStorage.getItem("palio.aggroBase") || "", 10); } catch (e) { base = NaN; }
+  if (!Number.isFinite(base)) {
+    base = cur;
+    try { localStorage.setItem("palio.aggroBase", String(base)); } catch (e) { /* niente */ }
+  }
+  return cur >= base && cur < base + 100;
+}
 // FINESTRA 1800 palii: i BOMBOLONI escono solo alle Contrade che hanno una rivale
 // (Bruco, Drago, Giraffa, Selva non ne hanno → niente bombolone in questa finestra).
 function bomboloneRivalsOnlyActive() {
@@ -8476,6 +8488,25 @@ function startMossa(fromTratta = false) {
       me.soldBurst = 0;
       me.soldNext = 12 + Math.random() * 18;     // prima raffica dopo 12-30s di tensione
     }
+    // ── FINESTRA AGGRO (prossimi 100 palii): AI più cattive verso il GIOCATORE che corre.
+    if (playing && playerId && aggroVsPlayerActive()) {
+      // 1) La/le rivale/i del giocatore lo NERBANO e gli vengono ADDOSSO (vendetta
+      //    diretta, oltre il cap dei 2 alleati).
+      state.horses.forEach((h) => {
+        if (h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
+        if (rivalIntensity(playerId, h.id) > 0 && !h.vendettaPending && h.vendettaState !== "fatto") {
+          h.vendettaPending = true; h.vendettaTargetId = playerId; h.allyTargetId = playerId; h.allyHelp = true;
+        }
+      });
+      // 2) MOLTE PIÙ contrade PARANO il giocatore per non farlo vincere: fino a 3 in
+      //    più, fra quelle SENZA incarico, gli vanno DAVANTI a bloccarlo.
+      let extraPara = 0;
+      state.horses.forEach((h) => {
+        if (extraPara >= 3 || h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
+        if (h.paraInRace || h.allyTargetId || h.allyBeneficiaryId) return;   // già con un incarico
+        h.paraInRace = playerId; h.allyTargetId = playerId; h.allyHelp = true; extraPara += 1;
+      });
+    }
   }
 
   // ── Estrazione/chiamata ai canapi: TUTTE le 9 Contrade (GIOCATORE COMPRESO)
@@ -8907,7 +8938,10 @@ function resetMossaAfterFalsa() {
     h.entering = false; h.enterPhase = undefined; h.mossaTurn = 0; h.behaviorState = "idle";
     h.nervBackState = null; h.nervBackTimer = 0;   // si riparte dal tondino: nessuno resta "agitato"
     h.blockingRincorsa = false; h.falseStartSpeed = 0;
-    h.returningToTondino = true;   // torna DIRETTO all'ovale, senza incastrarsi sul canapo posteriore
+    h.returningToTondino = true;
+    // TAGLIO: dopo la mossa FALSA si riparte DIRETTAMENTE dal tondino (snap immediato),
+    // non col rientro lento a piedi. dt enorme → il passo copre tutta la distanza in 1 frame.
+    try { returnToTondinoStep(h, 999, 0); } catch (e) { /* niente */ }
   });
   state.callIndex = 0;
   state.sinceCall = 0;
