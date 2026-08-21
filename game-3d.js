@@ -6272,7 +6272,7 @@ function refreshAstaUI() {
   const rivaleERincorsa = !!(A.rincorsaId && RIVALS[mioId] && RIVALS[mioId][A.rincorsaId]);   // #2: non compri la mossa dalla tua rivale
   const proteggePrepagante = !!(A.prepaidHolder && A.bestBidder === A.prepaidHolder && mioId !== A.prepaidHolder);   // #1
   const floorBid = proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best;   // soglia da scavalcare
-  const rilanci = [floorBid + 100, floorBid + 200, floorBid + 300];            // #1: 3 tasti +100/+200/+300
+  const rilanci = [floorBid + 10, floorBid + 50, floorBid + 100];              // 3 tasti: +10 / +50 / +100 (mostrati come cifre assolute)
   const rivId = cmp.rival ? cmp.rival.id : null;
   const rivInGara = rivId && state.horses.some((h) => h.id === rivId && !h.isRincorsa);
   const bloccoFatto = !!A.blocco[mioId];
@@ -6296,12 +6296,12 @@ function refreshAstaUI() {
     : rivaleERincorsa
       ? '<div style="opacity:.9;font-size:13px;color:#e8896f;font-weight:700">Non puoi comprare la mossa dalla tua rivale</div>'
       : `<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">`
-        + rilanci.map((amt, i) => `<button class="astaBidBtn" data-amt="${amt}" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;${bs};background:#f0cb35;color:#1a1206;font-weight:800">+${(i + 1) * 100} · ${amt}</button>`).join("")
+        + rilanci.map((amt) => `<button class="astaBidBtn" data-amt="${amt}" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;${bs};background:#f0cb35;color:#1a1206;font-weight:800">Offri ${amt}</button>`).join("")
         + `</div>`
         + (proteggePrepagante ? '<div style="opacity:.75;font-size:11px">mossa già pagata: serve il doppio</div>' : "");
   el.innerHTML =
-    `<div style="opacity:.85;font-size:${ph ? 12 : 14}px">Tratti con <b style="color:#f0cb35">${rinNome}</b> · più alta <b>${A.best}</b>${chi ? ` (${chi})` : ""}`
-    + ` &nbsp;·&nbsp; hai <b style="color:#f0cb35">${mieiDenari}</b></div>`
+    `<div style="opacity:.85;font-size:${ph ? 12 : 14}px">Tratti con <b style="color:#f0cb35">${rinNome}</b> &nbsp;·&nbsp; hai <b style="color:#f0cb35">${mieiDenari}</b> denari</div>`
+    + (inTesta || rivaleERincorsa ? "" : `<div style="font-size:${ph ? 13 : 15}px;font-weight:700">L'ultima offerta era <b style="color:#f0cb35">${A.best}</b>${chi ? ` (${chi})` : ""}, quanto offri?</div>`)
     + azione
     + (rivInGara && !bloccoFatto
       ? `<button id="astaBlockBtn" type="button" style="font:inherit;cursor:pointer;border:1px solid rgba(240,203,53,.5);border-radius:8px;${bs};background:rgba(60,40,20,.9);color:#f3e7cf">Non darla a ${cmp.rival.name} · ${ASTA_BLOCCO_RIVALE}</button>`
