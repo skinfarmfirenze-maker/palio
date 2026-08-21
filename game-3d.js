@@ -8435,6 +8435,7 @@ function startMossa(fromTratta = false) {
     .sort((a, b) => (a.postIndex ?? 0) - (b.postIndex ?? 0));
   state.callOrder = callOrder;
   state.falseStartCount = 0;                       // conteggio mosse false
+  state.chiamataA5 = false;                         // mossa a chiamata del giocatore-acquirente
   state.tuttiFuoriCount = 0;
   state.rincorsaWait = 0;                          // attesa cumulativa della rincorsa
   state.canapiCaos = Math.random() < 0.67;         // ~2/3 dei palii: VERO casino ai canapi nei primi 25s
@@ -8524,6 +8525,7 @@ function releaseRace() {
   // sembra solo una "buona giornata". WIN_FAVORE_PROB regola la % media di vittorie.
   state.playerFavored = Math.random() < WIN_FAVORE_PROB;
   state.mode = "race";
+  if (state.chiamataA5) { const p = getPlayer(); if (p) p.chiamataNoStaminaT = 2; state.chiamataA5 = false; }   // partenza a chiamata: 0 stamina per 2s
   state.raceClock = 0;
   state.replay = { frames: [], acc: 0 };   // nuovo nastro per il replay
   state.raceRunout = 0;                     // niente runout ereditato dalla gara prima
@@ -9961,7 +9963,22 @@ function updateRincorsa(rincorsa, dt) {
         // blocco cede solo oltre la durata massima assoluta, per non tenere aperta la
         // mossa all'infinito se la rivale resta sempre pronta.
         const rivalBloccaVia = rivalIsBene && state.mossaTimer < MOSSA_MAX_DURATION;
-        rincorsa.wantsToEnter = rincorsa.wantsToEnter || ((goodEntry || fiancata) && !rivalBloccaVia) || mistake;
+        // ── MOSSA A CHIAMATA: se il GIOCATORE si è comprato la mossa, è schierato ai
+        // canapi e la rincorsa è in posizione per fiancare, quando porta l'andatura a 5
+        // la rincorsa gli dà la mossa → parte LUI (senza forzare il canape, se allineato).
+        let chiamataA5 = false;
+        const meAsta = getPlayer();
+        const ownsMossa = state.asta && meAsta && !meAsta.isRincorsa && meAsta.called && !meAsta.entering
+          && state.asta.bestBidder === meAsta.id;
+        const rinReady = fieldAssembled && state.mossaTimer >= MOSSA_MIN_DURATION && (state.rincorsaWait || 0) >= 15;
+        if (ownsMossa && rinReady) {
+          if (Math.round(meAsta.speedSetting || 1) >= ANDATURA_MAX && isMossaAligned()) {
+            chiamataA5 = true; state.chiamataA5 = true;                       // parte a chiamata
+          } else if (state.messageTimer <= 0) {
+            showMessage("Parti a 5 · ti do la mossa!", 1.0, "good");          // spingi a 5 per partire
+          }
+        }
+        rincorsa.wantsToEnter = rincorsa.wantsToEnter || ((goodEntry || fiancata) && !rivalBloccaVia) || mistake || chiamataA5;
       }
     }
     // CORRIDOIO OCCUPATO: la rincorsa trattiene la carica (il blocco fisico è
@@ -10605,7 +10622,8 @@ function updatePlayer(dt, time) {
   const sample = sampleAt(player.progress);
   const curve = sample.curve;
   const chosenSpeed = firstLapCapAndatura(player, clamp(Math.round(player.speedSetting || 1), PLAYER_SPEED_MIN, ANDATURA_MAX));
-  const staminaRate = getStaminaRateForHorse(player, chosenSpeed);
+  let staminaRate = getStaminaRateForHorse(player, chosenSpeed);
+  if (player.chiamataNoStaminaT > 0) { player.chiamataNoStaminaT -= dt; staminaRate = 0; }   // partenza a chiamata: 0 stamina per i primi 2s
   player.stamina = clamp(player.stamina - staminaRate * dt, 0, player.staminaMax || STAMINA_MIN_ROLL);
   const effectiveSpeed = getPlayerEffectiveSpeed(player); // andatura 1..5
   player.effectiveSpeedLevel = effectiveSpeed;
@@ -13670,11 +13688,12 @@ function updateAccountChip() {
 // non a scopo di lucro", poi un tutorial info-grafico dei comandi (PC / controller /
 // telefono). Compare solo dopo il signup, mai al login.
 // ── CONSIGLI iniziali (popup skippabili, una tantum per dispositivo) ──────────
-const TIPS_VERSION = "1";   // bumpa per rimostrarli a tutti
+const TIPS_VERSION = "2";   // bumpa per rimostrarli a tutti
 const GAME_TIPS = [
   ["🫁", "Attenzione alla stamina dei cavalli!", "Il fiato del cavallo ti deve bastare 3 giri: non sparare tutto subito."],
   ["🌀", "Attenzione alle curve!", "Se le prendi a 3-4-5 il cavallo non gira, a meno che non ti allarghi molto."],
   ["🤝", "Non saltare gli accordi.", "Come pensi di vincere il Palio se salti gli accordi con le altre contrade?"],
+  ["⚡", "Comprati la rincorsa!", "Se ti sei comprato la rincorsa puoi partire a 5 come il Tittìa!!!! Tanto ti danno la mossa."],
 ];
 function showGameTips(onDone) {
   if (document.getElementById("gameTips")) { if (onDone) onDone(); return; }
