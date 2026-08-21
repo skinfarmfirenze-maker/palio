@@ -7478,7 +7478,7 @@ const LEADER_GAP_SOFT = 12;
 const LEADER_GAP_MAX = 30;
 const LEADER_BRAKE_FLOOR = 0.85;   // molla del leader MOLTO morbida (max −15%): quasi impercettibile. Il muro rigido a GAP_MAX resta il vero tappo anti-fuga.
 const LEADER_BRAKE_SOFT = 3;       // la molla del leader parte GIÀ da un piccolo vantaggio e sale gradualissima fino a GAP_MAX → nessun "inchioda" a inizio 2° giro (soglia SUA, non tocca la spinta di coda).
-// HANDICAP DI POSIZIONE del GIOCATORE: 1°=−0,04 · 2°=−0,04 · 3°=−0,03 · 4°=−0,02.
+// HANDICAP DI POSIZIONE del GIOCATORE: 1°=−0,04 · 2°=−0,05 · 3°=−0,04 · 4°=−0,02.
 // Dal 5° in giù: nessuna penalità. Posizione = quanti cavalli hanno più progress
 // (distanza cumulativa). Silenzioso.
 function playerPositionHandicap(player) {
@@ -7488,10 +7488,11 @@ function playerPositionHandicap(player) {
     if (h === player || h.isRincorsa) continue;
     if ((h.progress || 0) > (player.progress || 0)) ahead += 1;
   }
-  const pos = ahead + 1;                    // 1 = primo
-  if (pos === 1 || pos === 2) return 0.96;  // −0,04
-  if (pos === 3) return 0.97;               // −0,03
-  if (pos === 4) return 0.98;               // −0,02
+  const pos = ahead + 1;   // 1 = primo
+  if (pos === 1) return 0.96;   // −0,04
+  if (pos === 2) return 0.95;   // −0,05
+  if (pos === 3) return 0.96;   // −0,04
+  if (pos === 4) return 0.98;   // −0,02
   return 1;
 }
 function leaderBrakeMult(horse) {
