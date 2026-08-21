@@ -12882,8 +12882,12 @@ function renderRincorsaMiniCam() {
   // sguardo ravvicinato e inclinato verso il basso, sopra le teste del gruppo.
   const rLane = rincorsa.mossaLane ?? RINCORSA_LANE;   // corsia esterna della rincorsa
   // Camera più vicina e bassa → zoom maggiore su rincorsa + verrocchino (anche da PC).
-  const near = IS_TOUCH_DEVICE ? 8.5 : 9.5;
-  const high = IS_TOUCH_DEVICE ? 7.0 : 8.0;
+  // SEGUE la rincorsa (posizione avanti a lei, sguardo sul cavallo) e zooma sul
+  // cavallo — ancora di più su telefono (near/high più stretti + FOV più chiuso).
+  const near = IS_TOUCH_DEVICE ? 6.2 : 8.5;
+  const high = IS_TOUCH_DEVICE ? 5.0 : 7.0;
+  const fov = IS_TOUCH_DEVICE ? 46 : 62;   // più stretto = più zoom sul cavallo (era 78)
+  if (Math.abs((rincorsaMiniCam.fov || 0) - fov) > 0.01) { rincorsaMiniCam.fov = fov; rincorsaMiniCam.updateProjectionMatrix(); }
   const camProgress = rincorsa.mossaProgress + near;
   const cs = sampleAt(camProgress);
   rincorsaMiniCam.position.copy(cs.point)
