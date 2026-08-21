@@ -5991,8 +5991,9 @@ function openAstaRincorsa() {
   (cmp.accordi || []).forEach((a) => {
     if (a.helper !== rin.id) return;
     if (a.obiettivi && a.obiettivi.indexOf("canapi") < 0) return;   // "mossa a me" solo se scelto
-    const amt = a.amount || 0;
     const chi = a.beneficiary || a.sponsor || null;
+    if (chi && RIVALS[chi] && RIVALS[chi][rin.id]) return;   // non si compra la mossa dalla PROPRIA rivale
+    const amt = a.amount || 0;
     if (amt >= base) { base = amt; holder = chi; }
   });
   // TRE Contrade decise a spendere quasi tutto pur di aggiudicarsela; le altre
@@ -6002,6 +6003,8 @@ function openAstaRincorsa() {
     rincorsaId: rin.id,
     best: base,
     bestBidder: holder,
+    prepaidHolder: holder,                           // chi ha pagato la mossa PRE-palio (accordo)
+    prepaidAmount: holder ? base : 0,                // la sua posta: per scavalcarlo servono > 2× questa
     paid: {},                                        // id → denari prepagati (per il rimborso)
     blocco: {},                                      // id → blocco anti-rivale prepagato
     // STORICO delle offerte: paid[] viene azzerato a ogni sorpasso (il rimborso),
@@ -6018,7 +6021,13 @@ function openAstaRincorsa() {
 // Rilancio. PREPAGATO: i denari si scalano subito e tornano a chi viene scavalcato.
 function astaBid(id, amount) {
   const A = state.asta;
-  if (!A || A.chiusa || amount <= A.best) return false;
+  if (!A || A.chiusa) return false;
+  // #2: non puoi PAGARE la tua RIVALE (quando è lei di rincorsa) per la mossa.
+  if (A.rincorsaId && RIVALS[id] && RIVALS[id][A.rincorsaId]) return false;
+  // #1: MOSSA GARANTITA a chi l'ha pagata pre-palio → per scavalcarlo serve > 2× la sua posta.
+  const protegge = A.prepaidHolder && A.bestBidder === A.prepaidHolder && id !== A.prepaidHolder;
+  const soglia = protegge ? 2 * (A.prepaidAmount || 0) : A.best;
+  if (amount <= soglia) return false;
   const disponibile = contradaBudget(id) + (A.paid[id] || 0);
   if (disponibile < amount) return false;
   const prev = A.bestBidder;
@@ -6054,14 +6063,17 @@ function updateAstaAI(dt) {
   A.aiCd -= dt;
   if (A.aiCd > 0) return;
   A.aiCd = 1.4 + Math.random() * 2.4;
-  const cand = state.horses.filter((h) => !h.isRincorsa && !isHuman(h) && !h.called && h.id !== A.bestBidder);
+  const cand = state.horses.filter((h) => !h.isRincorsa && !isHuman(h) && !h.called && h.id !== A.bestBidder
+    && !(RIVALS[h.id] && RIVALS[h.id][A.rincorsaId]));   // #2: chi ha la rincorsa come rivale non tratta la mossa
   if (!cand.length) return;
   const h = cand[Math.floor(Math.random() * cand.length)];
   const decisa = A.decise.includes(h.id);
   const budget = contradaBudget(h.id) + (A.paid[h.id] || 0);
   // Le tre decise arrivano a spendere quasi tutto; le altre si fermano presto.
   const tetto = decisa ? budget * 0.92 : Math.min(budget * 0.30, A.best + 40);
-  const next = A.best + ASTA_STEP;
+  // #1: se c'è un prepagante protetto, per scavalcarlo il rilancio minimo è > 2× la sua posta.
+  const protegge = A.prepaidHolder && A.bestBidder === A.prepaidHolder && h.id !== A.prepaidHolder;
+  const next = (protegge ? 2 * (A.prepaidAmount || 0) : A.best) + ASTA_STEP;
   if (next > tetto) return;
   if (!decisa && Math.random() > 0.30) return;
   if (astaBid(h.id, next) && A.bestBidder !== (state.campaign.contrada || {}).id && state.messageTimer <= 0) {
@@ -6172,7 +6184,9 @@ function refreshAstaUI() {
   const rin = state.horses.find((h) => h.id === A.rincorsaId);
   const rinNome = rin ? rin.name : "la rincorsa";
   const inTesta = A.bestBidder === mioId;
-  const prossima = A.best + ASTA_STEP;
+  const rivaleERincorsa = !!(A.rincorsaId && RIVALS[mioId] && RIVALS[mioId][A.rincorsaId]);   // #2: non compri la mossa dalla tua rivale
+  const proteggePrepagante = !!(A.prepaidHolder && A.bestBidder === A.prepaidHolder && mioId !== A.prepaidHolder);   // #1
+  const prossima = (proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best) + ASTA_STEP;
   const rivId = cmp.rival ? cmp.rival.id : null;
   const rivInGara = rivId && state.horses.some((h) => h.id === rivId && !h.isRincorsa);
   const bloccoFatto = !!A.blocco[mioId];
@@ -6185,7 +6199,7 @@ function refreshAstaUI() {
   // Il tuo budget: durante la mossa l'indicatore in alto a destra è nascosto,
   // quindi senza questo offriresti alla cieca.
   const mieiDenari = contradaBudget(mioId);
-  const sig = `${A.best}|${A.bestBidder}|${bloccoFatto}|${rivInGara}|${inTesta}|${mieiDenari}`;
+  const sig = `${A.best}|${A.bestBidder}|${bloccoFatto}|${rivInGara}|${inTesta}|${mieiDenari}|${prossima}|${rivaleERincorsa}`;
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
 
@@ -6194,7 +6208,9 @@ function refreshAstaUI() {
     + ` &nbsp;·&nbsp; hai <b style="color:#f0cb35">${mieiDenari}</b> denari</div>`
     + (inTesta
       ? '<div id="astaLead" style="background:#2e7d4f;border-radius:8px;padding:6px 14px;font-weight:800">✓ La rincorsa ti darà la mossa</div>'
-      : `<button id="astaBidBtn" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;padding:8px 18px;background:#f0cb35;color:#1a1206;font-weight:800">Chiedi la mossa · ${prossima} denari</button>`)
+      : rivaleERincorsa
+        ? '<div style="opacity:.9;font-size:13px;color:#e8896f;font-weight:700">Non puoi comprare la mossa dalla tua rivale</div>'
+        : `<button id="astaBidBtn" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;padding:8px 18px;background:#f0cb35;color:#1a1206;font-weight:800">Chiedi la mossa · ${prossima} denari${proteggePrepagante ? " · mossa già pagata: serve il doppio" : ""}</button>`)
     + (rivInGara && !bloccoFatto
       ? `<button id="astaBlockBtn" type="button" style="font:inherit;cursor:pointer;border:1px solid rgba(240,203,53,.5);border-radius:8px;padding:6px 14px;background:rgba(60,40,20,.9);color:#f3e7cf">Non darla a ${cmp.rival.name} · ${ASTA_BLOCCO_RIVALE} denari</button>`
       : "")
@@ -6202,7 +6218,7 @@ function refreshAstaUI() {
 
   const bid = document.getElementById("astaBidBtn");
   if (bid) bid.addEventListener("click", () => {
-    if (!astaBid(mioId, A.best + ASTA_STEP)) showMessage("Non hai abbastanza denari", 1.2, "danger");
+    if (!astaBid(mioId, prossima)) showMessage("Non hai abbastanza denari", 1.2, "danger");
   });
   const blk = document.getElementById("astaBlockBtn");
   if (blk) blk.addEventListener("click", () => {
