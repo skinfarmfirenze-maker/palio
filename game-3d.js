@@ -6166,11 +6166,14 @@ function refreshAstaUI() {
   const me = getPlayer();
   const mioId = cmp && cmp.contrada ? cmp.contrada.id : null;
   const attiva = !!(A && !A.chiusa && me && mioId && state.mode === "mossa" && isHuman(me));
-  // #C: da TELEFONO durante la mossa nascondi il box "Posizione" (inutile lì) → lo spazio va all'asta (posta in alto).
+  // #C: da TELEFONO durante la mossa nascondi i box "Posizione" e "Giro" (inutili lì)
+  // → lo spazio in alto va ai pannelli dell'asta (spostati in alto su mobile).
   {
-    const phMob = (window.innerWidth || 999) < 640;
-    const posCorner = document.querySelector(".hud-top-left");
-    if (posCorner) posCorner.style.display = (state.mode === "mossa" && phMob) ? "none" : "";
+    const hideTop = state.mode === "mossa" && (window.innerWidth || 999) < 640;
+    const tl = document.querySelector(".hud-top-left");
+    const tr = document.querySelector(".hud-top-right");
+    if (tl) tl.style.display = hideTop ? "none" : "";
+    if (tr) tr.style.display = hideTop ? "none" : "";
   }
   // DUE viste diverse. Da OFFERENTE: sei nel tondino e rilanci (appena vieni
   // chiamato ai canapi, me.called, il pannello sparisce). Da RINCORSA: non
@@ -8515,7 +8518,7 @@ function mossaSpeedMod(horse) {
   return (horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1;
 }
 function releaseRace() {
-  { const pc = document.querySelector(".hud-top-left"); if (pc) pc.style.display = ""; }   // #C: ripristina il box Posizione al Via
+  { const tl = document.querySelector(".hud-top-left"); if (tl) tl.style.display = ""; const tr = document.querySelector(".hud-top-right"); if (tr) tr.style.display = ""; }   // #C: ripristina i box Posizione e Giro al Via
   chiudiAstaRincorsa();                                    // aggiudica l'asta e rimborsa i blocchi non onorati
   const oldAsta = document.getElementById("astaPanel"); if (oldAsta) oldAsta.remove();
   recordPalioRun();                                        // +1 al totale palii corsi (globale)
