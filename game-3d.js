@@ -5971,6 +5971,11 @@ function accordoCost(jockey) { return 50 * ((jockey && jockey.fedelta) || 3); }
 // rivalOnly: la voce appare SOLO se una rivale (del beneficiario) è in corsa.
 const ACCORDO_OBIETTIVI = [
   { id: "para",   label: "Marca la mia rivale e non farla vincere", rivalOnly: true },
+  { id: "nerbaRiv",     label: "Nerba la mia rivale", rivalOnly: true },
+  { id: "paraInterno",  label: "Para la mia rivale andando interno", rivalOnly: true },
+  { id: "curvaAddosso", label: "Buttati addosso alla mia rivale in curva (costa doppio)", rivalOnly: true },
+  { id: "paraRallenta", label: "Para la mia rivale rallentandole davanti", rivalOnly: true },
+  { id: "paraCanapi",   label: "Para la mia rivale ai canapi", rivalOnly: true },
   { id: "canapi", label: "Aprimi un varco ai canapi" },
   { id: "spingi", label: "Spingi forte ai canapi per me" },
   { id: "passa",  label: "Lasciami passare e para gli altri in corsa" },
@@ -5980,6 +5985,13 @@ const ACCORDO_OBIETTIVI = [
 ];
 function accordoMult(n) { return 1 + 0.5 * Math.max(0, (n || 1) - 1); }   // +50% del base per finalità extra
 function accordoCostObj(jockey, n) { return Math.round(accordoCost(jockey) * accordoMult(Math.max(1, n || 1))); }
+// Costo dato l'ELENCO di finalità: come sopra, ma "curvaAddosso" (buttati in curva)
+// costa DOPPIO → aggiunge un intero costo-base.
+function accordoCostSel(jockey, sel) {
+  let c = accordoCostObj(jockey, (sel || []).length);
+  if ((sel || []).indexOf("curvaAddosso") >= 0) c += accordoCost(jockey);
+  return c;
+}
 
 // ══ ASTA DELLA RINCORSA ══════════════════════════════════════════════════════
 // Dopo la PRIMA mossa falsa o la prima chiamata fuori, tutti sanno chi è di
@@ -6515,7 +6527,7 @@ function campaignAccordiScreen(spectate) {
             const pbtn = mkBtn(`Conferma · ${cost}`); pbtn.style.marginTop = "3px";
             const recompute = () => {
               const sel = Object.keys(checks).filter((k) => checks[k].checked);
-              const c = accordoCostObj(j, sel.length);
+              const c = accordoCostSel(j, sel);
               pbtn.textContent = `Conferma · ${c}`;
               const bad = sel.length === 0 || c > contradaBudget(myId);
               pbtn.disabled = bad; pbtn.style.opacity = bad ? ".5" : "1";
@@ -6524,7 +6536,7 @@ function campaignAccordiScreen(spectate) {
             pbtn.addEventListener("click", () => {
               const sel = Object.keys(checks).filter((k) => checks[k].checked);
               if (!sel.length) return;
-              const c = accordoCostObj(j, sel.length);
+              const c = accordoCostSel(j, sel);
               if (c > contradaBudget(myId)) return;
               // I soldi si scalano SUBITO (prepaid). Rimborso a fine palio se non vinci.
               if (Math.random() < 0.7) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }   // rifiuto 30%
@@ -8369,11 +8381,24 @@ function startMossa(fromTratta = false) {
           helper.objMossa = wantMossa;
           helper.objLetWin = wantVinci;
           if (wantCanapi || wantSpingi || wantPassa || wantMossa || wantVinci || wantInterno) { helper.allyBeneficiaryId = playerId; helper.allyHelp = true; }
-          if (wantPara && rivalId) {             // para la MIA rivale (canapi + corsa)
-            helper.paraInRace = rivalId;
+          // ── NUOVE finalità anti-rivale (riuso paraInRace = le va davanti a bloccarla,
+          // setVendetta = la va a disturbare/nerbare/addosso). Flag leggeri in più per
+          // le due varianti nuove (curva / rallenta).
+          const wantNerbaRiv = O.indexOf("nerbaRiv") >= 0;
+          const wantParaInterno = O.indexOf("paraInterno") >= 0;
+          const wantCurva = O.indexOf("curvaAddosso") >= 0;
+          const wantRallenta = O.indexOf("paraRallenta") >= 0;
+          const wantParaCanapi = O.indexOf("paraCanapi") >= 0;
+          if (wantParaInterno) helper.objPassa = true;   // "interno" include il farmi passare
+          const anyAntiRivale = wantPara || wantNerbaRiv || wantParaInterno || wantCurva || wantRallenta || wantParaCanapi;
+          if (anyAntiRivale && rivalId) {
             helper.allyTargetId = rivalId;
             helper.allyHelp = true;
-            setVendetta(helper, rivalId);
+            // Le va DAVANTI a bloccarla (para/interno/rallenta/canapi/curva); "nerba" da sola no.
+            if (wantPara || wantParaInterno || wantCurva || wantRallenta || wantParaCanapi) helper.paraInRace = rivalId;
+            setVendetta(helper, rivalId);                // la insegue e la disturba
+            if (wantCurva) helper.curvaRam = rivalId;        // extra: si butta addosso in curva
+            if (wantRallenta) helper.paraRallenta = rivalId; // extra: rallenta stando davanti a lei
           }
         }
       } else if (a.para && a.sponsor === playerId) {   // ASSISTI: l'alleato para la RIVALE
