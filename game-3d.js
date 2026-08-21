@@ -12578,7 +12578,9 @@ function renderFinalRanking() {
     // Bandiera ufficiale della contrada vincitrice (immagine vera).
     flag.style.background = `url("bandiere/${winner.id}.jpg") center / cover no-repeat`;
     flag.style.backgroundColor = winner.colors[0];
-    wname.textContent = `Vince la Contrada ${articoloContrada(winner.name)}`;
+    // "Vince la Contrada dell'Oca con Tittìa e Rocco Nice" — contrada, fantino e cavallo.
+    const conChi = [winner.jockey && winner.jockey.nick, winner.horseName].filter(Boolean).join(" e ");
+    wname.textContent = `Vince la Contrada ${articoloContrada(winner.name)}${conChi ? ` con ${conChi}` : ""}`;
     banner.classList.toggle("player-win", isMine);
   }
   if (ui.resultSummary) {
