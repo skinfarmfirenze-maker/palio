@@ -13460,21 +13460,38 @@ function showMaintenanceGate() {
 const RELAUNCH_AT = new Date(2026, 7, 20, 21, 0, 0).getTime();    // 20 ago 21:00 → apre
 const CYCLE_ANCHOR = new Date(2026, 7, 21, 21, 0, 0).getTime();   // 21 ago 21:00 → inizio ciclo (prima chiusura)
 const CYCLE_MS = 48 * 3600 * 1000;                               // durata di ogni blocco: 48h
+// Dalle 21:00 del 21 ago 2026 il gioco entra in DEMO: chiuso a tutti tranne gli
+// sviluppatori (Mario Rossi), SENZA timer/countdown.
+const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
 const MESI_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 function fmtDataIt(ts) { const d = new Date(ts); return d.getDate() + " " + MESI_IT[d.getMonth()] + " alle " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 function ensurePasswordGate() {
-  // NIENTE PIÙ PASSWORD. Mario Rossi (admin) entra sempre, per i test.
+  // Mario Rossi (sviluppatore) entra SEMPRE.
   if (isMarioRossi(getAccount())) { ensureAccountGate(); return; }
-  const now = Date.now();
-  if (now < RELAUNCH_AT) { showCountdownGate(RELAUNCH_AT, "Torniamo il <b>" + fmtDataIt(RELAUNCH_AT) + "</b>."); return; }
-  if (now < CYCLE_ANCHOR) { ensureAccountGate(); return; }                     // finestra iniziale 24h (20→21)
-  const k = Math.floor((now - CYCLE_ANCHOR) / CYCLE_MS);                        // 0,1,2,… blocchi da 48h
-  if (k % 2 === 0) {                                                            // blocco pari = CHIUSO (aggiornamenti)
-    const riapre = CYCLE_ANCHOR + (k + 1) * CYCLE_MS;
-    showCountdownGate(riapre, "Stiamo preparando <b>nuovi aggiornamenti</b>. Torniamo il <b>" + fmtDataIt(riapre) + "</b>.");
-    return;
-  }
-  ensureAccountGate();                                                          // blocco dispari = APERTO
+  // Dalle 21:00 del 21 ago 2026: DEMO chiusa a tutti tranne gli sviluppatori,
+  // SENZA timer. Prima di quell'ora: aperto normalmente.
+  if (Date.now() >= DEMO_CLOSE_AT) { showDemoClosedGate(); return; }
+  ensureAccountGate();
+}
+// Schermata DEMO (niente countdown): il gioco è chiuso salvo gli sviluppatori.
+function showDemoClosedGate() {
+  if (document.getElementById("demoGate")) return;
+  const ov = document.createElement("div");
+  ov.id = "demoGate";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;"
+    + "justify-content:center;gap:18px;background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
+    + "color:#f3e7cf;font-family:inherit;padding:28px;text-align:center";
+  ov.innerHTML =
+    '<div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio della Piazza</div>'
+    + '<div style="font-size:clamp(16px,3vw,22px);font-weight:700;max-width:min(580px,90vw);line-height:1.55">Questo gioco è gratuito e senza scopo di lucro, attualmente è in fase <b style="color:#f0cb35">DEMO</b>, solo gli sviluppatori possono accedere.</div>';
+  document.body.appendChild(ov);
+  // Accesso SVILUPPATORE discreto: 5 tap sul titolo → login (per entrare come
+  // Mario Rossi su un dispositivo dove non è già loggato).
+  let taps = 0;
+  ov.firstChild.addEventListener("click", () => {
+    taps += 1;
+    if (taps >= 5) { ov.remove(); ensureAccountGate(); }
+  });
 }
 function showCountdownGate(targetTs, subtitleHtml) {
   if (Date.now() >= targetTs) { ensurePasswordGate(); return; }
