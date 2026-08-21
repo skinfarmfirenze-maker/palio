@@ -5978,7 +5978,7 @@ function accordoCostObj(jockey, n) { return Math.round(accordoCost(jockey) * acc
 // lei l'asta è finita. Chi ha la prima posta ha pochissimo tempo per giocarsela.
 const ASTA_STEP = 10;                 // rilanci a step di 10 denari
 const ASTA_BASE_SENZA_ACCORDO = 10;   // base se la rincorsa non ha già un accordo
-const ASTA_BLOCCO_RIVALE = 30;        // costo FISSO per "non darla alla rivale"
+const ASTA_BLOCCO_RIVALE = 90;        // costo FISSO per "non darla alla rivale"
 
 function openAstaRincorsa() {
   const cmp = state.campaign;
@@ -6121,15 +6121,18 @@ function refreshAstaUIRincorsa(A, el, mioId) {
     const p = migliori.get(o.id);
     if (!p || o.amount > p.amount) migliori.set(o.id, o);
   });
-  const righe = [...migliori.values()].sort((a, b) => b.amount - a.amount).slice(0, 6);
-  const sig = `R|${A.best}|${A.bestBidder}|${(A.offerte || []).length}`;
+  const ph = (window.innerWidth || 999) < 640;                       // #2: più piccolo su telefono
+  const righe = [...migliori.values()].sort((a, b) => b.amount - a.amount).slice(0, ph ? 4 : 6);
+  const sig = `R|${A.best}|${A.bestBidder}|${(A.offerte || []).length}|${ph}`;
   if (!el) {
     el = document.createElement("div");
     el.id = "astaPanel";
-    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:120;"
+    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:120;"
+      + `bottom:${ph ? 10 : 22}px;padding:${ph ? "6px 9px" : "10px 16px"};font-size:${ph ? 12 : 14}px;`
+      + `gap:${ph ? 3 : 6}px;min-width:${ph ? 190 : 280}px;max-width:94vw;`
       + "background:rgba(20,14,8,.9);border:1px solid rgba(240,203,53,.55);border-radius:12px;"
-      + "padding:10px 16px;color:#f3e7cf;font-family:inherit;font-size:14px;text-align:center;"
-      + "display:flex;flex-direction:column;gap:6px;align-items:stretch;min-width:280px";
+      + "color:#f3e7cf;font-family:inherit;text-align:center;"
+      + "display:flex;flex-direction:column;align-items:stretch";
     document.body.appendChild(el);
   }
   if (el.dataset.sig === sig) return;
@@ -6137,22 +6140,22 @@ function refreshAstaUIRincorsa(A, el, mioId) {
 
   if (!righe.length) {
     el.innerHTML = '<div style="opacity:.85">Sei di <b style="color:#f0cb35">rincorsa</b>'
-      + ' &nbsp;·&nbsp; <span style="opacity:.75">nessuna offerta, per ora</span></div>';
+      + ' &nbsp;·&nbsp; <span style="opacity:.75">nessuna offerta</span></div>';
     return;
   }
   el.innerHTML =
-    '<div style="opacity:.85;margin-bottom:2px">Sei di <b style="color:#f0cb35">rincorsa</b> · ti offrono la mossa</div>'
+    `<div style="opacity:.85;margin-bottom:2px;font-size:${ph ? 12 : 13}px">Sei di <b style="color:#f0cb35">rincorsa</b> · ti offrono la mossa</div>`
     + righe.map((o) => {
       const vince = !o.blocco && A.bestBidder === o.id;
       const testo = o.blocco
-        ? `${nome(o.id)}: non darla a ${nome(o.target)}`
+        ? `${nome(o.id)}: non a ${nome(o.target)}`
         : `${nome(o.id)}`;
-      return `<div style="display:flex;justify-content:space-between;gap:16px;padding:3px 8px;border-radius:6px;`
+      return `<div style="display:flex;justify-content:space-between;gap:${ph ? 8 : 16}px;padding:${ph ? "2px 6px" : "3px 8px"};border-radius:6px;`
         + `background:${vince ? "rgba(46,125,79,.55)" : "rgba(255,255,255,.05)"}">`
         + `<span>${vince ? "★ " : o.blocco ? "✋ " : ""}${testo}</span>`
         + `<b style="color:#f0cb35">${o.amount}</b></div>`;
     }).join("")
-    + `<div style="opacity:.7;font-size:12px;margin-top:2px">Decidi tu quando entrare</div>`;
+    + `<div style="opacity:.7;font-size:${ph ? 10 : 12}px;margin-top:2px">Decidi tu quando entrare</div>`;
 }
 
 // Pannello di trattativa del GIOCATORE. Compare solo mentre è nel tondino: appena
@@ -6173,12 +6176,14 @@ function refreshAstaUI() {
   if (!visibile) { if (el) el.remove(); return; }
   if (ioRincorsa) { refreshAstaUIRincorsa(A, el, mioId); return; }
   if (!el) {
+    const phc = (window.innerWidth || 999) < 640;
     el = document.createElement("div");
     el.id = "astaPanel";
-    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:120;"
+    el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:120;"
+      + `bottom:${phc ? 12 : 22}px;padding:${phc ? "6px 10px" : "10px 16px"};gap:${phc ? 6 : 8}px;`
       + "background:rgba(20,14,8,.9);border:1px solid rgba(240,203,53,.55);border-radius:12px;"
-      + "padding:10px 16px;color:#f3e7cf;font-family:inherit;font-size:14px;text-align:center;"
-      + "display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:auto";
+      + "color:#f3e7cf;font-family:inherit;text-align:center;max-width:94vw;"
+      + "display:flex;flex-direction:column;align-items:center;pointer-events:auto";
     document.body.appendChild(el);
   }
   const rin = state.horses.find((h) => h.id === A.rincorsaId);
@@ -6186,7 +6191,8 @@ function refreshAstaUI() {
   const inTesta = A.bestBidder === mioId;
   const rivaleERincorsa = !!(A.rincorsaId && RIVALS[mioId] && RIVALS[mioId][A.rincorsaId]);   // #2: non compri la mossa dalla tua rivale
   const proteggePrepagante = !!(A.prepaidHolder && A.bestBidder === A.prepaidHolder && mioId !== A.prepaidHolder);   // #1
-  const prossima = (proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best) + ASTA_STEP;
+  const floorBid = proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best;   // soglia da scavalcare
+  const rilanci = [floorBid + 100, floorBid + 200, floorBid + 300];            // #1: 3 tasti +100/+200/+300
   const rivId = cmp.rival ? cmp.rival.id : null;
   const rivInGara = rivId && state.horses.some((h) => h.id === rivId && !h.isRincorsa);
   const bloccoFatto = !!A.blocco[mioId];
@@ -6199,27 +6205,32 @@ function refreshAstaUI() {
   // Il tuo budget: durante la mossa l'indicatore in alto a destra è nascosto,
   // quindi senza questo offriresti alla cieca.
   const mieiDenari = contradaBudget(mioId);
-  const sig = `${A.best}|${A.bestBidder}|${bloccoFatto}|${rivInGara}|${inTesta}|${mieiDenari}|${prossima}|${rivaleERincorsa}`;
+  const sig = `${A.best}|${A.bestBidder}|${bloccoFatto}|${rivInGara}|${inTesta}|${mieiDenari}|${floorBid}|${rivaleERincorsa}`;
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
 
+  const ph = (window.innerWidth || 999) < 640;                       // #2: più compatto su telefono
+  const bs = ph ? "padding:7px 9px;font-size:13px" : "padding:8px 14px;font-size:14px";
+  const azione = inTesta
+    ? '<div id="astaLead" style="background:#2e7d4f;border-radius:8px;padding:6px 12px;font-weight:800">✓ La rincorsa ti darà la mossa</div>'
+    : rivaleERincorsa
+      ? '<div style="opacity:.9;font-size:13px;color:#e8896f;font-weight:700">Non puoi comprare la mossa dalla tua rivale</div>'
+      : `<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">`
+        + rilanci.map((amt, i) => `<button class="astaBidBtn" data-amt="${amt}" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;${bs};background:#f0cb35;color:#1a1206;font-weight:800">+${(i + 1) * 100} · ${amt}</button>`).join("")
+        + `</div>`
+        + (proteggePrepagante ? '<div style="opacity:.75;font-size:11px">mossa già pagata: serve il doppio</div>' : "");
   el.innerHTML =
-    `<div style="opacity:.85">Tratti con <b style="color:#f0cb35">${rinNome}</b> · offerta più alta <b>${A.best}</b>${chi ? ` (${chi})` : ""}`
-    + ` &nbsp;·&nbsp; hai <b style="color:#f0cb35">${mieiDenari}</b> denari</div>`
-    + (inTesta
-      ? '<div id="astaLead" style="background:#2e7d4f;border-radius:8px;padding:6px 14px;font-weight:800">✓ La rincorsa ti darà la mossa</div>'
-      : rivaleERincorsa
-        ? '<div style="opacity:.9;font-size:13px;color:#e8896f;font-weight:700">Non puoi comprare la mossa dalla tua rivale</div>'
-        : `<button id="astaBidBtn" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;padding:8px 18px;background:#f0cb35;color:#1a1206;font-weight:800">Chiedi la mossa · ${prossima} denari${proteggePrepagante ? " · mossa già pagata: serve il doppio" : ""}</button>`)
+    `<div style="opacity:.85;font-size:${ph ? 12 : 14}px">Tratti con <b style="color:#f0cb35">${rinNome}</b> · più alta <b>${A.best}</b>${chi ? ` (${chi})` : ""}`
+    + ` &nbsp;·&nbsp; hai <b style="color:#f0cb35">${mieiDenari}</b></div>`
+    + azione
     + (rivInGara && !bloccoFatto
-      ? `<button id="astaBlockBtn" type="button" style="font:inherit;cursor:pointer;border:1px solid rgba(240,203,53,.5);border-radius:8px;padding:6px 14px;background:rgba(60,40,20,.9);color:#f3e7cf">Non darla a ${cmp.rival.name} · ${ASTA_BLOCCO_RIVALE} denari</button>`
+      ? `<button id="astaBlockBtn" type="button" style="font:inherit;cursor:pointer;border:1px solid rgba(240,203,53,.5);border-radius:8px;${bs};background:rgba(60,40,20,.9);color:#f3e7cf">Non darla a ${cmp.rival.name} · ${ASTA_BLOCCO_RIVALE}</button>`
       : "")
-    + (bloccoFatto ? '<div style="opacity:.8;font-size:13px">Hai pagato perché non la dia alla rivale</div>' : "");
+    + (bloccoFatto ? '<div style="opacity:.8;font-size:12px">Hai pagato perché non la dia alla rivale</div>' : "");
 
-  const bid = document.getElementById("astaBidBtn");
-  if (bid) bid.addEventListener("click", () => {
-    if (!astaBid(mioId, prossima)) showMessage("Non hai abbastanza denari", 1.2, "danger");
-  });
+  el.querySelectorAll(".astaBidBtn").forEach((b) => b.addEventListener("click", () => {
+    if (!astaBid(mioId, Number(b.dataset.amt))) showMessage("Non hai abbastanza denari", 1.2, "danger");
+  }));
   const blk = document.getElementById("astaBlockBtn");
   if (blk) blk.addEventListener("click", () => {
     if (!astaBloccaRivale(mioId, rivId)) showMessage("Non hai abbastanza denari", 1.2, "danger");
@@ -8490,6 +8501,12 @@ function startMossa(fromTratta = false) {
   showMessage("Al tondino: i cavalli girano in attesa della chiamata…", 3.0);
 }
 
+// Boost/malus TEMPORANEO di velocità legato alla mossa (asta): +9% per chi si
+// aggiudica la mossa pagando (4s), −6% per la rivale bloccata (3s). Il timer viene
+// scalato in updateRace; il moltiplicatore entra nelle righe di velocità.
+function mossaSpeedMod(horse) {
+  return (horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1;
+}
 function releaseRace() {
   chiudiAstaRincorsa();                                    // aggiudica l'asta e rimborsa i blocchi non onorati
   const oldAsta = document.getElementById("astaPanel"); if (oldAsta) oldAsta.remove();
@@ -8534,6 +8551,26 @@ function releaseRace() {
     const rin = state.horses.find((h) => h.isRincorsa);
     const rMap = rin ? (RIVALS[rin.id] || null) : null;
     if (rMap) state.horses.forEach((h) => { if (h !== rin && rMap[h.id]) h.startQuality = "slow"; });
+  }
+  // ASTA: chi si è AGGIUDICATO la mossa pagando → boost di accelerazione al via
+  // (+9% per 4s). Chi ha pagato il BLOCCO anti-rivale ONORATO → la rivale bloccata
+  // parte "slow" (mai nelle prime 2) e con malus di velocità (−6% per 3s).
+  {
+    const A = state.asta;
+    if (A) {
+      const byId = (id) => state.horses.find((h) => h.id === id);
+      if (A.bestBidder && ((A.paid && A.paid[A.bestBidder]) || A.bestBidder === A.prepaidHolder)) {
+        const w = byId(A.bestBidder);
+        if (w) { w.mossaModMult = 1.09; w.mossaModTimer = 4; }
+      }
+      Object.keys(A.blocco || {}).forEach((id) => {
+        const b = A.blocco[id];
+        if (b && A.bestBidder !== b.target) {   // blocco ONORATO: la rivale non ha spuntato l'asta
+          const r = byId(b.target);
+          if (r) { r.startQuality = "slow"; r.mossaModMult = 0.94; r.mossaModTimer = 3; }
+        }
+      });
+    }
   }
 
   state.horses.forEach((horse) => {
@@ -10634,7 +10671,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player);
+  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -11011,7 +11048,7 @@ function updateAiHorse(horse, dt, time) {
   const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.62, 1.5);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
@@ -11104,6 +11141,7 @@ function updateRace(dt, time) {
     }
   }
 
+  state.horses.forEach((h) => { if (h.mossaModTimer > 0) h.mossaModTimer -= dt; });   // asta: scala i boost/malus temporanei della mossa
   const preRanking = getRanking();
   state.currentLeader = preRanking[0] || null;
   state.currentLast = preRanking[preRanking.length - 1] || null;
