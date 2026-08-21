@@ -6128,7 +6128,7 @@ function refreshAstaUIRincorsa(A, el, mioId) {
     el = document.createElement("div");
     el.id = "astaPanel";
     el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:120;"
-      + `bottom:${ph ? 10 : 22}px;padding:${ph ? "6px 9px" : "10px 16px"};font-size:${ph ? 12 : 14}px;`
+      + `${ph ? "top:8px;" : "bottom:22px;"}padding:${ph ? "6px 9px" : "10px 16px"};font-size:${ph ? 12 : 14}px;`
       + `gap:${ph ? 3 : 6}px;min-width:${ph ? 190 : 280}px;max-width:94vw;`
       + "background:rgba(20,14,8,.9);border:1px solid rgba(240,203,53,.55);border-radius:12px;"
       + "color:#f3e7cf;font-family:inherit;text-align:center;"
@@ -6166,6 +6166,12 @@ function refreshAstaUI() {
   const me = getPlayer();
   const mioId = cmp && cmp.contrada ? cmp.contrada.id : null;
   const attiva = !!(A && !A.chiusa && me && mioId && state.mode === "mossa" && isHuman(me));
+  // #C: da TELEFONO durante la mossa nascondi il box "Posizione" (inutile lì) → lo spazio va all'asta (posta in alto).
+  {
+    const phMob = (window.innerWidth || 999) < 640;
+    const posCorner = document.querySelector(".hud-top-left");
+    if (posCorner) posCorner.style.display = (state.mode === "mossa" && phMob) ? "none" : "";
+  }
   // DUE viste diverse. Da OFFERENTE: sei nel tondino e rilanci (appena vieni
   // chiamato ai canapi, me.called, il pannello sparisce). Da RINCORSA: non
   // rilanci — le offerte arrivano A TE, e le devi vedere per decidere a chi
@@ -6180,7 +6186,7 @@ function refreshAstaUI() {
     el = document.createElement("div");
     el.id = "astaPanel";
     el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);z-index:120;"
-      + `bottom:${phc ? 12 : 22}px;padding:${phc ? "6px 10px" : "10px 16px"};gap:${phc ? 6 : 8}px;`
+      + `${phc ? "top:8px;" : "bottom:22px;"}padding:${phc ? "6px 10px" : "10px 16px"};gap:${phc ? 6 : 8}px;`
       + "background:rgba(20,14,8,.9);border:1px solid rgba(240,203,53,.55);border-radius:12px;"
       + "color:#f3e7cf;font-family:inherit;text-align:center;max-width:94vw;"
       + "display:flex;flex-direction:column;align-items:center;pointer-events:auto";
@@ -8508,6 +8514,7 @@ function mossaSpeedMod(horse) {
   return (horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1;
 }
 function releaseRace() {
+  { const pc = document.querySelector(".hud-top-left"); if (pc) pc.style.display = ""; }   // #C: ripristina il box Posizione al Via
   chiudiAstaRincorsa();                                    // aggiudica l'asta e rimborsa i blocchi non onorati
   const oldAsta = document.getElementById("astaPanel"); if (oldAsta) oldAsta.remove();
   recordPalioRun();                                        // +1 al totale palii corsi (globale)
@@ -8559,9 +8566,14 @@ function releaseRace() {
     const A = state.asta;
     if (A) {
       const byId = (id) => state.horses.find((h) => h.id === id);
+      const rinH = state.horses.find((h) => h.isRincorsa);
       if (A.bestBidder && ((A.paid && A.paid[A.bestBidder]) || A.bestBidder === A.prepaidHolder)) {
         const w = byId(A.bestBidder);
-        if (w) { w.mossaModMult = 1.09; w.mossaModTimer = 4; }
+        if (w) {
+          w.mossaModMult = 1.09; w.mossaModTimer = 4;   // +9% per 4s a chi si aggiudica la mossa pagando
+          // Se il GIOCATORE è di rincorsa e ha incassato → chi ha pagato parte fra le prime 2 (start pulito + boost).
+          if (rinH && isHuman(rinH)) w.startQuality = "clean";
+        }
       }
       Object.keys(A.blocco || {}).forEach((id) => {
         const b = A.blocco[id];
@@ -10301,9 +10313,7 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
     target.nerbSlowT = NERBATA_SLOW_DUR;
   }
   target.collisionFlash = Math.max(target.collisionFlash || 0, 0.7);
-  if (state.messageTimer <= 0 && Math.random() < 0.55) {
-    showMessage(`${attacker.name} nerba ${target.name}`, 1.0, "danger");
-  }
+  // (rimossa la scritta "X nerba Y": troppo ripetitiva a schermo)
   return true;
 }
 // Moltiplicatore di velocità per chi è stato nerbato in gara.
@@ -13570,6 +13580,7 @@ function ensureAccountGate() {
     if (isNew) { try { localStorage.setItem("palio.fbBroadcast", FEEDBACK_BROADCAST); } catch (e) { /* niente */ } }
     setAccount(account); ov.remove(); updateAccountChip();
     if (isNew) openWelcomeTutorial();   // UNA TANTUM: solo appena creato l'account
+    maybeShowGameTips();                // 3 consigli skippabili, una tantum per dispositivo (dietro il tutorial per i nuovi)
   };
   const errMsg = (code) => ({
     "nome-cognome": "Inserisci nome e cognome.",
@@ -13658,6 +13669,44 @@ function updateAccountChip() {
 // BENVENUTO — UNA TANTUM appena creato l'account: prima la scritta "gioco privato,
 // non a scopo di lucro", poi un tutorial info-grafico dei comandi (PC / controller /
 // telefono). Compare solo dopo il signup, mai al login.
+// ── CONSIGLI iniziali (popup skippabili, una tantum per dispositivo) ──────────
+const TIPS_VERSION = "1";   // bumpa per rimostrarli a tutti
+const GAME_TIPS = [
+  ["🫁", "Attenzione alla stamina dei cavalli!", "Il fiato del cavallo ti deve bastare 3 giri: non sparare tutto subito."],
+  ["🌀", "Attenzione alle curve!", "Se le prendi a 3-4-5 il cavallo non gira, a meno che non ti allarghi molto."],
+  ["🤝", "Non saltare gli accordi.", "Come pensi di vincere il Palio se salti gli accordi con le altre contrade?"],
+];
+function showGameTips(onDone) {
+  if (document.getElementById("gameTips")) { if (onDone) onDone(); return; }
+  let i = 0;
+  const ov = document.createElement("div");
+  ov.id = "gameTips";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;flex-direction:column;align-items:center;"
+    + "justify-content:center;gap:16px;padding:26px 20px;text-align:center;color:#f3e7cf;font-family:inherit;"
+    + "background:radial-gradient(1100px 700px at 50% -8%,#3a2a17 0%,#17110a 60%,#0d0906 100%)";
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); if (onDone) onDone(); };
+  const render = () => {
+    const [ic, t, d] = GAME_TIPS[i];
+    ov.innerHTML =
+      `<div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#f0cb35;opacity:.9">Consiglio ${i + 1}/${GAME_TIPS.length}</div>`
+      + `<div style="font-size:clamp(46px,12vw,74px);line-height:1">${ic}</div>`
+      + `<div style="font-size:clamp(20px,4.4vw,32px);font-weight:800;color:#f7edd6;max-width:min(560px,92vw)">${t}</div>`
+      + `<div style="font-size:clamp(14px,2.8vw,18px);opacity:.85;max-width:min(480px,88vw);line-height:1.5">${d}</div>`
+      + `<button type="button" id="gtNext" style="margin-top:6px;font:inherit;font-size:16px;font-weight:800;padding:12px 40px;border-radius:11px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer">${i < GAME_TIPS.length - 1 ? "Avanti ›" : "Ho capito!"}</button>`
+      + `<button type="button" id="gtSkip" style="font:inherit;font-size:13px;background:none;border:none;color:#f3e7cf;opacity:.6;cursor:pointer;text-decoration:underline">Salta</button>`;
+    ov.querySelector("#gtNext").addEventListener("click", () => { i += 1; if (i >= GAME_TIPS.length) close(); else render(); });
+    ov.querySelector("#gtSkip").addEventListener("click", close);
+  };
+  render();
+}
+function maybeShowGameTips() {
+  let seen = null;
+  try { seen = localStorage.getItem("palio.tipsSeen"); } catch (e) { /* niente */ }
+  if (seen === TIPS_VERSION) return;
+  try { localStorage.setItem("palio.tipsSeen", TIPS_VERSION); } catch (e) { /* niente */ }
+  showGameTips();
+}
 function openWelcomeTutorial() {
   if (document.getElementById("welcomeTut")) return;
   const ov = document.createElement("div");
