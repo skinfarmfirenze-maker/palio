@@ -13519,7 +13519,7 @@ function clearAccount() { try { localStorage.removeItem(ACCOUNT_KEY); } catch (e
 // Overlay di login/registrazione. Resta finché non si entra in un account.
 function ensureAccountGate() {
   if (document.getElementById("pwGate")) return;      // prima la password condivisa
-  if (getAccount()) { updateAccountChip(); return; }   // già loggato
+  if (getAccount()) { updateAccountChip(); maybeShowGameTips(); return; }   // già loggato → mostra i consigli (una tantum per TIPS_VERSION)
   if (document.getElementById("accountGate")) return;  // già aperto
 
   const ov = document.createElement("div");
