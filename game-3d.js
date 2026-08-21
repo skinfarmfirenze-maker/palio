@@ -5884,6 +5884,53 @@ const CORRUZIONE_OBIETTIVI = [
   { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare" },
 ];
 function corruptionCostObj(j, n) { return Math.round(corruptionCost(j) * accordoMult(Math.max(1, n || 1))); }
+
+// ── TRATTATIVA A TUTTO SCHERMO ────────────────────────────────────────────────
+// Le checkbox delle finalità si aprivano DENTRO la riga della lista e si
+// sovrapponevano al resto (illeggibile da telefono E da PC). Ora scegliere di
+// trattare con qualcuno apre una schermata dedicata: caselle grandi, costo
+// aggiornato live, "← Indietro" e "Conferma".
+function openFinalitaScreen(opts) {
+  const old = document.getElementById("finalitaScreen"); if (old) old.remove();
+  const ov = document.createElement("div");
+  ov.id = "finalitaScreen";
+  ov.style.cssText = "position:fixed;inset:0;z-index:82;display:flex;flex-direction:column;align-items:center;"
+    + "background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
+    + "color:#f3e7cf;font-family:inherit;padding:16px 12px;overflow-y:auto";
+  const rows = opts.obiettivi.map((o) =>
+    `<label style="display:flex;align-items:center;gap:12px;background:rgba(255,246,225,.06);border:1px solid rgba(240,203,53,.3);border-radius:12px;padding:12px 14px;font-size:15px;line-height:1.35;cursor:pointer;text-align:left">`
+    + `<input type="checkbox" data-fin="${o.id}" style="width:22px;height:22px;flex:0 0 auto;accent-color:#f0cb35"><span>${o.label}</span></label>`).join("");
+  ov.innerHTML =
+    `<div style="width:min(560px,96vw);display:flex;flex-direction:column;gap:9px;margin:auto 0;padding:6px 0">`
+    + `<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;opacity:.9;text-align:center">${opts.kicker || "Trattativa"}</div>`
+    + `<div style="font-size:clamp(20px,4.5vw,28px);font-weight:800;color:#f7edd6;text-align:center">${opts.titolo}</div>`
+    + (opts.sub ? `<div style="opacity:.8;font-size:13px;text-align:center;margin-bottom:2px">${opts.sub}</div>` : "")
+    + `<div style="display:flex;flex-direction:column;gap:8px">${rows}</div>`
+    + `<div style="display:flex;gap:10px;justify-content:center;margin-top:10px;flex-wrap:wrap">`
+    + `<button type="button" id="finBack" style="font:inherit;font-size:15px;font-weight:700;padding:12px 26px;border-radius:10px;border:1px solid rgba(240,203,53,.5);background:transparent;color:#f3e7cf;cursor:pointer">← Indietro</button>`
+    + `<button type="button" id="finOk" style="font:inherit;font-size:16px;font-weight:800;padding:12px 34px;border-radius:10px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer">Conferma</button>`
+    + `</div></div>`;
+  document.body.appendChild(ov);
+  const ok = ov.querySelector("#finOk");
+  const boxes = [...ov.querySelectorAll("input[type=checkbox]")];
+  const selNow = () => boxes.filter((b) => b.checked).map((b) => b.dataset.fin);
+  const recompute = () => {
+    const sel = selNow();
+    const c = opts.costoDi(sel);
+    ok.textContent = sel.length ? `Conferma · ${c}` : "Conferma";
+    const bad = sel.length === 0 || c > opts.budget();
+    ok.disabled = bad; ok.style.opacity = bad ? ".5" : "1";
+  };
+  boxes.forEach((b) => b.addEventListener("change", recompute));
+  ov.querySelector("#finBack").addEventListener("click", () => ov.remove());
+  ok.addEventListener("click", () => {
+    const sel = selNow();
+    if (!sel.length) return;
+    ov.remove();
+    opts.onConferma(sel);
+  });
+  recompute();
+}
 // Schermata di corruzione (solo PLAY): i 9 fantini altrui, con costo 80×fedeltà.
 function campaignCorruptionScreen() {
   const cmp = state.campaign;
@@ -5896,6 +5943,7 @@ function campaignCorruptionScreen() {
     const rivalRunning = !!(cmp.rival && others.some((h) => h.id === cmp.rival.id));   // ordini "rivale" solo se corre
     const k = document.createElement("p"); k.className = "cmp-kicker"; k.textContent = `Contrada ${cmp.contrada.name} · Budget ${budget} denari`;
     const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Corruzione dei fantini";
+    /* (le finalità si scelgono ora in una schermata dedicata: vedi openFinalitaScreen) */
     const sub = document.createElement("div"); sub.className = "cmp-text"; sub.style.fontSize = "14px";
     sub.innerHTML = "Corrompi un fantino avversario: <b>clicca la cifra</b>, poi scegli <b>cosa deve fare</b>. Costo = 80 × fedeltà, +50% per ogni finalità in più. I soldi spariscono dal gioco.";
     const list = document.createElement("div"); list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:16px 0;max-height:44vh;overflow:auto";
@@ -5925,38 +5973,26 @@ function campaignCorruptionScreen() {
         const isRival = !!(cmp.rival && h.id === cmp.rival.id);
         const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => !o.rivalOnly || (rivalRunning && !isRival));
         openBtn.addEventListener("click", () => {
-          ctrl.innerHTML = "";
-          const checks = {};
-          obiettivi.forEach((o) => {
-            const lab = document.createElement("label");
-            lab.style.cssText = "display:flex;gap:6px;align-items:flex-start;font-size:11px;opacity:.92;cursor:pointer;text-align:left;line-height:1.2";
-            const cb = document.createElement("input"); cb.type = "checkbox"; cb.style.marginTop = "1px";
-            lab.append(cb, document.createTextNode(o.label));
-            ctrl.appendChild(lab); checks[o.id] = cb;
+          // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
+          const costoDi = (sel) => corruptionCostObj(j, sel.length) + (sel.indexOf("buttati") >= 0 ? 100 : 0);   // buttati in curva = killer: +100
+          openFinalitaScreen({
+            kicker: "Corruzione",
+            titolo: `${h.name} · ${j.nick}`,
+            sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più`,
+            obiettivi,
+            costoDi,
+            budget: () => contradaBudget(cmp.contrada.id),
+            onConferma: (sel) => {
+              const c = costoDi(sel);
+              if (c > contradaBudget(cmp.contrada.id)) return;
+              // Il fantino può RIFIUTARE: 40% dei casi dice no (non paghi).
+              if (Math.random() < 0.40) { h._corRefused = true; render(); return; }
+              spendBudget(cmp.contrada.id, c);
+              cmp.corrupted[h.id] = cmp.contrada.id;
+              cmp.corruptOrders = cmp.corruptOrders || {}; cmp.corruptOrders[h.id] = sel;
+              render();
+            },
           });
-          const cbtn = document.createElement("button"); cbtn.className = "cmp-btn"; cbtn.style.cssText = "margin:3px 0 0;font-size:13px;padding:6px 14px";
-          const recompute = () => {
-            const sel = Object.keys(checks).filter((kk) => checks[kk].checked);
-            const c = corruptionCostObj(j, sel.length) + (sel.indexOf("buttati") >= 0 ? 100 : 0);   // buttati in curva = killer: +100
-            cbtn.textContent = `Conferma · ${c}`;
-            const bad = sel.length === 0 || c > contradaBudget(cmp.contrada.id);
-            cbtn.disabled = bad; cbtn.style.opacity = bad ? ".5" : "1";
-          };
-          Object.keys(checks).forEach((kk) => checks[kk].addEventListener("change", recompute));
-          cbtn.addEventListener("click", () => {
-            const sel = Object.keys(checks).filter((kk) => checks[kk].checked);
-            if (!sel.length) return;
-            const c = corruptionCostObj(j, sel.length) + (sel.indexOf("buttati") >= 0 ? 100 : 0);   // buttati in curva = killer: +100
-            if (c > contradaBudget(cmp.contrada.id)) return;
-            // Il fantino può RIFIUTARE: 30% dei casi dice no (non paghi).
-            if (Math.random() < 0.40) { h._corRefused = true; render(); return; }   // rifiuto fantini 40%
-            spendBudget(cmp.contrada.id, c);
-            cmp.corrupted[h.id] = cmp.contrada.id;
-            cmp.corruptOrders = cmp.corruptOrders || {}; cmp.corruptOrders[h.id] = sel;
-            render();
-          });
-          recompute();
-          ctrl.appendChild(cbtn);
         });
         ctrl.appendChild(openBtn);
         btn = ctrl;
@@ -6528,36 +6564,23 @@ function campaignAccordiScreen(spectate) {
           const openBtn = mkBtn(`Proponi · ${cost}`);
           const obiettivi = ACCORDO_OBIETTIVI.filter((o) => !o.rivalOnly || rivalRunning);   // "marca la rivale" solo se corre
           openBtn.addEventListener("click", () => {
-            ctrl.innerHTML = "";
-            const checks = {};
-            obiettivi.forEach((o) => {
-              const lab = document.createElement("label");
-              lab.style.cssText = "display:flex;gap:6px;align-items:flex-start;font-size:11px;opacity:.92;cursor:pointer;text-align:left;line-height:1.2";
-              const cb = document.createElement("input"); cb.type = "checkbox"; cb.style.marginTop = "1px";
-              lab.append(cb, document.createTextNode(o.label));
-              ctrl.appendChild(lab); checks[o.id] = cb;
+            // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
+            openFinalitaScreen({
+              kicker: "Manda una proposta",
+              titolo: `${h.name} · ${j.nick}`,
+              sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più · si paga solo a palio vinto`,
+              obiettivi,
+              costoDi: (sel) => accordoCostSel(j, sel),
+              budget: () => contradaBudget(myId),
+              onConferma: (sel) => {
+                const c = accordoCostSel(j, sel);
+                if (c > contradaBudget(myId)) return;
+                // I soldi si scalano SUBITO (prepaid). Rimborso a fine palio se non vinci.
+                if (Math.random() < 0.7) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }   // rifiuto 30%
+                else h._accRefused = true;
+                render();
+              },
             });
-            const pbtn = mkBtn(`Conferma · ${cost}`); pbtn.style.marginTop = "3px";
-            const recompute = () => {
-              const sel = Object.keys(checks).filter((k) => checks[k].checked);
-              const c = accordoCostSel(j, sel);
-              pbtn.textContent = `Conferma · ${c}`;
-              const bad = sel.length === 0 || c > contradaBudget(myId);
-              pbtn.disabled = bad; pbtn.style.opacity = bad ? ".5" : "1";
-            };
-            Object.keys(checks).forEach((k) => checks[k].addEventListener("change", recompute));
-            pbtn.addEventListener("click", () => {
-              const sel = Object.keys(checks).filter((k) => checks[k].checked);
-              if (!sel.length) return;
-              const c = accordoCostSel(j, sel);
-              if (c > contradaBudget(myId)) return;
-              // I soldi si scalano SUBITO (prepaid). Rimborso a fine palio se non vinci.
-              if (Math.random() < 0.7) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }   // rifiuto 30%
-              else h._accRefused = true;
-              render();
-            });
-            recompute();
-            ctrl.appendChild(pbtn);
           });
           ctrl.appendChild(openBtn);
           btn = ctrl;
