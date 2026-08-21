@@ -8511,6 +8511,14 @@ function releaseRace() {
 
   // Qualità di partenza per tutti (prima di impostare gli heading).
   state.horses.forEach((horse) => computeStartQuality(horse));
+  // REGOLA: quando una contrada è di RINCORSA, la sua RIVALE non parte fra le prime
+  // 4 → le forziamo lo start "slow" (0,4× di slancio), così scatta male e resta
+  // indietro al via. Vale anche se la rivale è il giocatore (handicap silenzioso).
+  {
+    const rin = state.horses.find((h) => h.isRincorsa);
+    const rMap = rin ? (RIVALS[rin.id] || null) : null;
+    if (rMap) state.horses.forEach((h) => { if (h !== rin && rMap[h.id]) h.startQuality = "slow"; });
+  }
 
   state.horses.forEach((horse) => {
     if (isHuman(horse)) {
@@ -9787,6 +9795,7 @@ function updateRincorsa(rincorsa, dt) {
         const rMap = RIVALS[rincorsa.id] || {};
         const rival = state.horses.find((o) => o.called && !o.entering && rMap[o.id]);
         let rivalIsMale = false;
+        let rivalIsBene = false;
         if (rival) {
           const k = rMap[rival.id];
           const rivalBene = Math.abs(rival.mossaTurn || 0) < 0.22
@@ -9796,6 +9805,7 @@ function updateRincorsa(rincorsa, dt) {
             || rival.mossaProgress < MOSSA_FRONT_LIMIT - 3.4
             || (rival.nervousnessCurrent || 0) > 0.78;
           rivalIsMale = rivalMale;
+          rivalIsBene = rivalBene;
           if (rivalBene) {
             threshold = clamp(threshold + 0.28 * k, 0.16, 0.95);
             if (Math.random() < 0.06 && state.messageTimer <= 0) {
@@ -9880,7 +9890,13 @@ function updateRincorsa(rincorsa, dt) {
           if (fiancata && state.messageTimer <= 0) showMessage(`${rincorsa.name} prova a fiancare la rivale!`, 1.5, "good");
         }
         // Una volta decisa (buona / per sbaglio / fiancata) si impegna: carica e va.
-        rincorsa.wantsToEnter = rincorsa.wantsToEnter || goodEntry || mistake || fiancata;
+        // REGOLA: la rincorsa non dà MAI la mossa alla rivale se questa è messa BENE
+        // → blocca il lancio VOLONTARIO (buona entrata / fiancata) finché la rivale è
+        // ben piazzata. La mossa falsa per sbaglio resta (non è una mossa valida). Il
+        // blocco cede solo oltre la durata massima assoluta, per non tenere aperta la
+        // mossa all'infinito se la rivale resta sempre pronta.
+        const rivalBloccaVia = rivalIsBene && state.mossaTimer < MOSSA_MAX_DURATION;
+        rincorsa.wantsToEnter = rincorsa.wantsToEnter || ((goodEntry || fiancata) && !rivalBloccaVia) || mistake;
       }
     }
     // CORRIDOIO OCCUPATO: la rincorsa trattiene la carica (il blocco fisico è
