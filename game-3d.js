@@ -5791,6 +5791,7 @@ function nextCampaignPalio() {
   cmp.corruptOrders = {};    // ordini dati ai fantini corrotti (per id): finalità scelte
   cmp.accordi = [];          // accordi fra contrade azzerati a ogni nuovo palio
   cmp.incomingAccordi = null; // proposte in arrivo: rigenerate alla schermata accordi
+  cmp.fazione = null;         // il "partito" del favorito avversario: rifatto a ogni palio
   cmp.mormorii = null;        // voci di piazza: rigenerate alla schermata accordi
   const entry = (cmp.schedule && cmp.schedule[cmp.palioIndex]) || { type: cmp.palioIndex % 2 === 0 ? "luglio" : "agosto" };
   cmp.currentType = entry.type;
@@ -6529,6 +6530,43 @@ function buildMormorii(cmp) {
   }
   return out;
 }
+// ── IL PARTITO DEL FAVORITO ────────────────────────────────────────────────────
+// A ogni palio una Contrada favorita (MAI il giocatore) arriva alla mossa col suo
+// partito già fatto: da 3 a 5 fra Contrade alleate e fantini comprati. Quelle
+// Contrade sono già schierate — al giocatore diranno di no quasi sempre — e quei
+// fantini non sono più acquistabili. È il contraltare della fazione che il
+// giocatore si costruisce pagando: qualcuno, in Piazza, l'ha fatto prima di lui.
+function campaignBuildFazione(cmp) {
+  if (!cmp || !state.horses || !state.horses.length) return null;
+  const myId = cmp.contrada && cmp.contrada.id;
+  const capoId = favoriteRunningId(myId);          // il favorito in gara, mai il giocatore
+  if (!capoId || capoId === myId) return null;
+  cmp.accordi = cmp.accordi || [];
+  cmp.corrupted = cmp.corrupted || {};
+  cmp.corruptOrders = cmp.corruptOrders || {};
+  const quanti = 3 + Math.floor(Math.random() * 3);   // 3..5 fra alleati e fantini
+  const membri = [];
+  const cand = shuffleInPlace(state.horses.filter((h) => h.id !== capoId && h.id !== myId
+    && !h.isRincorsa && h.jockey && rivalIntensity(capoId, h.id) === 0));
+  for (const h of cand) {
+    if (membri.length >= quanti) break;
+    if (Math.random() < 0.68) {
+      // Contrada alleata del capo (accordo già stretto).
+      cmp.accordi.push({ helper: h.id, beneficiary: capoId, amount: accordoCost(h.jockey), fazione: true });
+    } else {
+      // Fantino già comprato dal capo: per il giocatore risulta "fuori portata".
+      cmp.corrupted[h.id] = capoId;
+      cmp.corruptOrders[h.id] = ["perdi"];
+    }
+    membri.push(h.id);
+  }
+  cmp.fazione = { capo: capoId, membri };
+  return cmp.fazione;
+}
+// Questa Contrada è già schierata col favorito? (allora al giocatore dice di no)
+function inFazioneAvversaria(cmp, id) {
+  return !!(cmp && cmp.fazione && cmp.fazione.membri && cmp.fazione.membri.indexOf(id) >= 0);
+}
 function campaignAIAccordi() {
   const cmp = state.campaign; if (!cmp) return;
   cmp.accordi = cmp.accordi || [];
@@ -6565,6 +6603,7 @@ function campaignAIAccordi() {
 function campaignAccordiScreen(spectate) {
   const cmp = state.campaign;
   cmp.accordi = cmp.accordi || [];
+  if (cmp.fazione == null) campaignBuildFazione(cmp);   // il favorito ha già il suo partito
   if (!spectate && cmp.incomingAccordi == null) cmp.incomingAccordi = campaignBuildIncomingAccordi(cmp);
   const myId = cmp.contrada.id;
   const render = () => campaignOverlay((panel) => {
@@ -6652,7 +6691,9 @@ function campaignAccordiScreen(spectate) {
         if (h.id === myId || (cmp.rival && h.id === cmp.rival.id)) return;   // non a te, non alla nemica/rivale
         const j = h.jockey; if (!j) return;
         const cost = accordoCost(j);
-        const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
+        const schierata = inFazioneAvversaria(cmp, h.id);
+        const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`
+          + (schierata ? ` <span style="font-size:11px;color:#e8896f">· già schierata</span>` : "");
         const allied = cmp.accordi.some((a) => a.helper === h.id && (spectate ? a.para === cmp.rival.id : a.beneficiary === myId));
         let btn;
         if (allied) btn = disabledBtn(spectate ? "Ingaggiata ✓" : "Alleata ✓", "#2e6b46");
@@ -6676,6 +6717,8 @@ function campaignAccordiScreen(spectate) {
                 if (c > contradaBudget(myId)) return;
                 // Parare = rinunciare a vincere: chi monta un BOMBOLONE rifiuta spesso (75%).
                 if (h.horseTier === "bombolone" && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
+                // Già schierata col favorito: quasi sempre rifiuta.
+                if (inFazioneAvversaria(cmp, h.id) && Math.random() >= 0.12) { h._accRefused = true; render(); return; }
                 spendBudget(myId, c);
                 cmp.accordi.push({ helper: h.id, para: cmp.rival.id, sponsor: myId, amount: c, prepaid: true, obiettivi: sel });
                 render();
@@ -6712,7 +6755,9 @@ function campaignAccordiScreen(spectate) {
                 // con quel cavallo vuole correre per vincere → accetta solo il 25%.
                 const PERDENTI = ["vinci", "passa", "interno", "para", "paraInterno", "curvaAddosso", "paraRallenta", "paraCanapi"];
                 const perdente = sel.some((id) => PERDENTI.indexOf(id) >= 0);
-                const pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.25 : 0.7;
+                let pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.25 : 0.7;
+                // Già schierata col favorito: ti dice di no quasi sempre.
+                if (inFazioneAvversaria(cmp, h.id)) pAccetta = Math.min(pAccetta, 0.12);
                 if (Math.random() < pAccetta) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }
                 else h._accRefused = true;
                 render();
@@ -7741,6 +7786,13 @@ function playerPositionHandicap(player) {
 function playerFirstLapMult(player) {
   if (!player || state.mode !== "race") return 1;
   return (Math.floor(Math.max(0, player.progress) / track.length) === 0) ? 0.99 : 1;
+}
+// +0,01 di velocità alle ULTIME TRE in classifica, sempre (giocatore compreso).
+// È una spinta fissa e minima, indipendente dal distacco: serve a non far sfilacciare
+// la coda, senza la molla proporzionale di lastBoostMult.
+function ultime3Mult(horse) {
+  if (!horse || !state.ultime3Ids || state.ultime3Ids.indexOf(horse.id) < 0) return 1;
+  return horse.finishTime ? 1 : 1.01;
 }
 function leaderBrakeMult(horse) {
   // RALLENTATORE DEL PRIMO (giocatore o AI, stesse regole): scaglioni sul distacco
@@ -10998,7 +11050,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player);
+  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -11392,7 +11444,7 @@ function updateAiHorse(horse, dt, time) {
   const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.62, 1.5);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
@@ -11499,6 +11551,7 @@ function updateRace(dt, time) {
   state.leaderBrakeLeaderProg = preRanking[0] ? preRanking[0].progress : null;
   const nP = preRanking.length;
   state.lastBoostIds = nP >= 2 ? [preRanking[nP - 1].id, preRanking[nP - 2].id] : [];
+  state.ultime3Ids = preRanking.slice(Math.max(0, nP - 3)).map((h) => h.id);   // +0,01 fisso alle ultime tre
   updatePlayer(dt, time);
   state.horses.forEach((horse) => updateAiHorse(horse, dt, time));
   resolveRaceCollisions(dt);
