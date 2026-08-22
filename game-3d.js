@@ -6093,7 +6093,10 @@ function openAstaRincorsa() {
   const aiIds = state.horses.filter((h) => !h.isRincorsa && !isHuman(h)).map((h) => h.id);
   state.asta = {
     rincorsaId: rin.id,
-    best: base,
+    // La mossa GARANTITA al prepagante vale il DOPPIO di quanto ha pagato: l'asta
+    // parte già da quella cifra (hai pagato 200 → in asta risulti a 400), quindi
+    // per scavalcarti si comincia a rilanciare da 410.
+    best: holder ? base * 2 : base,
     bestBidder: holder,
     prepaidHolder: holder,                           // chi ha pagato la mossa PRE-palio (accordo)
     prepaidAmount: holder ? base : 0,                // la sua posta: per scavalcarlo servono > 2× questa
@@ -7636,14 +7639,14 @@ function playerFirstLapMult(player) {
 function leaderBrakeMult(horse) {
   // RALLENTATORE DEL PRIMO (giocatore o AI, stesse regole): scaglioni sul distacco
   // dal TERZO in classifica. Nessuna molla, nessun richiamo elastico: solo un filo
-  //   gap >= 4  → −0,01   ·   gap >= 8 → −0,02   ·   gap >= 12 → −0,03
+  //   gap >= 6  → −0,01   ·   gap >= 10 → −0,02   ·   gap >= 18 → −0,03
   if (!horse || horse.id !== state.leaderBrakeId) return 1;   // solo chi è PRIMO
   const terzo = state.secondBrakeThirdProg;                   // posta del 3°
   if (terzo == null) return 1;
   const gap = horse.progress - terzo;
-  if (gap >= 12) return 0.97;
-  if (gap >= 8) return 0.98;
-  if (gap >= 4) return 0.99;
+  if (gap >= 18) return 0.97;
+  if (gap >= 10) return 0.98;
+  if (gap >= 6) return 0.99;
   return 1;
 }
 
