@@ -7893,8 +7893,7 @@ function ensureSceltaStyle() {
 .sf-card.taken:hover{transform:none}
 .sf-card.mine{opacity:1;border-color:#f0cb35;box-shadow:0 0 0 2px rgba(240,203,53,.6)}
 .sf-card.taken .sf-price,.sf-card.mine .sf-price{display:none}   /* niente prezzo se già preso/scelto */
-.sf-nick{font-size:19px;font-weight:800;color:#f5ecd8}
-.sf-nome{font-size:12px;opacity:.7;margin-bottom:8px;min-height:14px}
+.sf-nick{font-size:19px;font-weight:800;color:#f5ecd8;margin-bottom:8px}
 .sf-stat{display:flex;align-items:center;gap:8px;font-size:12px;margin:3px 0}
 .sf-stat span{flex:0 0 78px;opacity:.85}
 .sf-pips{display:flex;gap:3px}
@@ -7957,7 +7956,6 @@ function buildSceltaFantinoUI() {
     card.innerHTML =
       (locked ? '<div class="sf-cross" title="Ha montato per la rivale: non disponibile per 3 palii">✕</div>' : '')
       + '<div class="sf-nick">' + j.nick + (ing ? '<span class="sf-price">' + j.ingaggio + '</span>' : '') + '</div>'
-      + '<div class="sf-nome">' + (j.nome && j.nome !== "—" ? j.nome : "") + '</div>'
       // TUTTE le statistiche, sempre: prima Curva non compariva affatto (e chi
       // sceglieva non sapeva quanto rischiava di cadere) e la Fedeltà solo in
       // modalità ingaggio.
