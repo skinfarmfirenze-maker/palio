@@ -7,6 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
+import { ancoraFronteViva } from "./cavallo-lab.js";   // posizione VERA della fronte, frame per frame
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
 const FANTINO_SCALE = 1.8;      // ingrandimento del fantino (×2 poi −10% → 1.8)
@@ -2909,6 +2910,7 @@ function attaccaHorseGlb(horse) {
 // protesa in avanti: i vertici col Z maggiore sono muso/testa; fra quelli prendo
 // la fascia ALTA (fronte, sopra il muso). Il risultato è identico per tutti i
 // cavalli (stessa geometria) → lo calcolo una volta e lo memorizzo su HORSE_GLB.
+const _spennPos = new THREE.Vector3();   // riuso: ancora viva della fronte
 function calcolaAncoraFronte(inner, group) {
   if (HORSE_GLB.spennAnchor) return HORSE_GLB.spennAnchor;
   let mesh = null;
@@ -3100,15 +3102,25 @@ function updateHorseGlb(dt) {
     // un osso, quindi la faccio ondeggiare a mano in SINCRONO con la falcata —
     // una nutata per passo, ampiezza che cresce con la corsa.
     const spenn = r.horse.group.userData && r.horse.group.userData.spennObj;
-    if (spenn && spenn.userData) {
+    if (spenn && spenn.userData && r.morphMesh) {
+      // POSIZIONE VERA della fronte, ricalcolata a ogni frame dai morph del galoppo
+      // (cavallo-lab). Prima si ondeggiava con un seno NON sincronizzato ai morph:
+      // la fronte si muove di 0.69 in altezza per falcata e la spennacchiera si
+      // staccava dalla testa. L'offset di montaggio iniziale viene preservato.
+      ancoraFronteViva(r.morphMesh, r.horse.group, _spennPos);
+      if (!spenn.userData.offReady) {
+        spenn.userData.offX = spenn.position.x - _spennPos.x;
+        spenn.userData.offY = spenn.position.y - _spennPos.y;
+        spenn.userData.offZ = spenn.position.z - _spennPos.z;
+        spenn.userData.offReady = true;
+      }
+      spenn.position.set(_spennPos.x + spenn.userData.offX,
+                         _spennPos.y + spenn.userData.offY,
+                         _spennPos.z + spenn.userData.offZ);
+      // Resta solo un filo di nutata, SOPRA la posizione vera.
       const cad = race > 0 ? clamp(gs * GAIT_K, 0.15, 6) : 0.55;
-      r.spennPhase = (r.spennPhase || 0) + dt * cad * 4.19;   // ~2π/1.5s = un ciclo per falcata
-      const bob = Math.sin(r.spennPhase);
-      const ampY = 0.02 + 0.11 * race;    // su/giù
-      const ampR = 0.05 + 0.13 * race;    // nutata (pitch)
-      spenn.position.y = (spenn.userData.baseY ?? spenn.position.y) + bob * ampY;
-      spenn.position.z = (spenn.userData.baseZ ?? spenn.position.z) + bob * ampY * 0.45;
-      spenn.rotation.x = (spenn.userData.baseRotX ?? 0) + bob * ampR;
+      r.spennPhase = (r.spennPhase || 0) + dt * cad * 4.19;
+      spenn.rotation.x = (spenn.userData.baseRotX ?? 0) + Math.sin(r.spennPhase) * (0.05 + 0.13 * race);
     }
   }
 }

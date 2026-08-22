@@ -25,7 +25,7 @@ export const LIV = {
   verde:      "#16833F",
   arancio:    "#E07A24",
   rosaAntico: "#C87F8E",
-  rossoRosa:  "#D6486A",   // Valdimontone: rosso virato al rosa, per non confonderlo con la Chiocciola
+  rossoRosa:  "#E2687F",   // Valdimontone: rosso virato al rosa (schiarito su richiesta), lontano dalla Chiocciola
   rossoAcceso: "#DC2A33",  // Chiocciola: accanto al giallo il rosso base si spegne, qui è alzato per pareggiare la Giraffa
   celeste:    "#5AB0E0",
   azzurro:    "#1E7BC4",
