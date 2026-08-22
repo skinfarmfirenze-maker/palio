@@ -3970,6 +3970,17 @@ function aggroVsPlayerActive() {
   const cur = palliGlobali();
   return cur > 0 && cur < 9000;
 }
+// FINESTRA 40 palii: all'ISTRICE tocca un BOMBOLONE alla Tratta (richiesta utente).
+function istriceBomboloneActive() {
+  const cur = palliGlobali();
+  let base;
+  try { base = parseInt(localStorage.getItem("palio.istriceBombBase") || "", 10); } catch (e) { base = NaN; }
+  if (!Number.isFinite(base)) {
+    base = cur;
+    try { localStorage.setItem("palio.istriceBombBase", String(base)); } catch (e) { /* niente */ }
+  }
+  return cur >= base && cur < base + 40;
+}
 // FINESTRA 1800 palii: i BOMBOLONI escono solo alle Contrade che hanno una rivale
 // (Bruco, Drago, Giraffa, Selva non ne hanno → niente bombolone in questa finestra).
 function bomboloneRivalsOnlyActive() {
@@ -7131,6 +7142,11 @@ function beginTratta() {
     const regina = shuffleInPlace(running.slice()).sort((a, b) => (alboC[b.id] || 0) - (alboC[a.id] || 0))[0];
     if (regina && brennaPool.length) assign.set(regina, brennaPool.shift());
   }
+  // FINESTRA 40 palii: all'ISTRICE va un BOMBOLONE vero, preso dal pool estratto.
+  if (istriceBomboloneActive()) {
+    const istr = running.find((h) => h.id === "istrice");
+    if (istr && !assign.has(istr) && bombPool.length) assign.set(istr, bombPool.shift());
+  }
   // Tutte le altre (e la regina negli altri 3 palii su 4): pescano a caso.
   const leftovers = shuffleInPlace([...restPool, ...brennaPool, ...bombPool]);
   running.forEach((entrant) => { if (!assign.has(entrant)) assign.set(entrant, leftovers.shift()); });
@@ -7148,6 +7164,12 @@ function beginTratta() {
     }
     entrant.staminaMax = drawn.stamina;   // la qualità del cavallo sorteggiato conta in gara
     entrant.stamina = drawn.stamina;
+    // FINESTRA 40 palii: l'ISTRICE corre comunque da bombolone (se il pool era vuoto,
+    // promuove il cavallo pescato e gli dà fiato da cavallone). Solo su entrant.
+    if (entrant.id === "istrice" && istriceBomboloneActive()) {
+      entrant.horseTier = "bombolone";
+      if (entrant.staminaMax < 92) { entrant.staminaMax = 92 + Math.floor(Math.random() * 9); entrant.stamina = entrant.staminaMax; }
+    }
     // Statistiche FISSE del barbero (dal roster).
     entrant.nervousnessBase = undefined;  // ricattura la base sotto (dalla calma)
     entrant.turnsStat = drawn.turns || 3;             // 1 = si gira subito · 5 = regge
