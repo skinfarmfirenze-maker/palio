@@ -1595,7 +1595,10 @@ function buildCurvePadding() {
   const step = 5;
   for (let i = 0; i < track.samples.length; i += step) {
     const s = track.samples[i];
-    if (s.curve < 0.34) continue;
+    // Oltre la curva vera e propria, i materassi PROSEGUONO sul rettilineo fino a
+    // sotto la Torre del Mangia (la Cappella di Piazza sta a ~SM_OUT+14).
+    const sottoLaTorre = NARROW_READY && s.cum > SM_OUT && s.cum < SM_OUT + 17;
+    if (s.curve < 0.34 && !sottoLaTorre) continue;
     if (NARROW_READY && s.cum > CAS_IN - 20) continue;   // Casato: niente materassi
     const next = track.samples[(i + step) % track.samples.length];
     const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.42;
