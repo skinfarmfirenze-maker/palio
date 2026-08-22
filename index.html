@@ -146,8 +146,41 @@
     </script>
     <!-- Import dinamico con cache-busting: ogni ricarica prende SEMPRE l'ultima
          versione di game-3d.js (niente più codice vecchio in cache). -->
-    <script type="module">
-      import("./game-3d.js?v=" + Date.now());
+    <!-- Schermata DEMO STATICA: durante la fase dimostrativa il sito NON carica
+         nulla del gioco (niente JS, audio, modelli 3D, bandiere, API). Una visita
+         costa 2 richieste invece di ~70: è così che il progetto resta nel piano
+         gratuito. Gli sviluppatori entrano una volta con ?dev=1 (poi basta l'URL). -->
+    <div id="demoStatic" style="display:none;position:fixed;inset:0;z-index:100000;
+      flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:28px;
+      text-align:center;color:#f3e7cf;font-family:Georgia,'Palatino Linotype',serif;
+      background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%)">
+      <div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;
+        text-transform:uppercase;font-weight:800">Palio della Piazza</div>
+      <div style="font-size:clamp(16px,3vw,22px);font-weight:600;max-width:min(580px,90vw);
+        line-height:1.55">Questo gioco è gratuito e senza scopo di lucro, attualmente è in fase
+        <b style="color:#f0cb35">DEMO</b>, solo gli sviluppatori possono accedere.</div>
+    </div>
+
+    <script>
+      // GATE STATICO (prima di qualsiasi download del gioco).
+      (function () {
+        var DEMO_DA = new Date(2026, 7, 21, 21, 0, 0).getTime();
+        var dev = false;
+        try {
+          if (/[?&]dev=1/.test(location.search)) localStorage.setItem("palio.dev", "1");
+          if (/[?&]dev=0/.test(location.search)) localStorage.removeItem("palio.dev");
+          dev = localStorage.getItem("palio.dev") === "1";
+        } catch (e) { /* niente */ }
+        if (Date.now() >= DEMO_DA && !dev) {
+          var d = document.getElementById("demoStatic");
+          if (d) d.style.display = "flex";
+          return;   // NIENTE import: il gioco non viene nemmeno scaricato
+        }
+        var s = document.createElement("script");
+        s.type = "module";
+        s.textContent = 'import("./game-3d.js?v=8");';   // versione FISSA: la cache del browser funziona davvero
+        document.body.appendChild(s);
+      })();
     </script>
   </body>
 </html>
