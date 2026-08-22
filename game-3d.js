@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva } from "./cavallo-lab.js";   // posizione VERA della fronte, frame per frame
+import { ancoraFronteViva, mantoDi } from "./cavallo-lab.js";   // fronte viva + manti reali dei barberi
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
 const FANTINO_SCALE = 1.8;      // ingrandimento del fantino (×2 poi −10% → 1.8)
@@ -3168,6 +3168,11 @@ function applyMantoColor(horse, color) {
 }
 // Applica il manto fisso (se previsto) e RI-TINGE il cavallo GLB se già in scena.
 function applyMantoFisso(horse) {
+  // MANTO VERO del barbero, dall'Archivio del Palio (cavallo-lab): baio, sauro,
+  // baio oscuro, grigio, roano, storno… Ha la precedenza su tutto. Solo i cavalli
+  // il cui manto non è documentato ricadono sulla vecchia tabella marrone/nero.
+  const vero = mantoDi(horse && horse.horseName);
+  if (vero) { applyMantoColor(horse, vero); return; }
   const m = MANTI_FISSI[horse && horse.horseName];
   if (m) applyMantoColor(horse, m);
 }
