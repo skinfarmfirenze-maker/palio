@@ -6125,7 +6125,6 @@ const ACCORDO_OBIETTIVI = [
   { id: "spingi", label: "Spingi forte ai canapi per me" },
   { id: "passa",  label: "Lasciami passare e para gli altri in corsa" },
   { id: "mossa",  label: "Se vai di rincorsa, la mossa la dai a me" },
-  { id: "vinci",  label: "Lasciami vincere" },
   { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare" },
 ];
 function accordoMult(n) { return 1 + 0.5 * Math.max(0, (n || 1) - 1); }   // +50% del base per finalità extra
@@ -6488,7 +6487,7 @@ function campaignBuildIncomingAccordi(cmp) {
   const base = 50 * ((player.jockey && player.jockey.fedelta) || 3);
   const pool = [];
   // Le proposte ricevute usano le STESSE finalità che il giocatore può proporre.
-  const AIUTO_OBIETTIVI = ["canapi", "spingi", "passa", "vinci", "interno"];
+  const AIUTO_OBIETTIVI = ["canapi", "spingi", "passa", "interno"];   // "vinci" rimossa
   const pickObiettivi = () => shuffleInPlace(AIUTO_OBIETTIVI.slice()).slice(0, 1 + Math.floor(Math.random() * 2));
   state.horses.forEach((h) => {
     if (h.id === player.id || (cmp.rival && h.id === cmp.rival.id)) return;   // né te, né la nemica
