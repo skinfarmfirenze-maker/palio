@@ -6033,7 +6033,12 @@ function campaignCorruptionScreen() {
         const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => (!o.rivalOnly || (rivalRunning && !isRival)) && !(o.playOnly && inAssisti));
         openBtn.addEventListener("click", () => {
           // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
-          const costoDi = (sel) => corruptionCostObj(j, sel.length) + (sel.indexOf("buttati") >= 0 ? 100 : 0);   // buttati in curva = killer: +100
+          // "buttati in curva" = killer: +100. "Resta ai canapi" costa il TRIPLO
+          // (aggiunge due volte il costo-base): far restare fermo un avversario
+          // alla mossa è la cosa più pesante che si possa comprare.
+          const costoDi = (sel) => corruptionCostObj(j, sel.length)
+            + (sel.indexOf("buttati") >= 0 ? 100 : 0)
+            + (sel.indexOf("resta") >= 0 ? corruptionCost(j) * 2 : 0);
           openFinalitaScreen({
             kicker: "Corruzione",
             titolo: `${h.name} · ${j.nick}`,
