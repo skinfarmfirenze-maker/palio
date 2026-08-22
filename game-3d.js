@@ -13529,15 +13529,25 @@ const CYCLE_MS = 48 * 3600 * 1000;                               // durata di og
 const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
 const MESI_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 function fmtDataIt(ts) { const d = new Date(ts); return d.getDate() + " " + MESI_IT[d.getMonth()] + " alle " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+// Il pannello ADMIN non è MAI bloccato dalla DEMO (ci si entra con ?admin o #admin).
+function isAdminUrl() {
+  try { return /[?&]admin\b/.test(location.search) || location.hash.toLowerCase() === "#admin"; }
+  catch (e) { return false; }
+}
+// Blocco DEMO: vale solo per un account REGISTRATO che non sia Mario Rossi.
+// Prima di avere un account si passa liberamente da login/registrazione.
+function demoBloccaQuesto() {
+  if (isAdminUrl()) return false;                  // admin: sempre libero
+  if (Date.now() < DEMO_CLOSE_AT) return false;    // demo non ancora iniziata
+  const acc = getAccount();
+  if (!acc) return false;                          // non ancora registrato: lascialo entrare a registrarsi
+  return !isMarioRossi(acc);                       // registrato e non sviluppatore → blocco
+}
 function ensurePasswordGate() {
   // Dalle 21 del 21 ago: albo vittorie momentaneamente RIMOSSO per tutti (anche Mario Rossi).
-  if (Date.now() >= DEMO_CLOSE_AT) { const ab = document.getElementById("alboButton"); if (ab) ab.style.display = "none"; }
-  // Mario Rossi (sviluppatore) entra SEMPRE.
-  if (isMarioRossi(getAccount())) { ensureAccountGate(); return; }
-  // Dalle 21:00 del 21 ago 2026: DEMO chiusa a tutti tranne gli sviluppatori,
-  // SENZA timer. Prima di quell'ora: aperto normalmente.
-  if (Date.now() >= DEMO_CLOSE_AT) { showDemoClosedGate(); return; }
-  ensureAccountGate();
+  if (Date.now() >= DEMO_CLOSE_AT && !isAdminUrl()) { const ab = document.getElementById("alboButton"); if (ab) ab.style.display = "none"; }
+  if (demoBloccaQuesto()) { showDemoClosedGate(); return; }
+  ensureAccountGate();   // admin, sviluppatore, o utente ancora da registrare
 }
 // Schermata DEMO (niente countdown): il gioco è chiuso salvo gli sviluppatori.
 function showDemoClosedGate() {
@@ -13767,6 +13777,8 @@ function ensureAccountGate() {
     // segno il flag come "visto" prima di updateAccountChip.
     if (isNew) { try { localStorage.setItem("palio.fbBroadcast", FEEDBACK_BROADCAST); } catch (e) { /* niente */ } }
     setAccount(account); ov.remove(); updateAccountChip();
+    // DEMO: appena registrato/entrato, se non sei lo sviluppatore il gioco si blocca qui.
+    if (demoBloccaQuesto()) { showDemoClosedGate(); return; }
     if (isNew) openWelcomeTutorial();   // UNA TANTUM: solo appena creato l'account
     maybeShowGameTips();                // 3 consigli skippabili, una tantum per dispositivo (dietro il tutorial per i nuovi)
   };
@@ -14575,8 +14587,7 @@ function init() {
   // già a schermo NON ricarica (altrimenti sarebbe un loop di reload).
   setInterval(() => {
     try {
-      if (Date.now() < DEMO_CLOSE_AT) return;
-      if (isMarioRossi(getAccount())) return;
+      if (!demoBloccaQuesto()) return;
       if (document.getElementById("demoGate")) return;
       location.reload();
     } catch (e) { /* niente */ }
