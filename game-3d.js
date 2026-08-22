@@ -947,8 +947,9 @@ function makeHerringboneTexture() {
   const S = 192, L = 64, W = 32, step = L + W;   // S multiplo di step → tiling pulito
   const c = document.createElement("canvas"); c.width = c.height = S;
   const x = c.getContext("2d");
-  x.fillStyle = "#4f2a1e"; x.fillRect(0, 0, S, S);   // malta/fughe
-  const cols = ["#a5563a", "#b5654a", "#9a4e33", "#ad5c40", "#8f472f", "#b76d4c"];
+  x.fillStyle = "#2f251d"; x.fillRect(0, 0, S, S);   // malta/fughe (bruno neutro, non rossastro)
+  // Marroni SCURI, poco saturi: la piazza non è rossa: è un lastricato bruno.
+  const cols = ["#5a4432", "#634c37", "#513d2d", "#6a5340", "#4a382a", "#6f573f"];
   let n = 0;
   const brick = (bx, by, bw, bh) => {
     x.fillStyle = cols[n++ % cols.length];
@@ -977,7 +978,7 @@ function buildCampoPaving() {
   brickTex.repeat.set(10, 10);
   const base = new THREE.Mesh(
     campoShapeGeometry(SCALE),
-    new THREE.MeshStandardMaterial({ map: brickTex, color: 0xb0674a, roughness: 0.97, metalness: 0 }));
+    new THREE.MeshStandardMaterial({ map: brickTex, color: 0xa89684, roughness: 0.97, metalness: 0 }));
   base.position.y = 0.005;
   base.receiveShadow = false;   // (come prima: niente shadow-acne dal sole basso)
   scene.add(base);
@@ -1004,7 +1005,9 @@ function buildCampoPaving() {
   const [fpx, fpy] = toPx(fx, fz);
   const [cpx, cpy] = toPx(cx, cz);
   const baseAng = Math.atan2(cpy - fpy, cpx - fpx);
-  g.strokeStyle = "#efe7d6"; g.lineCap = "round"; g.lineWidth = CV * 0.0055;
+  // Spicchi DISCRETI: travertino smorzato (non bianco pieno) e linea più sottile.
+  g.strokeStyle = "#b9ac95"; g.lineCap = "round"; g.lineWidth = CV * 0.0032;
+  g.globalAlpha = 0.62;
   const N = 9, SPREAD = (150 * Math.PI) / 180;
   for (let i = 0; i < N; i += 1) {
     const a = baseAng + (i / (N - 1) - 0.5) * SPREAD;
@@ -1014,7 +1017,7 @@ function buildCampoPaving() {
   }
   const tex = new THREE.CanvasTexture(cvs);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const lines = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  const lines = new THREE.Mesh(lineGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.7, depthWrite: false }));
   lines.position.y = 0.02;
   lines.renderOrder = 1;
   scene.add(lines);
