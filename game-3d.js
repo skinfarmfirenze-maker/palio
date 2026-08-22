@@ -6692,10 +6692,8 @@ function campaignAccordiScreen(spectate) {
         const j = h.jockey; if (!j) return;
         const cost = accordoCost(j);
         const schierata = inFazioneAvversaria(cmp, h.id);
-        const capoNome = schierata && cmp.fazione
-          ? ((CONTRADE.find((c) => c.id === cmp.fazione.capo) || {}).name || "") : "";
         const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`
-          + (schierata ? ` <span style="font-size:11px;color:#e8896f">· schierata con ${capoNome}</span>` : "");
+          + (schierata ? ` <span style="font-size:11px;color:#e8896f">· ha già preso accordi…</span>` : "");
         const allied = cmp.accordi.some((a) => a.helper === h.id && (spectate ? a.para === cmp.rival.id : a.beneficiary === myId));
         let btn;
         if (allied) btn = disabledBtn(spectate ? "Ingaggiata ✓" : "Alleata ✓", "#2e6b46");
