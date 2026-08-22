@@ -14526,6 +14526,18 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
 function init() {
   maybeOpenAdmin();       // ?admin → pannello amministratore (sopra tutto)
   ensurePasswordGate();   // gate password: copre tutto finché non entri
+  // WATCHDOG DEMO: chi era GIÀ dentro quando scatta l'ora resterebbe a giocare col
+  // codice vecchio in memoria. Ogni 15s ricontrolla: se la DEMO è iniziata, ricarica
+  // la pagina → al reload trova la schermata DEMO. Mario Rossi escluso. Se il gate è
+  // già a schermo NON ricarica (altrimenti sarebbe un loop di reload).
+  setInterval(() => {
+    try {
+      if (Date.now() < DEMO_CLOSE_AT) return;
+      if (isMarioRossi(getAccount())) return;
+      if (document.getElementById("demoGate")) return;
+      location.reload();
+    } catch (e) { /* niente */ }
+  }, 15000);
   try {
     precomputeTrack();
     // Ora che la pista esiste, verrocchino e corsia della rincorsa si spostano sul
