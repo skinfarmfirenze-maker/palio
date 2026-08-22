@@ -11383,14 +11383,14 @@ function updateRace(dt, time) {
   // resta "in scia" al vicino (progress limitato appena dietro), niente inchiodata.
   // ECCEZIONE: dentro San Martino (SM_IN..SM_OUT) e Casato (CAS_IN..CAS_OUT) nessun
   // limite — lì fra cadute e sorpassi interni si passa/viene passati liberamente.
-  {
+  if ((state.raceClock || 0) > 8) {
     const rk = getRanking();
     const MARGINE = 0.30;   // spazio in scia: alzato da 0.15 → trenini meno rigidi sui rettilinei
     const startIdx = {};
+    const lapRef = Math.floor(Math.max(0, (rk[0] && rk[0].progress) || 0) / (track.length || 1));
     rk.forEach((h, i) => {
       if (!h) return;
-      const lap = Math.floor(Math.max(0, h.progress) / (track.length || 1));
-      if (h._lapOvertake !== lap) { h._lapOvertake = lap; h._rankLapStart = i; }  // foto a inizio giro
+      if (h._lapOvertake !== lapRef) { h._lapOvertake = lapRef; h._rankLapStart = i; }  // foto UNICA per tutti
       startIdx[h.id] = h._rankLapStart ?? i;
     });
     const inCurvaLibera = (prog) => {
@@ -11410,7 +11410,12 @@ function updateRace(dt, time) {
       const aLost = i - startIdx[A.id];               // posizioni perse da A nel giro
       if (bGained >= 2 || aLost >= 3) {               // B ha già fatto 2 sorpassi, oppure A ne ha già subìti 3
         const cap = A.progress - MARGINE;             // B resta in scia ad A, non lo passa
-        if (B.progress > cap) { B.progress = cap; placeHorse(B, time); }
+        if (B.progress > cap) {
+          // rientro GRADUALE (non uno stop secco): si recupera una frazione
+          // dell'eccesso per frame, così non si vede nessuna frenata innaturale.
+          B.progress -= (B.progress - cap) * clamp(dt * 3.0, 0, 0.5);
+          placeHorse(B, time);
+        }
       }
     }
   }
