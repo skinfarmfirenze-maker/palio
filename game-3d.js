@@ -4365,6 +4365,20 @@ function pollGamepad() {
       if (pl) tiraNerbata(pl, (r1Now && !g.prevR1) ? 1 : -1, state.mode === "mossa" ? "mossa" : "race");
     }
   }
+  // D-PAD durante la MOSSA: offerte rapide all'asta della rincorsa, senza mouse.
+  //   ←  prima offerta (la più bassa)   ↑  offerta centrale   →  terza (la più alta)
+  if (state.mode === "mossa") {
+    const dpL = !!(gp.buttons[14] && gp.buttons[14].pressed);
+    const dpU = !!(gp.buttons[12] && gp.buttons[12].pressed);
+    const dpR = !!(gp.buttons[15] && gp.buttons[15].pressed);
+    const bids = [...document.querySelectorAll(".astaBidBtn")];
+    if (bids.length) {
+      if (dpL && !g.prevDpL && bids[0]) bids[0].click();
+      if (dpU && !g.prevDpU && bids[1]) bids[1].click();
+      if (dpR && !g.prevDpR && bids[2]) bids[2].click();
+    }
+    g.prevDpL = dpL; g.prevDpU = dpU; g.prevDpR = dpR;
+  } else { g.prevDpL = false; g.prevDpU = false; g.prevDpR = false; }
   g.prevR1 = r1Now;
   g.prevL1 = l1Now;
   g.prevX = xNow;
