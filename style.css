@@ -809,6 +809,16 @@ body:not(.touch-device) .touch-controls {
 .btn:focus-visible,
 .cmp-btn:focus-visible,
 .pc-card:focus-visible,
+/* ---- Selezione con levetta/frecce: il tasto scelto si ILLUMINA ---- */
+.ui-focus {
+  outline: 3px solid #f0cb35 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(240, 203, 53, 0.4), 0 0 18px rgba(240, 203, 53, 0.55) !important;
+  filter: brightness(1.12);
+  position: relative;
+  z-index: 3;
+}
+
 .sf-card:focus-visible,
 .hv-card:focus-visible,
 #finalitaScreen input[type="checkbox"]:focus-visible,

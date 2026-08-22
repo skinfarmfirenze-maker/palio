@@ -4505,8 +4505,20 @@ function uiMoveFocus(dir) {
   idx = (idx + dir + list.length) % list.length;
   const next = list[idx];
   try { next.focus(); } catch (e) { /* niente */ }
+  markUiFocus(next);   // evidenziazione ESPLICITA (col gamepad :focus-visible non scatta)
   try { next.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) { /* niente */ }
 }
+// Illumina l'elemento selezionato con la levetta/frecce. Il browser applica
+// :focus-visible solo quando riconosce la navigazione da tastiera: col controller
+// il fuoco è programmatico e resterebbe invisibile. Qui lo marchiamo a mano.
+function markUiFocus(el) {
+  document.querySelectorAll(".ui-focus").forEach((o) => { if (o !== el) o.classList.remove("ui-focus"); });
+  if (el && el.classList) el.classList.add("ui-focus");
+}
+// Appena si torna al mouse/dito, l'evidenziazione da levetta si spegne.
+window.addEventListener("mousedown", () => {
+  document.querySelectorAll(".ui-focus").forEach((o) => o.classList.remove("ui-focus"));
+});
 
 // "Torna al menu principale": zittisce musica/voce e riporta all'inizio, da
 // qualunque fase. Rimuove gli overlay di fase che openMenuScreen non tocca.
