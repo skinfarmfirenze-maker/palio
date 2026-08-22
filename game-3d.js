@@ -5456,7 +5456,7 @@ function toastMsg(text, ms = 3800) {
 function openModeChooser() {
   campaignOverlay((panel) => {
     const k = document.createElement("p"); k.className = "cmp-kicker"; k.textContent = "Come vuoi giocare";
-    const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Palio della Piazza";
+    const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Palio Game";
     const row = document.createElement("div"); row.style.cssText = "display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:8px";
     const col = (label, sub, bg, onClick) => {
       const c = document.createElement("div"); c.style.cssText = "flex:1;min-width:200px";
@@ -13295,7 +13295,7 @@ function showMaintenanceIntro() {
     + `<div style="opacity:.75;font-size:13px;margin-top:2px">${d}</div></div></div>`).join("");
   ov.innerHTML =
     '<div style="max-width:min(640px,94vw);width:100%;display:flex;flex-direction:column;align-items:center;gap:14px">'
-    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio della Piazza</div>'
+    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio Game</div>'
     + '<div style="font-size:clamp(22px,5vw,38px);line-height:1.15;font-weight:800;max-width:min(640px,92vw)">Le novità fatte grazie alle vostre richieste</div>'
     + '<div style="opacity:.8;font-size:clamp(13px,2.4vw,16px);max-width:min(520px,90vw)">Grazie a chi gioca e ci scrive: ecco cosa è cambiato.</div>'
     + `<div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:4px">${items}</div>`
@@ -13357,7 +13357,7 @@ function showMaintenanceGate() {
   };
   ov.innerHTML =
     '<div style="max-width:min(680px,94vw);width:100%;display:flex;flex-direction:column;align-items:center;gap:12px">'
-    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio della Piazza</div>'
+    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio Game</div>'
     + '<div style="font-size:clamp(22px,5vw,38px);line-height:1.15;font-weight:800;max-width:min(680px,92vw)">Vota le statistiche dei cavalli</div>'
     // ── SPIEGAZIONE (prima di votare) ──────────────────────────────────────────
     + '<div style="width:100%;max-width:min(600px,92vw);text-align:left;background:rgba(255,246,225,.05);border:1px solid rgba(240,203,53,.22);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.5">'
@@ -13558,7 +13558,7 @@ function showDemoClosedGate() {
     + "justify-content:center;gap:18px;background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
     + "color:#f3e7cf;font-family:inherit;padding:28px;text-align:center";
   ov.innerHTML =
-    '<div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio della Piazza</div>'
+    '<div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio Game</div>'
     + '<div style="font-size:clamp(16px,3vw,22px);font-weight:700;max-width:min(580px,90vw);line-height:1.55">Questo gioco è gratuito e senza scopo di lucro, attualmente è in fase <b style="color:#f0cb35">DEMO</b>, solo gli sviluppatori possono accedere.</div>';
   document.body.appendChild(ov);
   // Accesso SVILUPPATORE discreto: 5 tap sul titolo → login (per entrare come
@@ -13578,7 +13578,7 @@ function showCountdownGate(targetTs, subtitleHtml) {
     + "justify-content:center;gap:18px;background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
     + "color:#f3e7cf;font-family:inherit;padding:24px;text-align:center";
   ov.innerHTML =
-    '<div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio della Piazza</div>'
+    '<div style="font-size:clamp(20px,4vw,38px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio Game</div>'
     + '<div style="font-size:clamp(18px,3.4vw,26px);font-weight:700;max-width:min(560px,90vw)">Gioco di nuovo online fra</div>'
     + '<div id="cdTimer" style="font-size:clamp(34px,10vw,70px);font-weight:800;letter-spacing:.06em;color:#f6e6bd;font-variant-numeric:tabular-nums">—</div>'
     + '<div style="opacity:.82;font-size:clamp(13px,2.6vw,16px);max-width:min(470px,88vw)">' + (subtitleHtml || "") + '</div>';
@@ -13622,7 +13622,7 @@ function showPasswordPrompt() {
     + "justify-content:center;gap:16px;background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
     + "color:#f3e7cf;font-family:inherit;padding:24px;text-align:center";
   ov.innerHTML =
-    '<div style="font-size:clamp(22px,4vw,40px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio della Piazza</div>'
+    '<div style="font-size:clamp(22px,4vw,40px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio Game</div>'
     + `<div style="opacity:.85;font-size:15px;max-width:min(420px,86vw)${passwordCambiata ? ";color:#f0cb35;font-weight:700" : ""}">${sottotitolo}</div>`
     + '<input id="pwInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" enterkeyhint="go" spellcheck="false" '
     + 'style="font:inherit;font-size:18px;padding:12px 16px;border-radius:10px;border:1px solid rgba(240,203,53,.5);'
@@ -13717,7 +13717,7 @@ function ensureAccountGate() {
     + "background:transparent;color:#f3e7cf;cursor:pointer";
 
   ov.innerHTML =
-    '<div style="font-size:clamp(20px,3.6vw,34px);letter-spacing:.12em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio della Piazza</div>'
+    '<div style="font-size:clamp(20px,3.6vw,34px);letter-spacing:.12em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio Game</div>'
     + '<div style="display:flex;gap:8px;margin-top:2px">'
     + `<button type="button" id="tabLogin" style="${tabCss};background:#f0cb35;color:#1a1206">Entra</button>`
     + `<button type="button" id="tabSignup" style="${tabCss}">Registrati</button>`
