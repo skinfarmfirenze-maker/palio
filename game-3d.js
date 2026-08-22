@@ -5899,7 +5899,7 @@ function campaignAccoppiateScreen(next) {
       const flag = document.createElement("div"); flag.className = "cmp-row-flag"; flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1";
       const tierBadge = tm ? ` <span style="font-size:10.5px;font-weight:700;color:${tm.fg};background:${tm.bg};border-radius:5px;padding:1px 7px">${tm.label}</span>` : "";
-      info.innerHTML = `<b${isRival ? ' style="color:#e8896f"' : ""}>${h.name}</b>${isRival ? " (rivale)" : ""} · ${h.horseName || "—"}${tierBadge} · <span style="color:#f0cb35">${h.jockey ? h.jockey.nick : "—"}</span>`;
+      info.innerHTML = `<b${isRival ? ' style="color:#e8896f"' : ""}>${h.name}</b>${isRival ? " (rivale)" : ""} · ${h.horseName || "—"}${tierBadge} · <span style="color:#f0cb35">${h.jockey ? nickUp(h.jockey.nick) : "—"}</span>`;
       row.append(flag, info); list.appendChild(row);
     });
     const b = document.createElement("button"); b.className = "cmp-btn"; b.textContent = "Vai agli accordi →";
@@ -6028,7 +6028,7 @@ function campaignCorruptionScreen() {
       row.style.cssText = "display:flex;align-items:center;gap:10px;background:rgba(18,13,8,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:14px";
       const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1"; info.style.textAlign = "left";
-      info.innerHTML = `<b>${h.name}</b> · ${j.nick} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
+      info.innerHTML = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
       const simpleBtn = (txt, opts) => { const b = document.createElement("button"); b.className = "cmp-btn"; b.style.cssText = "margin:0;font-size:14px;padding:7px 16px;flex:0 0 auto"; b.textContent = txt; b.disabled = true; if (opts && opts.bg) b.style.background = opts.bg; else b.style.opacity = ".5"; return b; };
       let btn;
       if (mine) btn = simpleBtn("Corrotto ✓", { bg: "#2e6b46" });
@@ -6055,7 +6055,7 @@ function campaignCorruptionScreen() {
             + (sel.indexOf("resta") >= 0 ? corruptionCost(j) * 2 : 0);
           openFinalitaScreen({
             kicker: "Corruzione",
-            titolo: `${h.name} · ${j.nick}`,
+            titolo: `${h.name} · ${nickUp(j.nick)}`,
             sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più`,
             obiettivi,
             costoDi,
@@ -6417,6 +6417,10 @@ function astaFavorevoleAlVincitore() {
   return true;
 }
 
+// Soprannome del fantino come si MOSTRA: iniziale maiuscola. I nick veri restano
+// minuscoli dove servono da chiave (albo delle vittorie, override statistiche):
+// cambiarli spezzerebbe lo storico delle vittorie già registrate.
+function nickUp(n) { const t = String(n || ""); return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
 // Rivale principale di una Contrada (intensità massima in RIVALS), per la "para".
 function topRivalId(id) {
   const m = RIVALS[id]; if (!m) return null;
@@ -6626,7 +6630,7 @@ function campaignAccordiScreen(spectate) {
         if (h.id === myId || (cmp.rival && h.id === cmp.rival.id)) return;   // non a te, non alla nemica/rivale
         const j = h.jockey; if (!j) return;
         const cost = accordoCost(j);
-        const html = `<b>${h.name}</b> · ${j.nick} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
+        const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
         const allied = cmp.accordi.some((a) => a.helper === h.id && (spectate ? a.para === cmp.rival.id : a.beneficiary === myId));
         let btn;
         if (allied) btn = disabledBtn(spectate ? "Ingaggiata ✓" : "Alleata ✓", "#2e6b46");
@@ -6640,7 +6644,7 @@ function campaignAccordiScreen(spectate) {
             const obiettiviRiv = ACCORDO_OBIETTIVI.filter((o) => o.rivalOnly);
             openFinalitaScreen({
               kicker: `Paga per parare ${cmp.rival.name}`,
-              titolo: `${h.name} · ${j.nick}`,
+              titolo: `${h.name} · ${nickUp(j.nick)}`,
               sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più · si paga solo se la rivale NON vince`,
               obiettivi: obiettiviRiv,
               costoDi: (sel) => accordoCostSel(j, sel),
@@ -6670,7 +6674,7 @@ function campaignAccordiScreen(spectate) {
             // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
             openFinalitaScreen({
               kicker: "Manda una proposta",
-              titolo: `${h.name} · ${j.nick}`,
+              titolo: `${h.name} · ${nickUp(j.nick)}`,
               sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più · si paga solo a palio vinto`,
               obiettivi,
               costoDi: (sel) => accordoCostSel(j, sel),
@@ -8035,7 +8039,7 @@ function buildSceltaFantinoUI() {
     if (locked) card.classList.add("locked");
     card.innerHTML =
       (locked ? '<div class="sf-cross" title="Ha montato per la rivale: non disponibile per 3 palii">✕</div>' : '')
-      + '<div class="sf-nick">' + j.nick + (ing ? '<span class="sf-price">' + j.ingaggio + '</span>' : '') + '</div>'
+      + '<div class="sf-nick">' + nickUp(j.nick) + (ing ? '<span class="sf-price">' + j.ingaggio + '</span>' : '') + '</div>'
       // TUTTE le statistiche, sempre: prima Curva non compariva affatto (e chi
       // sceglieva non sapeva quanto rischiava di cadere) e la Fedeltà solo in
       // modalità ingaggio.
@@ -12697,7 +12701,7 @@ function renderFinalRanking() {
     flag.style.background = `url("${BANDIERE[winner.id]}") center / cover no-repeat`;
     flag.style.backgroundColor = winner.colors[0];
     // "Vince la Contrada dell'Oca con Tittìa e Rocco Nice" — contrada, fantino e cavallo.
-    const conChi = [winner.jockey && winner.jockey.nick, winner.horseName].filter(Boolean).join(" e ");
+    const conChi = [winner.jockey && nickUp(winner.jockey.nick), winner.horseName].filter(Boolean).join(" e ");
     wname.textContent = `Vince la Contrada ${articoloContrada(winner.name)}${conChi ? ` con ${conChi}` : ""}`;
     banner.classList.toggle("player-win", isMine);
   }
