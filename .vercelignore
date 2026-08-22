@@ -41,3 +41,7 @@ assets/jockeys/quaternius/
 # Tracciato di lavoro (dev-only):
 pista-tracciato.html
 pista-tracciato.svg
+
+# Le bandiere ora viaggiano dentro bandiere-data.js (1 richiesta invece di 17):
+# i file singoli non servono più online.
+bandiere/

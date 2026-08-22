@@ -6,6 +6,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // FANTINI NUOVI (modulo curato dalla chat "fantini"): buildFantino(contrada) costruisce
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
+import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
 const FANTINO_SCALE = 1.8;      // ingrandimento del fantino (×2 poi −10% → 1.8)
@@ -2607,11 +2608,20 @@ const PALIO_SOUND_FILES = [
   "istrice.m4a", "leocorno.m4a", "lupa.m4a", "nicchio.m4a", "oca.m4a", "onda.m4a",
   "pantera.m4a", "selva.m4a", "tartuca.m4a", "torre.m4a", "valdimontone.m4a",
 ];
+// NUCLEO da precaricare: SOLO i suoni che partono in momenti rapidi, dove il
+// ritardo del primo play si sentirebbe. Tutto il resto (i 17 jingle di Contrada —
+// ne serve UNO per palio — e i suoni della Tratta, che hanno tempi lunghi) si
+// scarica al primo utilizzo: playPalioSound crea l'Audio al volo. Prima si
+// scaricavano tutti e 33 a ogni visita: da soli erano un terzo delle richieste.
+const PALIO_SOUND_CORE = [
+  "start.m4a", "corsa.m4a", "galoppo.m4a", "ingresso.m4a",
+  "intro.m4a", "busta.m4a", "tamburi.m4a", "finale.m4a",
+];
 let __soundsPreloaded = false;
 function preloadPalioSounds() {
   if (__soundsPreloaded) return;
   __soundsPreloaded = true;
-  PALIO_SOUND_FILES.forEach((file) => {
+  PALIO_SOUND_CORE.forEach((file) => {
     try {
       let a = __palioAudio[file];
       if (!a) { a = new Audio("suoni/" + file); __palioAudio[file] = a; }
@@ -3829,7 +3839,7 @@ function createContradaGrid() {
     button.style.setProperty("--c3", contrada.colors[2]);
     const flag = document.createElement("img");
     flag.className = "contrada-flag";
-    flag.src = "bandiere/" + contrada.id + ".jpg";
+    flag.src = BANDIERE[contrada.id];
     flag.alt = contrada.name;
     flag.loading = "lazy";
     const name = document.createElement("strong");
@@ -4907,7 +4917,7 @@ function getFlagImageTexture(contrada, onReady) {
   const cached = __flagTexCache[contrada.id];
   if (cached) { onReady(cached); return; }
   new THREE.TextureLoader().load(
-    "bandiere/" + contrada.id + ".jpg",
+    BANDIERE[contrada.id],
     (tex) => {
       if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
       __flagTexCache[contrada.id] = tex;
@@ -5837,7 +5847,7 @@ function campaignAccoppiateScreen(next) {
       const row = document.createElement("div"); row.className = "cmp-row";
       row.style.cssText = "display:flex;align-items:center;gap:10px;background:rgba(255,246,225,.06);border:1px solid "
         + (isRival ? "rgba(232,137,111,.6)" : "rgba(255,255,255,.1)") + ";border-radius:10px;padding:8px 12px;font-size:14px";
-      const flag = document.createElement("div"); flag.className = "cmp-row-flag"; flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('bandiere/${h.id}.jpg') center/cover;flex:0 0 auto`;
+      const flag = document.createElement("div"); flag.className = "cmp-row-flag"; flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1";
       const tierBadge = tm ? ` <span style="font-size:10.5px;font-weight:700;color:${tm.fg};background:${tm.bg};border-radius:5px;padding:1px 7px">${tm.label}</span>` : "";
       info.innerHTML = `<b${isRival ? ' style="color:#e8896f"' : ""}>${h.name}</b>${isRival ? " (rivale)" : ""} · ${h.horseName || "—"}${tierBadge} · <span style="color:#f0cb35">${h.jockey ? h.jockey.nick : "—"}</span>`;
@@ -5965,7 +5975,7 @@ function campaignCorruptionScreen() {
       const taken = !!cmp.corrupted[h.id];
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:10px;background:rgba(18,13,8,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:14px";
-      const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('bandiere/${h.id}.jpg') center/cover;flex:0 0 auto`;
+      const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1"; info.style.textAlign = "left";
       info.innerHTML = `<b>${h.name}</b> · ${j.nick} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
       const simpleBtn = (txt, opts) => { const b = document.createElement("button"); b.className = "cmp-btn"; b.style.cssText = "margin:0;font-size:14px;padding:7px 16px;flex:0 0 auto"; b.textContent = txt; b.disabled = true; if (opts && opts.bg) b.style.background = opts.bg; else b.style.opacity = ".5"; return b; };
@@ -6497,7 +6507,7 @@ function campaignAccordiScreen(spectate) {
     const mkRow = (flagId, html, btn) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:10px;background:rgba(255,246,225,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:8px 12px;font-size:14px";
-      const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('bandiere/${flagId}.jpg') center/cover;flex:0 0 auto`;
+      const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[flagId]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1"; info.style.textAlign = "left"; info.innerHTML = html;
       row.append(flag, info, btn); return row;
     };
@@ -12567,7 +12577,7 @@ function renderFinalRanking() {
   const isRival = winner && cmp && cmp.active && cmp.rival && winner.id === cmp.rival.id;
   if (winner && banner && flag && wname) {
     // Bandiera ufficiale della contrada vincitrice (immagine vera).
-    flag.style.background = `url("bandiere/${winner.id}.jpg") center / cover no-repeat`;
+    flag.style.background = `url("${BANDIERE[winner.id]}") center / cover no-repeat`;
     flag.style.backgroundColor = winner.colors[0];
     // "Vince la Contrada dell'Oca con Tittìa e Rocco Nice" — contrada, fantino e cavallo.
     const conChi = [winner.jockey && winner.jockey.nick, winner.horseName].filter(Boolean).join(" e ");
