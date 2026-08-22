@@ -9131,7 +9131,9 @@ function updateMossa(dt, time) {
     const rin = state.horses.find((h) => h.isRincorsa);
     if (rin && !rin.revealed) {
       rin.revealed = true;
-      rin.revealTimer = 1.6;
+      // Niente scivolata automatica: il GIOCATORE guida da subito (0), l'AI cammina
+      // fin lì da sola (fino a 8s di margine, si azzera appena arrivata).
+      rin.revealTimer = isHuman(rin) ? 0 : 8;
       showMessage(isHuman(rin) ? "Sei tu la RINCORSA!" : `Rincorsa: ${rin.name}!`, 2.4, "good");
     }
   }
@@ -9960,16 +9962,25 @@ function updateRincorsa(rincorsa, dt) {
   // di rincorsa (dietro il verrocchino), senza scatti. Poi comportamento normale.
   if ((rincorsa.revealTimer || 0) > 0) {
     rincorsa.revealTimer -= dt;
-    const r = clamp(dt * 2.2, 0, 1);
-    rincorsa.progress += (RINCORSA_START_PROGRESS - rincorsa.progress) * r;
-    rincorsa.lane += (RINCORSA_LANE - rincorsa.lane) * r;
-    rincorsa.mossaProgress = rincorsa.progress;
-    rincorsa.mossaLane = rincorsa.lane;
-    rincorsa.mossaTurn = lerp(rincorsa.mossaTurn || 0, 0, r);
-    rincorsa.rincorsaSpeed = 0;
-    rincorsa.wantsToEnter = false;
-    rincorsa.speedLevel = 1.8;
-    return;
+    if (isHuman(rincorsa)) { rincorsa.revealTimer = 0; }   // il giocatore ci va da sé: controllo pieno subito
+    else {
+      // AI: RAGGIUNGE il verrocchino camminando a passo costante (niente lerp che
+      // la faceva "scivolare" là in un attimo, come un teletrasporto).
+      const dP = RINCORSA_START_PROGRESS - rincorsa.progress;
+      const dL = RINCORSA_LANE - rincorsa.lane;
+      const dist = Math.hypot(dP, dL) || 1;
+      const step = Math.min(6.0 * dt, dist);                // ~6 unità/s: trotto
+      rincorsa.progress += (dP / dist) * step;
+      rincorsa.lane += (dL / dist) * step;
+      rincorsa.mossaProgress = rincorsa.progress;
+      rincorsa.mossaLane = rincorsa.lane;
+      rincorsa.mossaTurn = lerp(rincorsa.mossaTurn || 0, 0, clamp(dt * 2, 0, 1));
+      rincorsa.rincorsaSpeed = 0;
+      rincorsa.wantsToEnter = false;
+      rincorsa.speedLevel = 2.6;
+      if (dist < 0.4) rincorsa.revealTimer = 0;             // arrivata: comportamento normale
+      return;
+    }
   }
   if (isHuman(rincorsa)) {
     // La rincorsa è guidata dalla VELOCITÀ (andatura 1..5): 1 = INDIETRO, 2 =
@@ -10154,7 +10165,10 @@ function updateRincorsa(rincorsa, dt) {
     }
   }
   rincorsa.progress += rincorsa.rincorsaSpeed * dt;
-  rincorsa.progress = Math.max(RINCORSA_START_PROGRESS - 6.0, rincorsa.progress);
+  // Il limite arretra fin DENTRO il tondino (centro a MOSSA_BACK_LIMIT-10): appena
+  // scoperta, la rincorsa parte da dov'è e va al verrocchino da sé, senza essere
+  // risucchiata in avanti da un clamp troppo stretto.
+  rincorsa.progress = Math.max(RINCORSA_START_PROGRESS - 13.0, rincorsa.progress);
   // ── VINCOLO VERROCCHINO: la rincorsa entra SOLO a SINISTRA del verrocchino (lato
   // esterno, dove c'è il varco), MAI a destra. Se col muso libero il giocatore prova
   // a varcare il canapo stando sul lato INTERNO del paletto (lane > VERROCCHINO_LANE),
