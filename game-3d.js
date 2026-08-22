@@ -1598,10 +1598,13 @@ function buildCurvePadding() {
   const step = 5;
   for (let i = 0; i < track.samples.length; i += step) {
     const s = track.samples[i];
-    // Oltre la curva vera e propria, i materassi PROSEGUONO sul rettilineo fino a
-    // sotto la Torre del Mangia (la Cappella di Piazza sta a ~SM_OUT+14).
-    const sottoLaTorre = NARROW_READY && s.cum > SM_OUT && s.cum < SM_OUT + 17;
-    if (s.curve < 0.34 && !sottoLaTorre) continue;
+    // TRATTO UNICO E CONTINUO: dall'ingresso di San Martino fino a sotto la Torre
+    // del Mangia (la Cappella sta a ~SM_OUT+14). Prima si filtrava campione per
+    // campione sulla curvatura: dove scendeva sotto soglia restavano BUCHI in mezzo
+    // alla fila. Ora è un intervallo unico, quindi la fila non si interrompe mai.
+    if (NARROW_READY) {
+      if (s.cum < SM_IN - 1 || s.cum > SM_OUT + 17) continue;
+    } else if (s.curve < 0.34) continue;                 // ripiego se le curve non sono ancora note
     if (NARROW_READY && s.cum > CAS_IN - 20) continue;   // Casato: niente materassi
     const next = track.samples[(i + step) % track.samples.length];
     const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.42;
@@ -1609,7 +1612,7 @@ function buildCurvePadding() {
     const a = s.point.clone().addScaledVector(campoOutward(s.point), offQui);
     const b = next.point.clone().addScaledVector(campoOutward(next.point), offNext);
     const mid = a.clone().lerp(b, 0.5);
-    const len = a.distanceTo(b) * 1.06;
+    const len = a.distanceTo(b) * 1.12;   // si sovrappongono: nessuna fessura fra un cuscino e l'altro
     const yaw = Math.atan2(b.x - a.x, b.z - a.z);
     const hQui = trackHeightAt(s.cum);
     const pad = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.02, len), padMat);
