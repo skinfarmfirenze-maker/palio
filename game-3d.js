@@ -7579,8 +7579,6 @@ function playerThirdLapHandicap(horse) {
 // Il tetto rigido dei 30 (1°–2°) è garantito a parte, dal clamp in updateRace.
 const LEADER_GAP_SOFT = 12;
 const LEADER_GAP_MAX = 30;
-const LEADER_BRAKE_FLOOR = 0.85;   // molla del leader MOLTO morbida (max −15%): quasi impercettibile. Il muro rigido a GAP_MAX resta il vero tappo anti-fuga.
-const LEADER_BRAKE_SOFT = 3;       // la molla del leader parte GIÀ da un piccolo vantaggio e sale gradualissima fino a GAP_MAX → nessun "inchioda" a inizio 2° giro (soglia SUA, non tocca la spinta di coda).
 // HANDICAP DI POSIZIONE del GIOCATORE: 1°=−0,04 · 2°=−0,05 · 3°=−0,04 · 4°=−0,02.
 // Dal 5° in giù: nessuna penalità. Posizione = quanti cavalli hanno più progress
 // (distanza cumulativa). Silenzioso.
@@ -7604,23 +7602,17 @@ function playerFirstLapMult(player) {
   return (Math.floor(Math.max(0, player.progress) / track.length) === 0) ? 0.99 : 1;
 }
 function leaderBrakeMult(horse) {
-  if (!horse) return 1;
-  let target = 1;
-  let refProg = null;                                          // posta della Contrada che insegue
-  if (horse.id === state.leaderBrakeId) refProg = state.leaderBrakeSecondProg;   // 1° ← distacco sul 2°
-  else if (horse.id === state.secondBrakeId) refProg = state.secondBrakeThirdProg; // 2° ← distacco sul 3°
-  if (refProg != null) {
-    const gap = horse.progress - refProg;
-    if (gap > LEADER_BRAKE_SOFT) {
-      const t = clamp((gap - LEADER_BRAKE_SOFT) / (LEADER_GAP_MAX - LEADER_BRAKE_SOFT), 0, 1);
-      target = lerp(1, LEADER_BRAKE_FLOOR, t);
-    }
-  }
-  // SMOOTHING TEMPORALE: il freno entra ed esce GRADUALE (come un vero freno che
-  // stringe piano), non a scatti frame-per-frame → il rallentamento non si "vede".
-  // Ease ~0,5s (alpha 0.035/frame a 60fps).
-  horse._lbSmooth = lerp(horse._lbSmooth ?? 1, target, 0.035);
-  return horse._lbSmooth;
+  // RALLENTATORE DEL PRIMO (giocatore o AI, stesse regole): scaglioni sul distacco
+  // dal TERZO in classifica. Nessuna molla, nessun richiamo elastico: solo un filo
+  //   gap >= 4  → −0,01   ·   gap >= 8 → −0,02   ·   gap >= 12 → −0,03
+  if (!horse || horse.id !== state.leaderBrakeId) return 1;   // solo chi è PRIMO
+  const terzo = state.secondBrakeThirdProg;                   // posta del 3°
+  if (terzo == null) return 1;
+  const gap = horse.progress - terzo;
+  if (gap >= 12) return 0.97;
+  if (gap >= 8) return 0.98;
+  if (gap >= 4) return 0.99;
+  return 1;
 }
 
 // ── RUBBER-BAND, l'altra metà: SPINTA alle ultime DUE Contrade ────────────────
@@ -11323,45 +11315,9 @@ function updateRace(dt, time) {
   updatePlayer(dt, time);
   state.horses.forEach((horse) => updateAiHorse(horse, dt, time));
   resolveRaceCollisions(dt);
-  // MURO RIGIDO: il distacco 1°–2° non può MAI superare LEADER_GAP_MAX (=30, le unità
-  // del "+Nm" a schermo). Il freno morbido sopra rende questo quasi sempre inattivo;
-  // qui è la rete di sicurezza. Math.max(prevProgress,…) → il leader si ferma, non
-  // scatta all'indietro (es. se il 2° cade e crea un salto momentaneo).
-  {
-    const r = getRanking();
-    if (r[0] && r[1] && !r[0].finishTime) {
-      const cap = r[1].progress + LEADER_GAP_MAX;
-      if (r[0].progress > cap) {
-        // NIENTE INCHIODATA: il tetto non blocca più di colpo (si vedeva il primo
-        // "frenare a muro" appena sforava). Ora è una MOLLA: si recupera solo una
-        // frazione dell'eccesso per frame (ease esponenziale) → rientro invisibile.
-        const excess = r[0].progress - cap;
-        r[0].progress -= excess * clamp(dt * 2.0, 0, 0.35);
-        placeHorse(r[0], time);
-      }
-    }
-    // MURO 1°–3° ≤ 9 dal SECONDO GIRO in poi: il 1° e il 2° non possono staccarsi
-    // di più di 9 dal 3° in classifica. NON si inchioda sul tetto: quando si sfora,
-    // si RICHIAMA il cavallo indietro "a molla", recuperando solo una piccola
-    // frazione dell'eccesso per frame (ease esponenziale, tau ~1s) → il rientro è
-    // quasi impercettibile al giocatore, niente snap/teletrasporto. Vale ogni palio.
-    if (r[0] && r[2] && !r[0].finishTime && Math.floor(Math.max(0, r[0].progress) / track.length) >= 1) {
-      const cap3 = r[2].progress + 9;
-      const pullFrac = 1 - Math.exp(-dt / 1.0);   // frazione dell'eccesso recuperata stavolta
-      [r[0], r[1]].forEach((h) => {
-        if (h && !h.finishTime && h.progress > cap3) {
-          const over = h.progress - cap3;
-          // rientro morbido, mai sotto la posizione del frame precedente (no scatto indietro visibile)
-          h.progress = Math.max(h.prevProgress ?? h.progress, h.progress - over * pullFrac);
-          placeHorse(h, time);
-        }
-      });
-    }
-    // NB: RIMOSSO il muro rigido sulla coda — snappava il cavallo in avanti a
-    // leader−30 e si vedeva come un TELETRASPORTO (soprattutto sul giocatore).
-    // La coda ora rientra solo con la spinta MORBIDA (lastBoostMult): niente
-    // scatti. Il distacco può superare i 30 in coda, ma senza teletrasporti.
-  }
+  // ── MOLLE RIMOSSE (richiesta utente): niente più richiami elastici del primo
+  // (muro 1°–2° a 30 e muro 1°–3° ≤9). Si vedevano come inchiodate. Al loro posto
+  // c'è SOLO il rallentatore graduale di leaderBrakeMult, basato sul gap dal 3°.
 
   // ── LIMITE SORPASSI: max 2 sorpassi FATTI (e 3 subìti) per GIRO ────────────
   // Realismo: sul rettilineo NON si possono passare 4-5 Contrade tutte d'un fiato.
