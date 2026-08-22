@@ -6062,7 +6062,12 @@ function campaignCorruptionScreen() {
         // fantino della rivale (non può attaccare sé stesso).
         const isRival = !!(cmp.rival && h.id === cmp.rival.id);
         const inAssisti = cmp.currentMode === "spectate";
-        const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => (!o.rivalOnly || (rivalRunning && !isRival)) && !(o.playOnly && inAssisti));
+        // Un solo fantino comprato può farti passare interno.
+        const internoCorrotti = Object.values(cmp.corruptOrders || {})
+          .filter((o) => o && o.indexOf("interno") >= 0).length;
+        const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => (!o.rivalOnly || (rivalRunning && !isRival))
+          && !(o.playOnly && inAssisti)
+          && !(o.id === "interno" && internoCorrotti >= 1));
         openBtn.addEventListener("click", () => {
           // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
           // "buttati in curva" = killer: +100. "Resta ai canapi" costa il TRIPLO
@@ -6683,10 +6688,13 @@ function campaignAccordiScreen(spectate) {
           ctrl.className = "cmp-ctrl";
           ctrl.style.cssText = "display:flex;flex-direction:column;gap:4px;flex:0 0 auto;align-items:flex-end;min-width:240px";
           const openBtn = mkBtn(`Proponi · ${cost}`);
-          const internoPresi = (cmp.accordi || []).filter((a) => a.beneficiary === myId
-            && a.obiettivi && a.obiettivi.indexOf("interno") >= 0).length;
+          const conFin = (id) => (cmp.accordi || []).filter((a) => a.beneficiary === myId
+            && a.obiettivi && a.obiettivi.indexOf(id) >= 0).length;
+          const internoPresi = conFin("interno");
+          const passaPresi = conFin("passa");
           const obiettivi = ACCORDO_OBIETTIVI.filter((o) => (!o.rivalOnly || rivalRunning)   // "marca la rivale" solo se corre
-            && !(o.id === "interno" && internoPresi >= 2));                                  // max 2 Contrade a farti passare interno
+            && !(o.id === "interno" && internoPresi >= 2)                                    // max 2 Contrade a farti passare interno
+            && !(o.id === "passa" && passaPresi >= 1));                                      // max 1 Contrada a lasciarti passare
           openBtn.addEventListener("click", () => {
             // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
             openFinalitaScreen({
