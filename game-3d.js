@@ -6692,8 +6692,10 @@ function campaignAccordiScreen(spectate) {
         const j = h.jockey; if (!j) return;
         const cost = accordoCost(j);
         const schierata = inFazioneAvversaria(cmp, h.id);
+        const capoNome = schierata && cmp.fazione
+          ? ((CONTRADE.find((c) => c.id === cmp.fazione.capo) || {}).name || "") : "";
         const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`
-          + (schierata ? ` <span style="font-size:11px;color:#e8896f">· già schierata</span>` : "");
+          + (schierata ? ` <span style="font-size:11px;color:#e8896f">· schierata con ${capoNome}</span>` : "");
         const allied = cmp.accordi.some((a) => a.helper === h.id && (spectate ? a.para === cmp.rival.id : a.beneficiary === myId));
         let btn;
         if (allied) btn = disabledBtn(spectate ? "Ingaggiata ✓" : "Alleata ✓", "#2e6b46");
@@ -6717,8 +6719,13 @@ function campaignAccordiScreen(spectate) {
                 if (c > contradaBudget(myId)) return;
                 // Parare = rinunciare a vincere: chi monta un BOMBOLONE rifiuta spesso (75%).
                 if (h.horseTier === "bombolone" && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
-                // Già schierata col favorito: quasi sempre rifiuta.
-                if (inFazioneAvversaria(cmp, h.id) && Math.random() >= 0.12) { h._accRefused = true; render(); return; }
+                // Già schierata col favorito: rifiuta solo se le chiedi di parare PROPRIO
+                // il suo capo; parare un'altra Contrada non le costa nulla e accetta.
+                if (inFazioneAvversaria(cmp, h.id)) {
+                  const capoId = cmp.fazione && cmp.fazione.capo;
+                  const conflitto = !cmp.rival || cmp.rival.id === capoId;
+                  if (conflitto && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
+                }
                 spendBudget(myId, c);
                 cmp.accordi.push({ helper: h.id, para: cmp.rival.id, sponsor: myId, amount: c, prepaid: true, obiettivi: sel });
                 render();
@@ -6756,8 +6763,21 @@ function campaignAccordiScreen(spectate) {
                 const PERDENTI = ["vinci", "passa", "interno", "para", "paraInterno", "curvaAddosso", "paraRallenta", "paraCanapi"];
                 const perdente = sel.some((id) => PERDENTI.indexOf(id) >= 0);
                 let pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.25 : 0.7;
-                // Già schierata col favorito: ti dice di no quasi sempre.
-                if (inFazioneAvversaria(cmp, h.id)) pAccetta = Math.min(pAccetta, 0.12);
+                // GIÀ SCHIERATA col favorito. Non è un no automatico: dipende da cosa chiedi.
+                //  · se chiedi SOLO di parare la tua rivale, e la tua rivale NON è il capo con
+                //    cui si è schierata, non le costa nulla — anzi fa un favore al suo partito:
+                //    accetta volentieri;
+                //  · se invece le chiedi qualcosa che aiuta TE a vincere (o di parare proprio
+                //    il suo capo), è in conflitto col patto che ha già preso: quasi sempre no,
+                //    ma qualcuna si lascia comprare lo stesso.
+                if (inFazioneAvversaria(cmp, h.id)) {
+                  const ANTI_RIVALE = ["para", "nerbaRiv", "paraInterno", "curvaAddosso", "paraRallenta", "paraCanapi"];
+                  const soloAntiRivale = sel.length > 0 && sel.every((id) => ANTI_RIVALE.indexOf(id) >= 0);
+                  const rivaleId = cmp.rival && cmp.rival.id;
+                  const capoId = cmp.fazione && cmp.fazione.capo;
+                  if (soloAntiRivale && rivaleId && rivaleId !== capoId) pAccetta = Math.max(pAccetta, 0.75);
+                  else pAccetta = Math.min(pAccetta, 0.25);
+                }
                 if (Math.random() < pAccetta) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }
                 else h._accRefused = true;
                 render();
