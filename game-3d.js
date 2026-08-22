@@ -6593,11 +6593,26 @@ function campaignAccordiScreen(spectate) {
         else if (spectate) {
           btn = mkBtn(`Para · ${cost}`);
           btn.addEventListener("click", () => {
-            // Parare = rinunciare a vincere: chi monta un BOMBOLONE rifiuta spesso (75%).
-            if (h.horseTier === "bombolone" && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
-            spendBudget(myId, cost);
-            cmp.accordi.push({ helper: h.id, para: cmp.rival.id, sponsor: myId, amount: cost, prepaid: true });
-            render();
+            // ASSISTI: si sceglie COSA deve fare alla rivale, come in modalità gioco
+            // (prima c'era solo un generico "para", senza finalità).
+            const obiettiviRiv = ACCORDO_OBIETTIVI.filter((o) => o.rivalOnly);
+            openFinalitaScreen({
+              kicker: `Paga per parare ${cmp.rival.name}`,
+              titolo: `${h.name} · ${j.nick}`,
+              sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più · si paga solo se la rivale NON vince`,
+              obiettivi: obiettiviRiv,
+              costoDi: (sel) => accordoCostSel(j, sel),
+              budget: () => contradaBudget(myId),
+              onConferma: (sel) => {
+                const c = accordoCostSel(j, sel);
+                if (c > contradaBudget(myId)) return;
+                // Parare = rinunciare a vincere: chi monta un BOMBOLONE rifiuta spesso (75%).
+                if (h.horseTier === "bombolone" && Math.random() >= 0.25) { h._accRefused = true; render(); return; }
+                spendBudget(myId, c);
+                cmp.accordi.push({ helper: h.id, para: cmp.rival.id, sponsor: myId, amount: c, prepaid: true, obiettivi: sel });
+                render();
+              },
+            });
           });
         } else {
           // PLAY: PRIMA si clicca la CIFRA, POI compaiono le finalità da spuntare.
@@ -8499,12 +8514,19 @@ function startMossa(fromTratta = false) {
           }
         }
       } else if (a.para && a.sponsor === playerId) {   // ASSISTI: l'alleato para la RIVALE
+        const O = a.obiettivi || null;
         helper.allyBeneficiaryId = null;
         helper.allyTargetId = a.para;
-        helper.paraInRace = a.para;              // in gara le va DAVANTI a pararla
         helper.friendlyToPlayer = true;
         helper.allyHelp = true;
+        // Senza finalità (accordo vecchio stile) le va comunque davanti a bloccarla;
+        // con le finalità scelte, solo "nerba" da sola non implica il pararla.
+        const soloNerba = O && O.length === 1 && O[0] === "nerbaRiv";
+        if (!soloNerba) helper.paraInRace = a.para;
         setVendetta(helper, a.para);
+        if (O && O.indexOf("paraInterno") >= 0) helper.objPassa = true;
+        if (O && O.indexOf("curvaAddosso") >= 0) helper.curvaRam = a.para;      // le si butta addosso in curva
+        if (O && O.indexOf("paraRallenta") >= 0) helper.paraRallenta = a.para;  // le rallenta davanti
       } else {                                   // accordo fra AI: comportamento storico
         const benId = a.beneficiary || null;
         const targetId = a.para || (benId ? topRunningRivalId(benId) : null);
