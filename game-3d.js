@@ -8568,7 +8568,8 @@ function startMossa(fromTratta = false) {
   state.rincorsaWait = 0;                          // attesa cumulativa della rincorsa
   state.canapiCaos = Math.random() < 0.67;         // ~2/3 dei palii: VERO casino ai canapi nei primi 25s
   state.caosSide = Math.random() < 0.7 ? 1 : -1;   // stringono da un lato: di solito interno (+1)
-  state.caosPushers = [];                          // 2 contrade dal CENTRO che si sfilano dietro e spingono forte (elette pigramente nel casino)
+  state.caosPushers = [];
+  state.caosFront = [];                            // ALMENO 6 restano ADDOSSO ai canapi durante il trambusto (non tutti dietro)                          // 2 contrade dal CENTRO che si sfilano dietro e spingono forte (elette pigramente nel casino)
   // Quante volte QUESTO Mossiere è disposto a chiamare "tutti fuori" (TETTO, non
   // obiettivo: se non c'è casino non li chiama affatto). 2 palii su 5 ne concede
   // UNO SOLO → dopo quella prima uscita la rincorsa fianca senza altre chiamate.
@@ -9617,12 +9618,18 @@ function updateMossa(dt, time) {
       if (state.canapiCaos && tension && (state.rincorsaWait || 0) < 25
           && (state.tuttiFuoriCount || 0) === 0 && (state.falseStartCount || 0) === 0) {   // solo PRIMA del 1° "tutti fuori"/mossa falsa
         const side = state.caosSide || 1;
-        // ELEZIONE PIGRA: le prime 2 AI vicine al CENTRO diventano le "spingitrici".
+        // ELEZIONE PIGRA: le prime 2 AI vicine al CENTRO diventano le "spingitrici";
+        // le 6 successive restano ADDOSSO ai canapi (il canape non si svuota mai).
         if (!state.caosPushers) state.caosPushers = [];
+        if (!state.caosFront) state.caosFront = [];
         const pl = horse.postLane ?? horse.slotLane ?? horse.mossaLane ?? 0;
-        if (state.caosPushers.length < 2 && Math.abs(pl) < AI_LANE_LIMIT * 0.5
+        const giaFront = state.caosFront.indexOf(horse.id) !== -1;
+        if (!giaFront && state.caosPushers.length < 2 && Math.abs(pl) < AI_LANE_LIMIT * 0.5
             && state.caosPushers.indexOf(horse.id) === -1) {
           state.caosPushers.push(horse.id);
+        }
+        if (!giaFront && state.caosPushers.indexOf(horse.id) === -1 && state.caosFront.length < 6) {
+          state.caosFront.push(horse.id);
         }
         if (state.caosPushers.indexOf(horse.id) !== -1) {
           // DUE CONTRADE DAL CENTRO: si spostano DECISE sul lato, si SFILANO DIETRO
@@ -9631,6 +9638,12 @@ function updateMossa(dt, time) {
           progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
           laneGoal = clamp(side * (AI_LANE_LIMIT - 0.3) + side * (2.8 + agg * 1.2), -AI_LANE_LIMIT - 3, AI_LANE_LIMIT + 3); // spinta forte verso il lato
           turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
+        } else if (state.caosFront.indexOf(horse.id) !== -1) {
+          // LE 6 ADDOSSO AI CANAPI: stringono da un lato e si accavallano fra loro,
+          // ma NON arretrano — restano al fronte, così il canape resta pieno.
+          laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          progGoal = frontLine - Math.abs(Math.sin(time * 0.7 + horse.phase * 1.5)) * 0.5;   // appena uno scarto, restano sotto il canape
+          turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 0.9;     // muso storto, ma non girate del tutto
         } else {
           laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
           const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
