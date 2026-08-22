@@ -6082,7 +6082,9 @@ function accordoCostObj(jockey, n) { return Math.round(accordoCost(jockey) * acc
 // costa DOPPIO → aggiunge un intero costo-base.
 function accordoCostSel(jockey, sel) {
   let c = accordoCostObj(jockey, (sel || []).length);
+  // Finalità "pesanti": costano il DOPPIO (un intero costo-base in più).
   if ((sel || []).indexOf("curvaAddosso") >= 0) c += accordoCost(jockey);
+  if ((sel || []).indexOf("interno") >= 0) c += accordoCost(jockey);
   return c;
 }
 
@@ -6626,7 +6628,10 @@ function campaignAccordiScreen(spectate) {
           ctrl.className = "cmp-ctrl";
           ctrl.style.cssText = "display:flex;flex-direction:column;gap:4px;flex:0 0 auto;align-items:flex-end;min-width:240px";
           const openBtn = mkBtn(`Proponi · ${cost}`);
-          const obiettivi = ACCORDO_OBIETTIVI.filter((o) => !o.rivalOnly || rivalRunning);   // "marca la rivale" solo se corre
+          const internoPresi = (cmp.accordi || []).filter((a) => a.beneficiary === myId
+            && a.obiettivi && a.obiettivi.indexOf("interno") >= 0).length;
+          const obiettivi = ACCORDO_OBIETTIVI.filter((o) => (!o.rivalOnly || rivalRunning)   // "marca la rivale" solo se corre
+            && !(o.id === "interno" && internoPresi >= 2));                                  // max 2 Contrade a farti passare interno
           openBtn.addEventListener("click", () => {
             // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
             openFinalitaScreen({
