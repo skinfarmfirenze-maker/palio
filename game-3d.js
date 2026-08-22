@@ -8618,6 +8618,11 @@ function startMossa(fromTratta = false) {
     };
     (cmp.accordi || []).forEach((a) => {
       const helper = byId[a.helper]; if (!helper || helper.player) return;
+      // PAROLA DATA, NON SEMPRE MANTENUTA: un accordo su cinque non viene onorato.
+      // La Contrada ha preso i denari ma in Piazza fa di testa sua — succede, e il
+      // giocatore non lo sa finché non lo vede in corsa. Deciso UNA volta per palio
+      // (questo codice gira all'inizio della mossa), non a ogni frame.
+      if (Math.random() >= 0.8) return;
       if (a.beneficiary === playerId) {          // il GIOCATORE corre: l'alleato aiuta te
         helper.friendlyToPlayer = true;
         if (!a.obiettivi) {                      // accordo classico (senza finalità): aiuto pieno
