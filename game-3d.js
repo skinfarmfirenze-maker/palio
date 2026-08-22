@@ -8999,7 +8999,7 @@ function resetMossaAfterFalsa() {
   });
   state.callIndex = 0;
   state.sinceCall = 0;
-  state.callPause = 3.2;
+  state.callPause = 8.2;   // +5s: tornati al tondino c'è il tempo di trattare la mossa
   try { startBusta(0.4); } catch (e) { /* niente */ }   // si torna al tondino: rientra il sottofondo
   state.mossaPhase = "positioning";
   state.tensionTimer = 0;                 // la mossa RIPARTE: attesa/tensione da capo
@@ -9043,7 +9043,7 @@ function triggerTuttiFuori() {
   });
   state.callIndex = 0;                   // richiama dalla prima, ORDINE IDENTICO
   state.sinceCall = 0;
-  state.callPause = 4.0;
+  state.callPause = 9.0;   // +5s: dopo il "tutti fuori" c'è il tempo di trattare la mossa
   try { startBusta(0.4); } catch (e) { /* niente */ }   // tutti al tondino: rientra il sottofondo
   state.mossaPhase = "positioning";
   state.tensionTimer = 0;
@@ -10168,7 +10168,7 @@ function updateRincorsa(rincorsa, dt) {
   // Il limite arretra fin DENTRO il tondino (centro a MOSSA_BACK_LIMIT-10): appena
   // scoperta, la rincorsa parte da dov'è e va al verrocchino da sé, senza essere
   // risucchiata in avanti da un clamp troppo stretto.
-  rincorsa.progress = Math.max(RINCORSA_START_PROGRESS - 13.0, rincorsa.progress);
+  rincorsa.progress = Math.max(RINCORSA_START_PROGRESS - 18.0, rincorsa.progress);   // +5 unità di margine indietro
   // ── VINCOLO VERROCCHINO: la rincorsa entra SOLO a SINISTRA del verrocchino (lato
   // esterno, dove c'è il varco), MAI a destra. Se col muso libero il giocatore prova
   // a varcare il canapo stando sul lato INTERNO del paletto (lane > VERROCCHINO_LANE),
