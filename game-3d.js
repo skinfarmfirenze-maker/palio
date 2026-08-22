@@ -6693,7 +6693,7 @@ function campaignAccordiScreen(spectate) {
           const internoPresi = conFin("interno");
           const passaPresi = conFin("passa");
           const obiettivi = ACCORDO_OBIETTIVI.filter((o) => (!o.rivalOnly || rivalRunning)   // "marca la rivale" solo se corre
-            && !(o.id === "interno" && internoPresi >= 2)                                    // max 2 Contrade a farti passare interno
+            && !(o.id === "interno" && internoPresi >= 1)                                    // max 1 Contrada a pararti andando interno
             && !(o.id === "passa" && passaPresi >= 1));                                      // max 1 Contrada a lasciarti passare
           openBtn.addEventListener("click", () => {
             // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
