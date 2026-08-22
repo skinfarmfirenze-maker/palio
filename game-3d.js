@@ -7738,12 +7738,13 @@ function playerFirstLapMult(player) {
 function leaderBrakeMult(horse) {
   // RALLENTATORE DEL PRIMO (giocatore o AI, stesse regole): scaglioni sul distacco
   // dal TERZO in classifica. Nessuna molla, nessun richiamo elastico: solo un filo
-  //   gap >= 6  → −0,01   ·   gap >= 10 → −0,02   ·   gap >= 18 → −0,03
+  //   gap >= 6 → −0,01 · >= 10 → −0,02 · >= 15 → −0,03 · >= 19 → −0,04
   if (!horse || horse.id !== state.leaderBrakeId) return 1;   // solo chi è PRIMO
   const terzo = state.secondBrakeThirdProg;                   // posta del 3°
   if (terzo == null) return 1;
   const gap = horse.progress - terzo;
-  if (gap >= 18) return 0.97;
+  if (gap >= 19) return 0.96;
+  if (gap >= 15) return 0.97;
   if (gap >= 10) return 0.98;
   if (gap >= 6) return 0.99;
   return 1;
