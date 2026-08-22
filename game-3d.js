@@ -10454,7 +10454,7 @@ function updateRincorsaHud(rincorsa) {
 function updateMossaMessages(dt, time, rincorsa) {
   if (state.messageTimer > 0) return;
   if (state.mossaPhase === "tension" && state.mossaTimer > 7 && Math.random() < dt * 0.25) {
-    const phrases = ["La folla trattiene il respiro…", "I cavalli sono al limite…", "Tutto dipende dalla rincorsa…"];
+    const phrases = ["Tutto dipende dalla rincorsa…"];   // tolte "la folla trattiene il respiro" e "i cavalli sono al limite"
     showMessage(phrases[Math.floor(Math.random() * phrases.length)], 1.1);
   }
 }
