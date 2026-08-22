@@ -4315,7 +4315,7 @@ function pollGamepad() {
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   let gp = null;
   for (const p of pads) { if (p && p.connected) { gp = p; break; } }
-  if (!gp) { g.left = false; g.right = false; g.latLeft = false; g.latRight = false; g.prevX = false; g.prevO = false; g.prevNavPrev = false; g.prevNavNext = false; return; }
+  if (!gp) { g.left = false; g.right = false; g.latLeft = false; g.latRight = false; g.prevX = false; g.prevO = false; g.prevR1 = false; g.prevL1 = false; g.prevNavPrev = false; g.prevNavNext = false; return; }
   const dead = 0.30;
   const ax = gp.axes[0] || 0;    // levetta SINISTRA orizzontale
   const ay = gp.axes[1] || 0;    // levetta SINISTRA verticale
@@ -4354,6 +4354,19 @@ function pollGamepad() {
     ensureAudio(); if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
     if (inRace) adjustPlayerSpeed(-1);   // in gara: O = marcia giù
   }
+  // R1 / L1 (dorsali, buttons[5] e [4]) = NERBATA a destra / a sinistra, come K e S
+  // sulla tastiera. Fronte di salita: un colpo per pressione.
+  const r1Now = !!(gp.buttons[5] && gp.buttons[5].pressed);
+  const l1Now = !!(gp.buttons[4] && gp.buttons[4].pressed);
+  if ((r1Now && !g.prevR1) || (l1Now && !g.prevL1)) {
+    ensureAudio(); if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
+    if (inRace) {
+      const pl = getPlayer();
+      if (pl) tiraNerbata(pl, (r1Now && !g.prevR1) ? 1 : -1, state.mode === "mossa" ? "mossa" : "race");
+    }
+  }
+  g.prevR1 = r1Now;
+  g.prevL1 = l1Now;
   g.prevX = xNow;
   g.prevO = oNow;
 }
@@ -4427,7 +4440,7 @@ function uiOnScreen(el) { return !!(el && el.getClientRects().length > 0); }
 function uiShown(el) { return uiOnScreen(el) && !el.disabled; }
 // Il "layer" UI in cima (dal più sopra verso il basso), dove cercare i pulsanti.
 function activeUILayer() {
-  const ids = ["pwGate", "alboOverlay", "hvOverlay", "campaignOverlay", "palioChooser", "sfOverlay", "trattaHud", "estrHud"];
+  const ids = ["gameTips", "finalitaScreen", "pwGate", "alboOverlay", "hvOverlay", "campaignOverlay", "palioChooser", "sfOverlay", "trattaHud", "estrHud"];
   for (const id of ids) { const el = document.getElementById(id); if (uiOnScreen(el)) return el; }
   const scr = document.querySelector(".screen.active");
   if (uiOnScreen(scr)) return scr;
@@ -4437,7 +4450,7 @@ function activeUILayer() {
 function uiFocusables() {
   const layer = activeUILayer();
   if (!layer) return [];
-  return [...layer.querySelectorAll("button, .contrada-card, .pc-card, .sf-card, [role='option']")]
+  return [...layer.querySelectorAll("button, .contrada-card, .pc-card, .sf-card, .hv-card, input[type='checkbox'], [role='option']")]
     .filter((b) => uiOnScreen(b) && !b.disabled);
 }
 // Il pulsante "avanti/salta/conferma" del layer in cima.
@@ -4457,7 +4470,9 @@ function uiPrimaryButton() {
 // INVIO / X: attiva il pulsante a fuoco, oppure il primario del layer.
 function uiActivate() {
   const af = document.activeElement;
-  if (af && af.tagName === "BUTTON" && uiShown(af) && uiFocusables().includes(af)) { af.click(); return; }
+  const attivabile = af && uiShown(af) && uiFocusables().includes(af)
+    && (af.tagName === "BUTTON" || (af.tagName === "INPUT" && af.type === "checkbox"));
+  if (attivabile) { af.click(); return; }
   const primary = uiPrimaryButton();
   if (primary) primary.click();
 }
