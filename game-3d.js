@@ -5919,7 +5919,9 @@ const CORRUZIONE_OBIETTIVI = [
   { id: "nerba",   label: "Nerba la mia rivale", rivalOnly: true },
   { id: "perdi",   label: "Non provare a vincere" },
   { id: "buttati", label: "Buttati sulla mia rivale in curva", rivalOnly: true },
-  { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare" },
+  { id: "noMossa", label: "Se vai di rincorsa, non dare la mossa alla mia rivale", rivalOnly: true },
+  // "fammi passare" ha senso solo se la mia Contrada corre (in ASSISTI non corro).
+  { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare", playOnly: true },
 ];
 function corruptionCostObj(j, n) { return Math.round(corruptionCost(j) * accordoMult(Math.max(1, n || 1))); }
 
@@ -6009,7 +6011,8 @@ function campaignCorruptionScreen() {
         // "Nerba/Buttati sulla mia rivale" NON compaiono se stai corrompendo proprio il
         // fantino della rivale (non può attaccare sé stesso).
         const isRival = !!(cmp.rival && h.id === cmp.rival.id);
-        const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => !o.rivalOnly || (rivalRunning && !isRival));
+        const inAssisti = cmp.currentMode === "spectate";
+        const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => (!o.rivalOnly || (rivalRunning && !isRival)) && !(o.playOnly && inAssisti));
         openBtn.addEventListener("click", () => {
           // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
           const costoDi = (sel) => corruptionCostObj(j, sel.length) + (sel.indexOf("buttati") >= 0 ? 100 : 0);   // buttati in curva = killer: +100
@@ -8378,6 +8381,7 @@ function startMossa(fromTratta = false) {
     horse.corruptPerdi = false;                    // corruzione "non provare a vincere": rallenta nel finale
     horse.friendlyToPlayer = false;               // alleato/corrotto: non dà fastidio al giocatore
     horse.paraInRace = null;                       // (assisti) va davanti a questa Contrada per pararla in corsa
+    horse.noMossaTarget = null;                    // fantino corrotto: a chi NON deve dare la mossa se va di rincorsa
     horse.corruptDelay = 0;                        // ritardo extra al via (rivale corrotta in assisti)
     horse.vendettaAt = 4 + Math.random() * 24;   // quando scatta (secondi di tensione)
     horse.vendettaLife = 0;
@@ -8557,6 +8561,7 @@ function startMossa(fromTratta = false) {
           if (orders.indexOf("resta") >= 0) h.corruptDelay = Math.max(h.corruptDelay || 0, 1.2);
           if (orders.indexOf("perdi") >= 0) h.corruptPerdi = true;
           if (orders.indexOf("interno") >= 0) { h.objPassa = true; h.allyBeneficiaryId = playerId; h.allyHelp = true; }  // para gli altri interno + fammi passare
+          if (orders.indexOf("noMossa") >= 0 && rivalId) h.noMossaTarget = rivalId;   // di rincorsa: non dà la mossa alla mia rivale
           const aggr = (orders.indexOf("nerba") >= 0 || orders.indexOf("buttati") >= 0) && rivalId && byId[rivalId] && rivalId !== h.id;
           if (aggr) { h.allyTargetId = rivalId; h.allyHelp = true; h.paraInRace = rivalId; setVendetta(h, rivalId); }
         } else {
@@ -10167,7 +10172,18 @@ function updateRincorsa(rincorsa, dt) {
         // ben piazzata. La mossa falsa per sbaglio resta (non è una mossa valida). Il
         // blocco cede solo oltre la durata massima assoluta, per non tenere aperta la
         // mossa all'infinito se la rivale resta sempre pronta.
-        const rivalBloccaVia = rivalIsBene && state.mossaTimer < MOSSA_MAX_DURATION;
+        // FANTINO COMPRATO: gli è stato pagato di NON dare la mossa a una Contrada
+        // precisa → finché quella è messa bene, non si lancia.
+        let noMossaBene = false;
+        if (rincorsa.noMossaTarget) {
+          const t = state.horses.find((o) => o.id === rincorsa.noMossaTarget && o.called && !o.entering);
+          if (t) {
+            noMossaBene = Math.abs(t.mossaTurn || 0) < 0.22
+              && t.mossaProgress > MOSSA_FRONT_LIMIT - 2.6
+              && (t.nervousnessCurrent || 0) < 0.7;
+          }
+        }
+        const rivalBloccaVia = (rivalIsBene || noMossaBene) && state.mossaTimer < MOSSA_MAX_DURATION;
         // ── MOSSA A CHIAMATA: se il GIOCATORE si è comprato la mossa, è schierato ai
         // canapi e la rincorsa è in posizione per fiancare, quando porta l'andatura a 5
         // la rincorsa gli dà la mossa → parte LUI (senza forzare il canape, se allineato).
