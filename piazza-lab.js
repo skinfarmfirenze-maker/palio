@@ -37,10 +37,10 @@ export const MIS = {
   estCorrimano: 0.15,      // sezione del corrimano di legno in cima
 
   // Colonnino + staccionata (interno)
-  // 0.60, non 0.30: i paracarri di pietra del gioco stanno a bordo+0.2 con
-  // profondità 0.32 (arrivano a +0.36) e a 0.30 trapassavano la staccionata.
-  // A 0.60 restano davanti, come stavano davanti alla vecchia ringhiera (+0.72).
-  intSporgenza: 0.60,
+  // 0.35: i paracarri di pietra del lato interno sono stati RIMOSSI dal gioco
+  // (commit c14f5a8, su nostra proposta: nella piazza vera non ci sono blocchi
+  // davanti al colonnino), quindi la staccionata può stare accostata al bordo.
+  intSporgenza: 0.35,
   intAltezza: 1.02,
   intPasso: 4.2,           // interasse dei pilastrini di travertino
   intPilastro: 0.34,       // lato del pilastrino
@@ -88,6 +88,20 @@ export const COL = {
 //   largoInterno(s) = TRACK_HALF_WIDTH
 //   quota(s)      = trackHeightAt(s.cum)
 // ══════════════════════════════════════════════════════════════════════════════
+// I VARCHI sono intervalli in cum {da, a} (gestiscono il wrap del giro): dove
+// cadono, la scenografia non si costruisce. Servono per la zona mossa (la
+// palancata lascerebbe la rincorsa senza corridoio), per la Cappella di Piazza
+// e per l'entrone, che bucano le gradinate.
+function dentroVarchi(cum, varchi, giro) {
+  if (!varchi || !varchi.length) return false;
+  const c = ((cum % giro) + giro) % giro;
+  return varchi.some((v) => {
+    const da = ((v.da % giro) + giro) % giro;
+    const a = ((v.a % giro) + giro) % giro;
+    return da <= a ? (c >= da && c <= a) : (c >= da || c <= a);
+  });
+}
+
 function stazioni(ctx, { lato, extra = 0, passo = 3 }) {
   const camp = ctx.campioni;
   const out = [];
@@ -109,6 +123,7 @@ function stazioni(ctx, { lato, extra = 0, passo = 3 }) {
     p.y = ctx.quota(s);
     out.push({ p, fuori: lat.multiplyScalar(segno), cum: s.cum });
   }
+  out.giro = camp[camp.length - 1].cum + (camp[1].cum - camp[0].cum);
   // Tangente e distanza percorsa lungo QUESTA linea (non lungo l'asse pista):
   // così i pannelli hanno tutti la stessa larghezza anche dove la pista si svasa.
   let corsa = 0;
@@ -135,7 +150,10 @@ function stazioni(ctx, { lato, extra = 0, passo = 3 }) {
 // `mat` sul punto i = materiale del segmento i→i+1; `salta: true` = buco (per
 // tornare indietro nel profilo senza disegnare la faccia).
 // ══════════════════════════════════════════════════════════════════════════════
-function spazza(staz, profilo, materiali, { uScala = 1, chiudi = true } = {}) {
+function spazza(staz, profilo, materiali, { uScala = 1, chiudi = true, varchi = null, soloTra = null } = {}) {
+  const giro = staz.giro || (staz[staz.length - 1].cum + 1);
+  const fuoriZona = (st) => dentroVarchi(st.cum, varchi, giro)
+    || (soloTra && !dentroVarchi(st.cum, soloTra, giro));
   const geo = new THREE.BufferGeometry();
   const pos = [];
   const uv = [];
@@ -162,6 +180,7 @@ function spazza(staz, profilo, materiali, { uScala = 1, chiudi = true } = {}) {
       });
     }
     for (let i = 0; i < N - 1; i += 1) {
+      if (fuoriZona(staz[i]) || fuoriZona(staz[(i + 1) % staz.length])) continue;
       const k = base + i * 2;
       idx.push(k, k + 1, k + 3, k, k + 3, k + 2);
     }
@@ -451,17 +470,21 @@ export function texturaTravertino({ risoluzione = 256 } = {}) {
 // Punti equidistanti lungo una linea di stazioni (per pilastrini, stecche,
 // scalette, spettatori): la spaziatura è sulla LINEA della barriera, quindi
 // resta costante anche dove la pista si svasa o si stringe.
-function passiRegolari(staz, passo) {
+function passiRegolari(staz, passo, { varchi = null, soloTra = null } = {}) {
   const tot = staz[staz.length - 1].s;
+  const giro = staz.giro || (staz[staz.length - 1].cum + 1);
   const out = [];
   let k = 0;
   for (let d = 0; d < tot - passo * 0.5; d += passo) {
     while (k < staz.length - 2 && staz[k + 1].s < d) k += 1;
     const a = staz[k], b = staz[k + 1];
     const t = (d - a.s) / Math.max(1e-6, b.s - a.s);
+    const cum = a.cum + (b.cum - a.cum) * t;
+    if (dentroVarchi(cum, varchi, giro)) continue;
+    if (soloTra && !dentroVarchi(cum, soloTra, giro)) continue;
     const p = a.p.clone().lerp(b.p, t);
     const fuori = a.fuori.clone().lerp(b.fuori, t).normalize();
-    out.push({ p, fuori, yaw: Math.atan2(fuori.x, fuori.z), s: d });
+    out.push({ p, fuori, yaw: Math.atan2(fuori.x, fuori.z), s: d, cum });
   }
   return out;
 }
@@ -496,6 +519,7 @@ export function costruisciSteccatoEsterno(ctx, opz = {}) {
   const retro = opaco({ color: 0x7d855e, roughness: 0.88 });
 
   const staz = stazioni(ctx, { lato: "esterno", extra: opz.sporgenza ?? MIS.estSporgenza, passo: opz.passo || 3 });
+  const zone = { varchi: opz.varchi || null, soloTra: opz.soloTra || null };
 
   // Corpo: faccia dipinta verso la pista, cappello e retro lisci.
   const corpo = spazza(staz, [
@@ -503,7 +527,7 @@ export function costruisciSteccatoEsterno(ctx, opz = {}) {
     { d: 0, y: H, v: 1, mat: 1 },
     { d: SP, y: H, v: 1, mat: 2 },
     { d: SP, y: 0, v: 0 }
-  ], [dipinto, legno, retro], { uScala: opz.pannello ?? MIS.estPannello });
+  ], [dipinto, legno, retro], { uScala: opz.pannello ?? MIS.estPannello, ...zone });
   g.add(corpo);
 
   // Corrimano di legno scuro che corre in cima, un filo a sbalzo sui due lati.
@@ -514,7 +538,7 @@ export function costruisciSteccatoEsterno(ctx, opz = {}) {
     { d: SP + 0.05, y: H + c, v: 0.6, mat: 0 },
     { d: SP + 0.05, y: H, v: 0.85, mat: 0 },
     { d: -0.05, y: H, v: 1 }
-  ], [legno], { uScala: 2.2 });
+  ], [legno], { uScala: 2.2, ...zone });
   g.add(rail);
 
   return g;
@@ -530,6 +554,7 @@ export function costruisciSteccatoInterno(ctx, opz = {}) {
   const pietra = opaco({ map: opz.texturaTravertino || texturaTravertino(), color: 0xffffff, roughness: 0.72 });
 
   const staz = stazioni(ctx, { lato: "interno", extra: opz.sporgenza ?? MIS.intSporgenza, passo: opz.passo || 3 });
+  const zone = { varchi: opz.varchi || null, soloTra: opz.soloTra || null };
 
   // Due correnti orizzontali: quello alto fa da corrimano, quello basso tiene
   // le stecche. Sezione piatta, come le assi vere.
@@ -539,12 +564,12 @@ export function costruisciSteccatoInterno(ctx, opz = {}) {
     { d: sp / 2, y: y + h, v: 0.6, mat: 0 },
     { d: sp / 2, y, v: 0.9, mat: 0 },
     { d: -sp / 2, y, v: 1 }
-  ], [legnoChiaro], { uScala: 2.4 });
+  ], [legnoChiaro], { uScala: 2.4, ...zone });
   g.add(corrente(H - 0.13, 0.13, 0.11));
   g.add(corrente(H * 0.42, 0.10, 0.09));
 
   // Stecche verticali fitte fra un pilastrino e l'altro.
-  const stecche = passiRegolari(staz, opz.stecca ?? MIS.intStecca);
+  const stecche = passiRegolari(staz, opz.stecca ?? MIS.intStecca, zone);
   const imS = istanze(new THREE.BoxGeometry(0.085, H - 0.1, 0.045), legnoChiaro, stecche.length);
   const dummy = new THREE.Object3D();
   let n = 0;
@@ -561,7 +586,7 @@ export function costruisciSteccatoInterno(ctx, opz = {}) {
   g.add(imS);
 
   // Pilastrini di travertino: fusto + cappello leggermente aggettante.
-  const pil = passiRegolari(staz, opz.passoPilastri ?? MIS.intPasso);
+  const pil = passiRegolari(staz, opz.passoPilastri ?? MIS.intPasso, zone);
   const L = opz.pilastro ?? MIS.intPilastro;
   const imP = istanze(new THREE.BoxGeometry(L, H + 0.12, L), pietra, pil.length);
   const imC = istanze(new THREE.BoxGeometry(L * 1.12, 0.075, L * 1.12), pietra, pil.length);
@@ -600,6 +625,7 @@ export function costruisciPalchi(ctx, opz = {}) {
   const sotto = opaco({ map: opz.texturaLegno || texturaLegno(), color: 0x4a3a30, roughness: 0.95 });
 
   const staz = stazioni(ctx, { lato: "esterno", extra: opz.fronte ?? MIS.palcoFronte, passo: opz.passo || 3 });
+  const zone = { varchi: opz.varchi || null, soloTra: opz.soloTra || null };
 
   // Profilo a scalinata: zoccolo cieco, poi pedata/alzata per ogni fila.
   const prof = [];
@@ -615,11 +641,11 @@ export function costruisciPalchi(ctx, opz = {}) {
   v += 0.6; punto(d + 0.25, y, 2);      // spallina in cima
   v += (y) / 0.7; punto(d + 0.25, 0);   // chiusura sul retro (verso i palazzi)
 
-  g.add(spazza(staz, prof, [legno, legnoScuro, sotto], { uScala: 2.2 }));
+  g.add(spazza(staz, prof, [legno, legnoScuro, sotto], { uScala: 2.2, ...zone }));
 
   // Scalette di servizio appoggiate alla gradinata, come in piazza.
   const passoScala = opz.scalaOgni ?? MIS.palcoScalaOgni;
-  const scale = passiRegolari(staz, passoScala);
+  const scale = passiRegolari(staz, passoScala, zone);
   const dTop = d + 0.1, yTop = y;
   const dBot = 0.15, yBot = 0.05;
   const Ldd = dTop - dBot, Lyy = yTop - yBot;
@@ -670,9 +696,9 @@ export function costruisciPalchi(ctx, opz = {}) {
       { d: 0.14, y: y + h, v: 0.6, mat: 0 },
       { d: 0.14, y, v: 0.9, mat: 0 },
       { d: 0.02, y, v: 1 }
-    ], [legnoScuro], { uScala: 2.2 });
+    ], [legnoScuro], { uScala: 2.2, ...zone });
     g.add(corr(yR, 0.11), corr(base + 0.2, 0.08));
-    const monta = passiRegolari(staz, 2.2);
+    const monta = passiRegolari(staz, 2.2, zone);
     const imM = istanze(new THREE.BoxGeometry(0.09, 0.66, 0.09), legnoScuro, monta.length);
     const d2 = new THREE.Object3D();
     let k2 = 0;
@@ -691,7 +717,7 @@ export function costruisciPalchi(ctx, opz = {}) {
   // Sedute: la folla vera è fitta, spalla a spalla.
   const posti = [];
   const passoPosti = opz.passoPosti ?? 0.44;
-  const lungoFila = passiRegolari(staz, passoPosti);
+  const lungoFila = passiRegolari(staz, passoPosti, zone);
   for (let r = 0; r < file; r += 1) {
     lungoFila.forEach((q, i) => {
       if (((i * 7 + r * 3) % 13) === 0) return;        // qualche posto vuoto
@@ -764,6 +790,13 @@ export function costruisciPubblicoPalchi(posti, opz = {}) {
 }
 
 // ── TUTTO INSIEME ────────────────────────────────────────────────────────────
+// opz.mossa  = { da, a } in cum: lì la palancata NON si costruisce (il corridoio
+//              della rincorsa e i canapi devono restare liberi).
+// opz.palazzo = { cum } (centro del rettilineo del Palazzo, da getStraightCenterP):
+//              sul fronte del Palazzo (facciata a bordo+3.2) i palchi normali da
+//              8 file lasciano il posto ai PALCHI DELLE COMPARSE (4 file, che
+//              finiscono esatti sulla facciata), con i varchi della CAPPELLA DI
+//              PIAZZA e dell'ENTRONE, costruiti qui. La palancata resta continua.
 export function costruisciPiazza(ctx, opz = {}) {
   const g = new THREE.Group();
   g.name = "ScenografiaPiazza";
@@ -774,10 +807,195 @@ export function costruisciPiazza(ctx, opz = {}) {
     texturaTravertino: opz.texturaTravertino || texturaTravertino(),
     texturaPalancata: opz.texturaPalancata || texturaPalancata({ risoluzione: opz.risoluzione || 1024, onEmblema: opz.onEmblema || null })
   };
-  const palchi = costruisciPalchi(ctx, { ...opz.palchi, ...cond });
+
+  // Zone del rettilineo del Palazzo, in cum. Il segno di marcia si ricava dal
+  // riferimento locale: +x del Palazzo (che nel gioco corre verso la Torre a
+  // x=-20.2) può andare nei cum crescenti o decrescenti a seconda del giro.
+  let varchiPalchi8 = opz.palchi?.varchi ? [...opz.palchi.varchi] : [];
+  let zonaComparse = null;
+  let pal = null;
+  if (opz.palazzo && opz.palazzo.cum != null) {
+    const rif = riferimentoA(ctx, opz.palazzo.cum);
+    const inner = rif.fuori.clone().negate();
+    const th = Math.atan2(inner.x, inner.z);
+    const asseX = new THREE.Vector3(Math.cos(th), 0, -Math.sin(th));
+    const segno = asseX.dot(rif.lungo) >= 0 ? 1 : -1;
+    const aCum = (x1, x2) => {
+      const a = opz.palazzo.cum + segno * x1;
+      const b = opz.palazzo.cum + segno * x2;
+      return { da: Math.min(a, b), a: Math.max(a, b) };
+    };
+    pal = {
+      tutto: aCum(-24.8, 17.2),                       // dove NON vanno i palchi da 8
+      comparse: aCum(-16, 17.2),                      // dove vanno i palchi bassi
+      cappella: { span: aCum(-24.5, -16), centro: opz.palazzo.cum + segno * -20.25 },
+      entrone: { span: aCum(-15.4, -10.4), centro: opz.palazzo.cum + segno * -12.9 }
+    };
+    varchiPalchi8.push(pal.tutto);
+  }
+
+  const palchi = costruisciPalchi(ctx, { ...opz.palchi, varchi: varchiPalchi8, ...cond });
   g.add(palchi.gruppo);
-  g.add(costruisciSteccatoEsterno(ctx, { ...opz.esterno, ...cond }));
+  let posti = palchi.posti;
+
+  if (pal) {
+    const comparse = costruisciPalchi(ctx, {
+      file: opz.palazzo.fileComparse ?? 4,
+      soloTra: [pal.comparse],
+      varchi: [pal.entrone.span],
+      scalaOgni: 9,
+      ...cond
+    });
+    comparse.gruppo.name = "PalchiComparse";
+    g.add(comparse.gruppo);
+    posti = posti.concat(comparse.posti);
+    g.add(costruisciCappella(ctx, { cum: pal.cappella.centro, ...opz.cappella, ...cond }));
+    g.add(costruisciEntrone(ctx, { cum: pal.entrone.centro, ...opz.entrone, ...cond }));
+  }
+
+  const varchiPalancata = [];
+  if (opz.mossa) varchiPalancata.push(opz.mossa);
+  if (opz.esterno?.varchi) varchiPalancata.push(...opz.esterno.varchi);
+  g.add(costruisciSteccatoEsterno(ctx, { ...opz.esterno, varchi: varchiPalancata.length ? varchiPalancata : null, ...cond }));
   g.add(costruisciSteccatoInterno(ctx, { ...opz.interno, ...cond }));
-  if (opz.pubblico !== false) g.add(costruisciPubblicoPalchi(palchi.posti, opz.pubblicoOpz || {}));
-  return { gruppo: g, posti: palchi.posti, palchi };
+  if (opz.pubblico !== false) g.add(costruisciPubblicoPalchi(posti, opz.pubblicoOpz || {}));
+  return { gruppo: g, posti, palchi, zone: pal };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. IL RETTILINEO DEL PALAZZO — cappella, entrone, palchi delle comparse
+// ──────────────────────────────────────────────────────────────────────────────
+// Sul rettilineo il Palazzo Pubblico dà direttamente sulla piazza (facciata a
+// bordo+3.2 nel gioco): i palchi normali (8 file, fondo 5.31) ci finirebbero
+// DENTRO. Lì vanno i palchi bassi delle comparse (4 file: 1.15+4×0.52≈3.2,
+// finiscono esatti sulla facciata), e le gradinate si interrompono per la
+// CAPPELLA DI PIAZZA (il tabernacolo di marmo ai piedi della Torre) e per
+// l'ENTRONE (il portale da cui i cavalli entrano). La palancata dipinta invece
+// corre CONTINUA anche davanti a cappella ed entrone, come nelle foto.
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Riferimento locale sul bordo esterno a un dato cum: origine sul bordo pista,
+// `fuori` verso i palazzi, `lungo` nel verso dei cum crescenti.
+function riferimentoA(ctx, cum) {
+  const camp = ctx.campioni;
+  const giro = camp[camp.length - 1].cum + (camp[1].cum - camp[0].cum);
+  const c = ((cum % giro) + giro) % giro;
+  let migliore = camp[0], dist = Infinity;
+  camp.forEach((s0) => { const d = Math.abs(s0.cum - c); if (d < dist) { dist = d; migliore = s0; } });
+  const i = camp.indexOf(migliore);
+  const prev = camp[(i - 1 + camp.length) % camp.length];
+  const next = camp[(i + 1) % camp.length];
+  const lungo = next.point.clone().sub(prev.point).setY(0).normalize();
+  const radiale = ctx.fuori(migliore.point);
+  const fuori = (migliore.normal && migliore.normal.isVector3)
+    ? migliore.normal.clone().multiplyScalar(migliore.normal.dot(radiale) >= 0 ? 1 : -1)
+    : radiale.clone();
+  const bordo = migliore.point.clone().addScaledVector(fuori, ctx.largoEsterno(migliore));
+  bordo.y = ctx.quota(migliore);
+  return { bordo, fuori, lungo, yaw: Math.atan2(fuori.x, fuori.z), giro };
+}
+
+// ── LA CAPPELLA DI PIAZZA ────────────────────────────────────────────────────
+// Tabernacolo di marmo bianco: alto basamento, quattro pilastri con le nicchie
+// dei santi, archi a tutto sesto, trabeazione con fregio e una volta bassa
+// che si appoggia alla facciata. Sta dietro la palancata, che le passa davanti.
+export function costruisciCappella(ctx, opz = {}) {
+  const rif = riferimentoA(ctx, opz.cum);
+  const g = new THREE.Group();
+  g.name = "CappellaDiPiazza";
+  const marmo = opaco({ map: opz.texturaTravertino || texturaTravertino(), color: 0xf4efe2, roughness: 0.55 });
+  const marmoOmbra = opaco({ color: 0xd8d0bc, roughness: 0.7 });
+  const buio = opaco({ color: 0x342a1c, roughness: 0.95 });   // ombra calda, non nero assoluto
+
+  const L = opz.larghezza ?? 8.2;      // fronte lungo la pista
+  const D = opz.profondita ?? 2.6;     // sporgenza dalla facciata verso la pista
+  const HP = opz.altezzaPilastri ?? 5.6;
+  const HB = 0.9;                      // basamento
+  const daBordo = opz.daBordo ?? 0.55; // il fronte sta appena dietro la palancata
+
+  const box = (w, h, d, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  // Coordinate locali: x lungo la pista, z verso la pista (fronte a z = 0).
+  // Basamento pieno con gradino.
+  box(L, HB, D, marmo, 0, HB / 2, -D / 2);
+  box(L + 0.4, 0.22, D + 0.3, marmoOmbra, 0, 0.11, -D / 2);
+  // Quattro pilastri sul fronte, con nicchia scura e cornicetta.
+  const xs = [-L / 2 + 0.45, -L / 6, L / 6, L / 2 - 0.45];
+  xs.forEach((x) => {
+    box(0.9, HP, 0.9, marmo, x, HB + HP / 2, -0.45);
+    box(0.44, 1.1, 0.12, opaco({ color: 0x4a4034, roughness: 0.9 }), x, HB + HP * 0.62, 0.02);   // nicchia
+    box(0.56, 0.14, 0.16, marmoOmbra, x, HB + HP * 0.62 + 0.62, 0.03);
+    box(0.26, 0.62, 0.1, opaco({ color: 0xbfb49c, roughness: 0.8 }), x, HB + HP * 0.60, 0.05);    // il "santo"
+  });
+  // Pilastri posteriori (contro la facciata) e volta bassa.
+  [-L / 2 + 0.45, L / 2 - 0.45].forEach((x) => box(0.7, HP, 0.7, marmo, x, HB + HP / 2, -D + 0.35));
+  // Trabeazione + fregio + cornice aggettante.
+  box(L + 0.5, 0.55, D + 0.5, marmo, 0, HB + HP + 0.27, -D / 2);
+  box(L + 0.2, 0.35, D + 0.2, marmoOmbra, 0, HB + HP + 0.72, -D / 2);
+  box(L + 0.8, 0.28, D + 0.8, marmo, 0, HB + HP + 1.02, -D / 2);
+  // Balaustrina in cima (colonnine).
+  for (let x = -L / 2 + 0.3; x <= L / 2 - 0.3; x += 0.55) {
+    box(0.14, 0.6, 0.14, marmo, x, HB + HP + 1.46, -0.35);
+  }
+  box(L + 0.2, 0.14, 0.2, marmo, 0, HB + HP + 1.82, -0.35);
+  // Fondo in ombra fra i pilastri (l'interno della cappella).
+  box(L - 1.4, HP, 0.15, buio, 0, HB + HP / 2, -D + 0.55);
+
+  g.position.copy(rif.bordo).addScaledVector(rif.fuori, daBordo);
+  g.rotation.y = rif.yaw + Math.PI;    // fronte verso la pista
+  // NB: l'asse x locale dopo la rotazione corre lungo la pista da sé.
+  return g;
+}
+
+// ── L'ENTRONE ────────────────────────────────────────────────────────────────
+// Il portale del Cortile del Podestà: arco a sesto acuto in pietra, strombo,
+// passaggio in ombra profonda e le due ante di legno aperte contro il muro.
+// Da qui i cavalli ENTRANO in piazza: il varco nelle gradinate è suo.
+export function costruisciEntrone(ctx, opz = {}) {
+  const rif = riferimentoA(ctx, opz.cum);
+  const g = new THREE.Group();
+  g.name = "Entrone";
+  const pietra = opaco({ map: opz.texturaTravertino || texturaTravertino(), color: 0xcbb896, roughness: 0.8 });
+  const cotto = opaco({ color: 0x8a5a3e, roughness: 0.92 });
+  const buio = opaco({ color: 0x160f08, roughness: 1 });
+  const legnoAnta = opaco({ map: opz.texturaLegno || texturaLegno({ tinta: "#4a3020" }), color: 0xffffff, roughness: 0.85 });
+
+  const W = opz.larghezza ?? 3.8;      // luce del portale
+  const H = opz.altezza ?? 5.4;        // all'imposta dell'arco
+  const daFacciata = opz.daFacciata ?? 3.2;   // il portale sta NEL filo della facciata
+
+  const box = (w, h, d, mat, x, y, z, ry = 0) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.rotation.y = ry;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  // Coordinate locali: fronte del portale a z = 0 (filo facciata), pista verso +z.
+  // Passaggio in ombra (tunnel), più profondo della facciata.
+  box(W, H + 1.2, 0.2, buio, 0, (H + 1.2) / 2, -1.6);
+  box(W + 1.2, 0.4, 3.2, buio, 0, H + 1.0, -1.4);              // intradosso
+  [-1, 1].forEach((sgn) => box(0.4, H + 1.2, 3.2, cotto, sgn * (W / 2 + 0.2), (H + 1.2) / 2, -1.4));
+  // Cornice di pietra del portale: stipiti + arco a punta stilizzato.
+  [-1, 1].forEach((sgn) => box(0.55, H, 0.5, pietra, sgn * (W / 2 + 0.45), H / 2, 0));
+  [-1, 1].forEach((sgn) => {
+    const b = box(0.5, 2.9, 0.5, pietra, sgn * W * 0.27, H + 1.05, 0);
+    b.rotation.z = sgn * 0.55;
+  });
+  box(1.0, 0.8, 0.6, pietra, 0, H + 2.15, 0);                  // chiave con stemma
+  box(0.72, 0.5, 0.12, cotto, 0, H + 2.15, 0.32);              // balzana (mezzo scudo)
+  // Ante di legno aperte, accostate al muro dentro il passaggio.
+  [-1, 1].forEach((sgn) => box(0.14, H - 0.3, W * 0.52, legnoAnta, sgn * (W / 2 - 0.1), (H - 0.3) / 2, -0.95));
+
+  g.position.copy(rif.bordo).addScaledVector(rif.fuori, daFacciata);
+  g.rotation.y = rif.yaw + Math.PI;    // fronte verso la pista
+  return g;
 }

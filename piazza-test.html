@@ -70,11 +70,12 @@ const hZero = () => 0;
 scene.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, matTufo, 0.035));
 scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, matTufoDark, 0.025, hPista, hZero));
 // Lastricato del centro piazza (qui basta un disco: serve solo come sfondo).
-const conchiglia = new THREE.Mesh(new THREE.CircleGeometry(TRACK_HALF_WIDTH * 0 + 62, 48), new THREE.MeshStandardMaterial({ color: 0x9a5f42, roughness: 0.95 }));
-conchiglia.rotation.x = -Math.PI / 2;
-conchiglia.position.set(0, 0.02, -36);
-conchiglia.receiveShadow = true;
-scene.add(conchiglia);
+// Lastricato del centro: NASTRO che segue la sagoma della pista (un disco piatto
+// copriva la pista abbassata al rettilineo del Palazzo e "seppelliva" tutto).
+const matConchiglia = new THREE.MeshStandardMaterial({ color: 0x9a5f42, roughness: 0.95, side: THREE.DoubleSide });
+scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 1.5, TRACK_HALF_WIDTH + 34, matConchiglia, 0.02, hZero, hZero));
+// Striscia esterna alla quota della pista (i palchi scendono con lei, come in gioco).
+scene.add(createRibbonMesh((s) => bordoEsterno(s) - 8.5, (s) => bordoEsterno(s) - 0.2, new THREE.MeshStandardMaterial({ color: 0xcdac63, roughness: 0.97, side: THREE.DoubleSide }), 0.015, hPista, hPista));
 
 // ── LA SCENOGRAFIA (piazza-lab.js) ───────────────────────────────────────────
 const ctx = {
@@ -84,10 +85,41 @@ const ctx = {
   largoInterno: () => TRACK_HALF_WIDTH,
   quota: (s) => trackHeightAt(s.cum)
 };
+// Centro del rettilineo del Palazzo: stessa ricerca di getStraightCenterP del
+// gioco (la run più lunga con curvatura ~nulla).
+function centroRettilineo() {
+  const L = track.length, step = 1.0, thr = 0.06;
+  let bestStart = 0, bestLen = 0, runStart = null;
+  for (let d = 0; d <= L * 2; d += step) {
+    const flat = (sampleAt(d).curve || 0) < thr;
+    if (flat && runStart === null) runStart = d;
+    if ((!flat || d >= L * 2) && runStart !== null) {
+      const len = d - runStart;
+      if (len > bestLen && len <= L) { bestLen = len; bestStart = runStart; }
+      runStart = null;
+    }
+  }
+  return ((bestStart + bestLen / 2) % L + L) % L;
+}
 const piazza = costruisciPiazza(ctx, {
   pubblico: qp.get("pubblico") !== "0",
-  risoluzione: parseInt(qp.get("res") || "1024", 10)
+  risoluzione: parseInt(qp.get("res") || "1024", 10),
+  mossa: { da: track.length - 28, a: track.length },
+  palazzo: { cum: centroRettilineo() }
 });
+// Facciata segnaposto del Palazzo nel banco: un muro a bordo+3.2 largo 34, per
+// vedere cappella/entrone/palchi delle comparse contro qualcosa.
+if (qp.get("palazzo") !== "0") {
+  const cumP = centroRettilineo();
+  const sP = sampleAt(cumP);
+  const nP = sP.normal.clone().multiplyScalar(sP.normal.dot(campoOutward(sP.point)) >= 0 ? 1 : -1);
+  const muroP = new THREE.Mesh(new THREE.BoxGeometry(34, 15, 2.6), new THREE.MeshStandardMaterial({ color: 0x9a6647, roughness: 0.9 }));
+  muroP.position.copy(sP.point).addScaledVector(nP, TRACK_HALF_WIDTH + 3.2 + 1.3);
+  muroP.position.y = 7.5;
+  muroP.rotation.y = Math.atan2(nP.x, nP.z);
+  muroP.receiveShadow = true;
+  scene.add(muroP);
+}
 scene.add(piazza.gruppo);
 
 // ── I PALAZZI (palazzi-lab.js) ───────────────────────────────────────────────
@@ -149,6 +181,9 @@ function inquadra() {
     const dietro = sampleAt(cum - 11);
     occhio = dietro.point.clone().addScaledVector(campoOutward(dietro.point), 6.5).setY(trackHeightAt(cum - 11) + 3.0);
     mira = punto(7.5, 1.3);
+  } else if (VISTA === "cappella") {  // il fronte del Palazzo dalla pista
+    occhio = punto(BORDO - 14 / ZOOM, 2.0 + h * 0 + 3.2);
+    mira = punto(BORDO + 2.8, 2.6);
   } else if (VISTA === "palco") {     // in piedi sull'ultima fila dei palchi
     occhio = punto(BORDO + PALCHI_FONDO * 0.8, 6.6);
     mira = punto(-4, 0.2);
@@ -173,7 +208,7 @@ render();
 setTimeout(render, 120);
 
 document.getElementById("hud").innerHTML =
-  `vista=<b>${VISTA}</b> (pista · interno · gara · palco · alto) · p=${P} · zoom=${ZOOM}<br>` +
+  `vista=<b>${VISTA}</b> (pista · interno · gara · palco · alto · cappella) · p=${P} · zoom=${ZOOM}<br>` +
   `palancata h=${MIS.estAltezza} · palchi ${MIS.palcoFile} file, fondo ${PALCHI_FONDO.toFixed(2)} oltre il bordo pista · posti ${piazza.posti.length}` +
   (palazzi ? `<br>palazzi: ${palazzi.blocchi} blocchi, filo facciate a ${palazzi.filo.toFixed(2)} dall'asse pista` : "");
 window.__piazza = piazza; window.__render = render; window.__scene = scene;

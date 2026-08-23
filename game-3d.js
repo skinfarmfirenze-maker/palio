@@ -1173,7 +1173,16 @@ function buildScene() {
   // (Il workaround sulla staccionata interna è stato rimosso: la chat grafica ha
   // corretto stazioni() perché segua la NORMALE della pista invece della radiale.
   // Verificato: distanza dal bordo 12.10 costante in rettilineo, San Martino e Casato.)
-  try { scene.add(costruisciPiazza(scenaCtx).gruppo); } catch (e) { console.error("scenografia piazza:", e); }
+  //  · `mossa`  = niente palancata nella zona dei canapi/tondino/rincorsa (−28..0),
+  //               altrimenti si tapperebbe il varco d'ingresso della rincorsa;
+  //  · `palazzo` = zona del Palazzo Pubblico: palchi delle comparse, Cappella di
+  //               Piazza ai piedi della Torre ed Entrone, col varco nelle gradinate.
+  try {
+    scene.add(costruisciPiazza(scenaCtx, {
+      mossa: { da: track.length - 28, a: track.length },
+      palazzo: { cum: getStraightCenterP() },
+    }).gruppo);
+  } catch (e) { console.error("scenografia piazza:", e); }
 
   for (let i = 0; i < track.samples.length; i += 11) {
     const s = track.samples[i];
@@ -4987,15 +4996,9 @@ function ensurePalazzoObjects() {
   const guglia = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.5, 2.4, 8), brickDark);
   guglia.position.set(tx, 40.6, 0); grp.add(guglia);
 
-  // CAPPELLA DI PIAZZA ai piedi della Torre: loggia in marmo bianco rivolta al Campo.
-  const cappBase = box(6.4, 4.4, 2.4, marmo, tx, 2.2, 1.5);
-  cappBase.castShadow = true; cappBase.receiveShadow = true;
-  box(7.0, 0.55, 2.8, marmo, tx, 4.6, 1.5);                    // trabeazione
-  box(7.2, 0.6, 3.0, pietra, tx, 5.05, 1.5);                   // cornice sopra
-  for (let i = -1; i <= 1; i += 1) {
-    box(0.5, 3.4, 0.5, marmo, tx + i * 2.4, 2.4, 2.9);         // pilastri della loggia
-    box(1.4, 3.0, 0.4, darkWin, tx + i * 1.6 - 0.0, 2.0, 2.75);// archi in ombra
-  }
+  // (La vecchia mini-loggia ai piedi della Torre è stata RIMOSSA: la Cappella di
+  // Piazza vera, in marmo, la costruisce ora il modulo di scenografia — vedi
+  // l'opzione `palazzo` passata a costruisciPiazza.)
 
   // Colloca la facciata sul lato esterno della pista, DAVANTI alla cinta di
   // case (il Palazzo dà direttamente sulla piazza), rivolta verso il Campo.
