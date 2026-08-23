@@ -8,6 +8,8 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi } from "./cavallo-lab.js";   // fronte viva + manti reali dei barberi
+import { costruisciPiazza, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
 const FANTINO_SCALE = 1.8;      // ingrandimento del fantino (×2 poi −10% → 1.8)
@@ -1155,7 +1157,20 @@ function buildScene() {
 
   buildTufoScuffs();
   buildCampoLandmarks();
-  buildTrackBarriers();
+  // ── SCENOGRAFIA (moduli della chat grafica) ────────────────────────────────
+  // Steccati, palchi e pubblico. I moduli non conoscono la pista: gliela passiamo
+  // noi con queste quattro funzioni, così restano additivi e nessuna costante del
+  // tracciato viene toccata.
+  const scenaCtx = {
+    campioni: track.samples,
+    fuori: campoOutward,
+    largoEsterno: (s) => TRACK_HALF_WIDTH + mossaFlareAt(s.cum) - trackNarrowAt(s.cum),
+    largoInterno: () => TRACK_HALF_WIDTH,
+    quota: (s) => trackHeightAt(s.cum),
+  };
+  // try/catch: se un modulo della scenografia fallisce, il GIOCO deve partire
+  // comunque (meglio una piazza spoglia che una schermata nera).
+  try { scene.add(costruisciPiazza(scenaCtx).gruppo); } catch (e) { console.error("scenografia piazza:", e); }
 
   for (let i = 0; i < track.samples.length; i += 11) {
     const s = track.samples[i];
@@ -1176,7 +1191,12 @@ function buildScene() {
   buildVerrocchino();
   buildCurveChevrons();
   buildCurvePadding();
-  buildBuildings();
+  // Cortina di palazzi: pochi fronti lunghi, anello chiuso. Il varco 0.565–0.635
+  // lascia il posto al Palazzo Pubblico + Torre del Mangia, che restano nostri
+  // (ensurePalazzoObjects, già costruito qui sopra).
+  try {
+    scene.add(costruisciPalazzi(scenaCtx, { fondoPalchi: PALCHI_FONDO, varchi: [{ da: 0.565, a: 0.635 }] }).gruppo);
+  } catch (e) { console.error("scenografia palazzi:", e); }
   ensurePalazzoObjects();   // il Palazzo Pubblico accurato (unico), sempre visibile
   buildCrowdAndFlags();
   buildSpeedLines();
@@ -1607,8 +1627,10 @@ function buildCurvePadding() {
     } else if (s.curve < 0.34) continue;                 // ripiego se le curve non sono ancora note
     if (NARROW_READY && s.cum > CAS_IN - 20) continue;   // Casato: niente materassi
     const next = track.samples[(i + step) % track.samples.length];
-    const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.42;
-    const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.42;
+    // +0.05 (era +0.42): la palancata della scenografia sta a +0.35, i materassi
+    // devono restare DAVANTI a lei, come in Piazza.
+    const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.05;
+    const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.05;
     const a = s.point.clone().addScaledVector(campoOutward(s.point), offQui);
     const b = next.point.clone().addScaledVector(campoOutward(next.point), offNext);
     const mid = a.clone().lerp(b, 0.5);
@@ -1634,8 +1656,9 @@ function buildCurvePadding() {
       const s = track.samples[i];
       if (s.cum < CAS_IN + 6 || s.cum > CAS_OUT + NARROW_RELEASE + 6) continue;
       const next = track.samples[(i + step) % track.samples.length];
-      const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.5;
-      const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.5;
+      // +0.15 (era +0.5): davanti alla palancata (+0.35), non dietro.
+      const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.15;
+      const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.15;
       const a = s.point.clone().addScaledVector(campoOutward(s.point), offQui);
       const b = next.point.clone().addScaledVector(campoOutward(next.point), offNext);
       const mid = a.clone().lerp(b, 0.5);

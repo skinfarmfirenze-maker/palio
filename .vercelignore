@@ -45,3 +45,6 @@ pista-tracciato.svg
 # Le bandiere ora viaggiano dentro bandiere-data.js (1 richiesta invece di 17):
 # i file singoli non servono più online.
 bandiere/
+piazza-test.html
+pista-ring.js
+estrai-pista.mjs
