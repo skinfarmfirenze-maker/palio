@@ -1177,8 +1177,10 @@ function buildScene() {
 
   for (let i = 0; i < track.samples.length; i += 11) {
     const s = track.samples[i];
-    [-1, 1].forEach((side) => {
-      // Lato esterno (side −1): i paracarri seguono la svasatura dei canapi.
+    // SOLO lato ESTERNO (side −1). Sul lato interno i paracarri sono stati tolti:
+    // nella piazza vera non ci sono blocchi di pietra davanti al colonnino, e così
+    // la staccionata interna può stare accostata al bordo com'è nella realtà.
+    [-1].forEach((side) => {
       const larg = TRACK_HALF_WIDTH + 0.2 + (side < 0 ? mossaFlareAt(s.cum) : 0);
       const p = s.point.clone().addScaledVector(s.normal, side * larg);
       const block = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.32, 0.32), materials.stone);
