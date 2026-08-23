@@ -37,7 +37,10 @@ export const MIS = {
   estCorrimano: 0.15,      // sezione del corrimano di legno in cima
 
   // Colonnino + staccionata (interno)
-  intSporgenza: 0.30,
+  // 0.60, non 0.30: i paracarri di pietra del gioco stanno a bordo+0.2 con
+  // profondità 0.32 (arrivano a +0.36) e a 0.30 trapassavano la staccionata.
+  // A 0.60 restano davanti, come stavano davanti alla vecchia ringhiera (+0.72).
+  intSporgenza: 0.60,
   intAltezza: 1.02,
   intPasso: 4.2,           // interasse dei pilastrini di travertino
   intPilastro: 0.34,       // lato del pilastrino
@@ -91,11 +94,20 @@ function stazioni(ctx, { lato, extra = 0, passo = 3 }) {
   const segno = lato === "interno" ? -1 : 1;
   for (let i = 0; i <= camp.length; i += passo) {
     const s = camp[i % camp.length];
-    const f = ctx.fuori(s.point).clone();
+    // Lo spostamento laterale segue la NORMALE del campione, non la radiale:
+    // la pista non è un cerchio e nei corner (San Martino, Casato) le due
+    // direzioni divergono — con la radiale la barriera si staccava dal bordo
+    // o entrava in pista ("si deforma nelle curve", segnalato dalla chat gioco).
+    // È la stessa convenzione delle barriere storiche di game-3d.js:
+    // p = point + normal * (outwardSign * offset).
+    const radiale = ctx.fuori(s.point);
+    const lat = (s.normal && s.normal.isVector3)
+      ? s.normal.clone().multiplyScalar(s.normal.dot(radiale) >= 0 ? 1 : -1)
+      : radiale.clone();
     const largo = lato === "interno" ? ctx.largoInterno(s) : ctx.largoEsterno(s);
-    const p = s.point.clone().addScaledVector(f, segno * (largo + extra));
+    const p = s.point.clone().addScaledVector(lat, segno * (largo + extra));
     p.y = ctx.quota(s);
-    out.push({ p, fuori: f.multiplyScalar(segno), cum: s.cum });
+    out.push({ p, fuori: lat.multiplyScalar(segno), cum: s.cum });
   }
   // Tangente e distanza percorsa lungo QUESTA linea (non lungo l'asse pista):
   // così i pannelli hanno tutti la stessa larghezza anche dove la pista si svasa.

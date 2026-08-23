@@ -1170,17 +1170,10 @@ function buildScene() {
   };
   // try/catch: se un modulo della scenografia fallisce, il GIOCO deve partire
   // comunque (meglio una piazza spoglia che una schermata nera).
-  try {
-    const piazza = costruisciPiazza(scenaCtx);
-    // La staccionata INTERNA del modulo si deforma nelle curve (San Martino e
-    // Casato): la togliamo e la rifacciamo con la geometria storica del gioco,
-    // che segue la normale della pista. Il resto — palancata, palchi, pubblico —
-    // resta quello nuovo.
-    const dentro = piazza.gruppo.children.find((c) => c.name === "SteccatoInterno");
-    if (dentro) piazza.gruppo.remove(dentro);
-    scene.add(piazza.gruppo);
-    buildTrackBarriers({ soloInterno: true });
-  } catch (e) { console.error("scenografia piazza:", e); }
+  // (Il workaround sulla staccionata interna è stato rimosso: la chat grafica ha
+  // corretto stazioni() perché segua la NORMALE della pista invece della radiale.
+  // Verificato: distanza dal bordo 12.10 costante in rettilineo, San Martino e Casato.)
+  try { scene.add(costruisciPiazza(scenaCtx).gruppo); } catch (e) { console.error("scenografia piazza:", e); }
 
   for (let i = 0; i < track.samples.length; i += 11) {
     const s = track.samples[i];
