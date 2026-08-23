@@ -827,6 +827,56 @@ export function costruisciPiazza(ctx, opz = {}) {
   // riferimento locale: +x del Palazzo (che nel gioco corre verso la Torre a
   // x=-20.2) può andare nei cum crescenti o decrescenti a seconda del giro.
   let varchiPalchi8 = opz.palchi?.varchi ? [...opz.palchi.varchi] : [];
+  // Alla mossa i palchi CONTINUANO e si allargano con la svasatura (foto di
+  // Simone): si interrompono solo nel tratto del verrocchio + palco dei
+  // capitani, a sinistra del canape.
+  let mossaCum = null;
+  let ctxEst = ctx;   // il ctx usato da palchi e palancata (alla mossa cambia)
+  if (opz.mossa) {
+    const giroTot = ctx.campioni[ctx.campioni.length - 1].cum + (ctx.campioni[1].cum - ctx.campioni[0].cum);
+    const vert = opz.mossa.verrocchioCum ?? (giroTot - 1.0);
+    mossaCum = {
+      verrocchio: vert,
+      capitani: opz.mossa.capitaniCum ?? (vert - 0.4),
+      varcoPalchi: { da: vert - 4.6, a: vert + 2.0 }
+    };
+    varchiPalchi8.push(mossaCum.varcoPalchi);
+
+    // ── ALLARGAMENTO "A PUNTA" (foto aerea di Simone) ─────────────────────
+    // Alla mossa il fronte dei palchi NON segue la curva: continua DRITTO come
+    // una corda, e le due rette si incontrano ad ANGOLO dove sta il palco dei
+    // capitani. In pratica: profilo di larghezza TRIANGOLARE (cresce lineare
+    // fino alla punta al vertice, poi rientra), mai sotto la svasatura vera
+    // del gioco (il fronte non deve mai stare sul tufo).
+    const A = vert - (opz.mossa.primaDelCanape ?? 19);
+    const C = vert + (opz.mossa.dopoIlCanape ?? 9);
+    const largoDi = (cum) => {
+      const c = ((cum % giroTot) + giroTot) % giroTot;
+      let migliore = ctx.campioni[0], dist = Infinity;
+      ctx.campioni.forEach((s0) => { const dd = Math.abs(s0.cum - c); if (dd < dist) { dist = dd; migliore = s0; } });
+      return ctx.largoEsterno(migliore);
+    };
+    const largoA = largoDi(A);
+    const largoC = largoDi(C);
+    const largoPunta = largoDi(vert) + (opz.mossa.punta ?? 1.6);
+    const svolgi = (cum) => {
+      // distanza con segno dal vertice, gestendo il giro che si chiude
+      let d = cum - ((vert % giroTot) + giroTot) % giroTot;
+      if (d > giroTot / 2) d -= giroTot;
+      if (d < -giroTot / 2) d += giroTot;
+      return d;
+    };
+    const dA = svolgi(A), dC = svolgi(C);
+    ctxEst = {
+      ...ctx,
+      largoEsterno: (s0) => {
+        const d = svolgi(s0.cum);
+        if (d > dA && d < 0) return Math.max(ctx.largoEsterno(s0), largoA + (largoPunta - largoA) * (1 - d / dA));
+        if (d >= 0 && d < dC) return Math.max(ctx.largoEsterno(s0), largoPunta + (largoC - largoPunta) * (d / dC));
+        return ctx.largoEsterno(s0);
+      }
+    };
+  }
   let zonaComparse = null;
   let pal = null;
   if (opz.palazzo && opz.palazzo.cum != null) {
@@ -849,7 +899,7 @@ export function costruisciPiazza(ctx, opz = {}) {
     varchiPalchi8.push(pal.tutto);
   }
 
-  const palchi = costruisciPalchi(ctx, { ...opz.palchi, varchi: varchiPalchi8, ...cond });
+  const palchi = costruisciPalchi(ctxEst, { ...opz.palchi, varchi: varchiPalchi8, ...cond });
   g.add(palchi.gruppo);
   let posti = palchi.posti;
 
@@ -873,9 +923,17 @@ export function costruisciPiazza(ctx, opz = {}) {
   }
 
   const varchiPalancata = [];
-  if (opz.mossa) varchiPalancata.push(opz.mossa);
+  // La palancata resta CONTINUA anche alla mossa (le foto la mostrano): il
+  // varco esplicito torna disponibile con opz.mossa.varcoPalancata = true.
+  if (opz.mossa && opz.mossa.varcoPalancata) varchiPalancata.push(opz.mossa);
   if (opz.esterno?.varchi) varchiPalancata.push(...opz.esterno.varchi);
-  g.add(costruisciSteccatoEsterno(ctx, { ...opz.esterno, varchi: varchiPalancata.length ? varchiPalancata : null, ...cond }));
+  g.add(costruisciSteccatoEsterno(ctxEst, { ...opz.esterno, varchi: varchiPalancata.length ? varchiPalancata : null, ...cond }));
+  if (mossaCum) {
+    // Il pulpito del mossiere al canape e, dietro di lui nel varco delle
+    // gradinate, il palco dei capitani.
+    g.add(costruisciVerrocchio(ctxEst, { cum: mossaCum.verrocchio, ...cond }));
+    g.add(costruisciPalcoCapitani(ctxEst, { cum: mossaCum.capitani, daBordo: 1.3, ...cond }));
+  }
   g.add(costruisciSteccatoInterno(ctx, { ...opz.interno, ...cond }));
   if (opz.pubblico !== false) g.add(costruisciPubblicoPalchi(posti, opz.pubblicoOpz || {}));
   return { gruppo: g, posti, palchi, zone: pal };
@@ -1102,5 +1160,204 @@ export function costruisciPalizzata(ctx, opz = {}) {
   imP.count = n;
   imP.instanceMatrix.needsUpdate = true;
   g.add(imP);
+  return g;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7. LA MOSSA — verrocchio del mossiere e palco dei capitani
+// ──────────────────────────────────────────────────────────────────────────────
+// Alla mossa non ci sono palchi di spettatori (foto di Simone): sul lato
+// esterno c'è il VERROCCHIO, il palco recintato e rialzato da cui il mossiere
+// — unico giudice della corsa — governa il canape e lo abbassa; DIETRO sta il
+// palco dei CAPITANI delle contrade. Il canape vero (corda e meccanica) resta
+// del gioco: qui c'è solo la falegnameria.
+// ══════════════════════════════════════════════════════════════════════════════
+export function costruisciVerrocchio(ctx, opz = {}) {
+  const rif = riferimentoA(ctx, opz.cum);
+  const g = new THREE.Group();
+  g.name = "VerrocchioMossiere";
+  // Il legno del verrocchio è SCURO, quasi ebano, lucidato da un secolo di mani.
+  const scuro = opaco({ color: 0x2e1d12, roughness: 0.55 });
+  const scuroOp = opaco({ color: 0x241610, roughness: 0.7 });
+
+  const R = opz.raggio ?? 1.05;        // raggio del pulpito (ottagonale)
+  const HB = opz.base ?? 0.95;         // base piena
+  const HP = 0.85;                     // fascia dei balaustri
+  const cil = (rTop, rBot, h, mat, y) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 8), mat);
+    m.position.y = y;
+    m.rotation.y = Math.PI / 8;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  cil(R, R * 1.04, HB, scuroOp, HB / 2);                       // base piena
+  cil(R * 1.1, R * 1.1, 0.09, scuro, HB + 0.045);              // toro di imposta
+  cil(R * 1.09, R * 1.09, 0.1, scuro, HB + HP + 0.1);          // cimasa
+  cil(R * 1.14, R * 1.14, 0.05, scuroOp, HB + HP + 0.18);      // corrimano
+  // Balaustri torniti tutt'attorno (instanziati: 24 colonnine a doppia pancia).
+  const nB = 24;
+  const imB = istanze(new THREE.CylinderGeometry(0.045, 0.06, HP, 6), scuro, nB);
+  const d = new THREE.Object3D();
+  for (let i = 0; i < nB; i += 1) {
+    const a = (i / nB) * TAU;
+    d.position.set(Math.cos(a) * R * 0.97, HB + HP / 2 + 0.05, Math.sin(a) * R * 0.97);
+    d.rotation.set(0, 0, 0);
+    d.updateMatrix();
+    imB.setMatrixAt(i, d.matrix);
+  }
+  imB.count = nB;
+  imB.instanceMatrix.needsUpdate = true;
+  g.add(imB);
+  // Pedana interna e il MOSSIERE in piedi, dal busto in su sopra la cimasa.
+  const mossiere = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.66, 3, 8), opaco({ color: 0x494540, roughness: 0.9 }));
+  mossiere.position.set(0.12, HB + 0.75, -0.1);
+  mossiere.castShadow = true;
+  g.add(mossiere);
+  const testa = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), opaco({ color: 0xd8ac86, roughness: 0.9 }));
+  testa.position.set(0.12, HB + 1.38, -0.1);
+  g.add(testa);
+
+  // Sta AL BORDO del tufo, davanti alla palancata: il mossiere deve dominare
+  // il canape. Alla mossa la pista è svasata: il pulpito occupa l'angolo dove
+  // i cavalli non passano.
+  g.position.copy(rif.bordo).addScaledVector(rif.fuori, opz.daBordo ?? -0.35);
+  g.rotation.y = rif.yaw + Math.PI;
+  return g;
+}
+
+export function costruisciPalcoCapitani(ctx, opz = {}) {
+  const rif = riferimentoA(ctx, opz.cum);
+  const g = new THREE.Group();
+  g.name = "PalcoCapitani";
+  const legno = opaco({ map: opz.texturaLegno || texturaLegno(), color: 0xffffff, roughness: 0.85 });
+  const legnoS = opaco({ color: 0x4a3020, roughness: 0.92 });
+  const L = opz.larghezza ?? 6.0;
+  const D = opz.profondita ?? 2.4;
+  const HQ = opz.quota ?? 1.1;
+  const box = (w, h, d, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  box(L, 0.14, D, legno, 0, HQ, -D / 2);                          // piano
+  box(L, HQ * 0.92, 0.08, legno, 0, HQ * 0.46, -0.04);            // zoccolo cieco sul fronte
+  for (let x = -L / 2 + 0.3; x <= L / 2 - 0.3; x += L / 2 - 0.3) {
+    box(0.18, HQ, 0.18, legnoS, x, HQ / 2, -D + 0.15);
+  }
+  box(L, 0.8, 0.05, legno, 0, HQ + 0.46, 0.02);                   // parapetto
+  box(L, 0.08, 0.08, legnoS, 0, HQ + 0.9, 0.02);
+  // Due panche coi CAPITANI seduti: giacche scure, qualche fazzoletto di contrada.
+  const tinte = [0x23262e, 0x2e2a26, 0x1f2c38, 0x33262a];
+  const nCap = opz.capitani ?? 10;
+  for (let i = 0; i < nCap; i += 1) {
+    const fila = i % 2;
+    const x = -L / 2 + 0.7 + (Math.floor(i / 2) / Math.ceil(nCap / 2 - 1)) * (L - 1.4);
+    const cap = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.4, 3, 8), opaco({ color: tinte[i % tinte.length], roughness: 0.92 }));
+    cap.position.set(x, HQ + 0.42, -0.65 - fila * 0.85);
+    cap.castShadow = true;
+    g.add(cap);
+    const t = new THREE.Mesh(new THREE.SphereGeometry(0.1, 7, 5), opaco({ color: 0xd0a37e, roughness: 0.9 }));
+    t.position.set(x, HQ + 0.88, -0.65 - fila * 0.85);
+    g.add(t);
+  }
+  g.position.copy(rif.bordo).addScaledVector(rif.fuori, opz.daBordo ?? 3.1);
+  g.rotation.y = rif.yaw + Math.PI;
+  return g;
+}
+
+// ── I FOTOGRAFI di San Martino ───────────────────────────────────────────────
+// All'esterno di San Martino, dove sbuca la via, non ci sono palchi: ci sono i
+// fotografi accovacciati dietro la palancata, con la macchina al viso.
+export function costruisciFotografi(ctx, opz = {}) {
+  const g = new THREE.Group();
+  g.name = "FotografiSanMartino";
+  const staz = stazioni(ctx, { lato: "esterno", extra: opz.daBordo ?? 0.75, passo: 2 });
+  const punti = passiRegolari(staz, opz.passo ?? 1.1, { soloTra: [{ da: opz.da, a: opz.a }] });
+  const tinte = [0x2c2c30, 0x3a3a40, 0x44403a, 0x26303a, 0x555049];
+  punti.forEach((q, i) => {
+    const acc = ((Math.sin((i + 1) * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    if (acc < 0.25) return;                       // qualche buco
+    const kneel = acc < 0.62;                     // molti accovacciati, alcuni in piedi
+    const h = kneel ? 0.44 : 0.66;
+    const corpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.155, h * 0.8, 3, 7), opaco({ color: tinte[i % tinte.length], roughness: 0.92 }));
+    corpo.position.copy(q.p).addScaledVector(q.fuori, 0.1);
+    corpo.position.y = q.p.y + h;
+    corpo.rotation.y = q.yaw + Math.PI;           // guardano la pista
+    corpo.castShadow = true;
+    g.add(corpo);
+    const testa = new THREE.Mesh(new THREE.SphereGeometry(0.095, 7, 5), opaco({ color: 0xd4a87f, roughness: 0.9 }));
+    testa.position.copy(corpo.position).setY(corpo.position.y + h * 0.62 + 0.12);
+    g.add(testa);
+    // La macchina fotografica al viso, verso la pista.
+    const cam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.12), opaco({ color: 0x111114, roughness: 0.6 }));
+    cam.position.copy(testa.position).addScaledVector(q.fuori, -0.16).setY(testa.position.y - 0.02);
+    cam.rotation.y = q.yaw;
+    g.add(cam);
+  });
+  return g;
+}
+
+// ── Folla IN PIEDI dietro lo steccato (zona mossa) ───────────────────────────
+// Alla mossa il pubblico sta a terra, in piedi dietro lo steccato semplice —
+// niente gradinate. Le file seguono le stazioni del bordo (svasatura compresa):
+// NESSUNO può finire sul tufo.
+export function costruisciFollaInPiedi(ctx, opz = {}) {
+  const g = new THREE.Group();
+  g.name = "FollaInPiedi";
+  const staz = stazioni(ctx, { lato: "esterno", extra: 0, passo: 2 });
+  const zone = { soloTra: [{ da: opz.da, a: opz.a }], varchi: opz.varchi || null };
+  const file = opz.file ?? 3;
+  const tinte = [0xe8e4da, 0xcfc8ba, 0x9aa2ab, 0xb8a890, 0x736d63, 0x55606b,
+    0x6b4a3a, 0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0x84725c];
+  const punti = passiRegolari(staz, 0.55, zone);
+  const im = new THREE.InstancedMesh(
+    new THREE.CapsuleGeometry(0.14, 0.55, 2, 6),
+    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    punti.length * file
+  );
+  const teste = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.1, 7, 5),
+    new THREE.MeshStandardMaterial({ roughness: 0.9 }),
+    punti.length * file
+  );
+  const pelle = [0xd8ac86, 0xc59468, 0xe3c19c, 0xa87b52];
+  const d = new THREE.Object3D();
+  const col = new THREE.Color();
+  const rnd = (i, k) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
+  let n = 0;
+  punti.forEach((q, i) => {
+    for (let r = 0; r < file; r += 1) {
+      if (rnd(i, r) < 0.22) continue;
+      const off = 1.0 + r * 0.55 + (rnd(i, r + 3) - 0.5) * 0.3;
+      const alt = 0.86 + rnd(i, r + 5) * 0.3;
+      d.position.copy(q.p).addScaledVector(q.fuori, off);
+      d.position.y = q.p.y + 0.55 * alt;
+      d.rotation.set(0, q.yaw + Math.PI + (rnd(i, r + 7) - 0.5) * 0.5, 0);
+      d.scale.set(1, alt, 1);
+      d.updateMatrix();
+      im.setMatrixAt(n, d.matrix);
+      col.setHex(tinte[Math.floor(rnd(i, r + 9) * tinte.length) % tinte.length]);
+      col.multiplyScalar(0.78 + rnd(i, r + 11) * 0.4);
+      im.setColorAt(n, col);
+      d.position.y = q.p.y + 0.55 * alt + 0.5 * alt + 0.06;
+      d.scale.set(1, 1, 1);
+      d.updateMatrix();
+      teste.setMatrixAt(n, d.matrix);
+      col.setHex(pelle[Math.floor(rnd(i, r + 13) * pelle.length) % pelle.length]);
+      teste.setColorAt(n, col);
+      n += 1;
+    }
+  });
+  im.count = n; teste.count = n;
+  im.instanceMatrix.needsUpdate = true;
+  teste.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
+  if (teste.instanceColor) teste.instanceColor.needsUpdate = true;
+  g.add(im, teste);
   return g;
 }

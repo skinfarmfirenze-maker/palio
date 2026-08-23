@@ -1180,10 +1180,17 @@ function buildScene() {
   //               Piazza ai piedi della Torre ed Entrone, col varco nelle gradinate.
   try {
     scene.add(costruisciPiazza(scenaCtx, {
-      mossa: { da: track.length - 28, a: track.length },
-      // Alla mossa il pubblico non ha gradinate: al loro posto il VERROCCHIO del
-      // Mossiere e, dietro, il palco dei Capitani (buildPalcoMossiere).
-      palchi: { varchi: [{ da: track.length + VARCO_MOSSA.da, a: track.length + VARCO_MOSSA.a }] },
+      // LA MOSSA: il verrocchio del mossiere (pulpito ottagonale) al canape
+      // anteriore, dietro di lui il palco dei Capitani nel varco delle gradinate,
+      // e il fronte che si allarga 'a punta' invece di seguire la curva. Il varco
+      // nella palancata non serve più (nelle foto è continua anche alla mossa):
+      // torna con varcoPalancata:true + da/a se in gara dovesse servire.
+      // punta 0.45 e non 1.6: le facciate stanno su un anello di raggio fisso,
+      // calcolato sul punto in cui la pista e' PIU' LARGA — che e' proprio la
+      // mossa — piu' 5.31 di palchi e 0.45 di stacco. Al vertice il margine e'
+      // quindi 0.50 secchi: con 1.6 il fronte dei palchi entrava 1.10 DENTRO i
+      // palazzi. Per una punta piu' marcata va allargato il filo della cortina.
+      mossa: { verrocchioCum: positiveMod(MOSSA_FRONT_LIMIT, track.length), punta: 0.45 },
       palazzo: { cum: getStraightCenterP() },
     }).gruppo);
   } catch (e) { console.error("scenografia piazza:", e); }
@@ -1207,7 +1214,6 @@ function buildScene() {
 
   buildStartLine();
   buildVerrocchino();
-  buildPalcoMossiere();
   buildCurveChevrons();
   buildCurvePadding();
   // Cortina di palazzi: pochi fronti lunghi, anello chiuso. Il varco 0.565–0.635
@@ -1540,159 +1546,6 @@ function buildVerrocchino() {
   group.visible = false;
   scene.add(group);
   state.canapiPosteriore = group;
-}
-
-// ── IL VERROCCHIO DEL MOSSIERE E IL PALCO DEI CAPITANI ──────────────────────
-// ATTENZIONE a non confonderli: il VERROCCHINO (buildVerrocchino, qui sopra) e'
-// il PALETTO piantato sul canapo posteriore, attorno a cui si lancia la
-// rincorsa. Il VERROCCHIO e' un'altra cosa: il PALCO del Mossiere.
-// Alla mossa, sul lato esterno, NON ci sono le gradinate del pubblico: c'è il
-// VERROCCHIO — il palco recintato da cui il Mossiere, unico giudice della corsa,
-// governa il canape e lo abbassa — e DIETRO di lui il PALCO DEI CAPITANI delle
-// Contrade. Il buco nelle gradinate lo apre la chiamata a costruisciPiazza
-// (palchi.varchi, stesso intervallo di VARCO_MOSSA); qui si costruisce cosa c'è
-// dentro. Tutto in coordinate della pista: `p` = progress (negativo = prima del
-// traguardo, quindi i canapi stanno fra -7 e -1), `prof` = quanto fuori dal
-// bordo del tufo.
-const VARCO_MOSSA = { da: -10.6, a: -0.1 };
-function buildPalcoMossiere() {
-  const L = track.length;
-  const group = new THREE.Group();
-  group.name = "verrocchioMossiere";
-  const legno = new THREE.MeshStandardMaterial({ color: 0x9c7649, roughness: 0.88 });
-  const legnoScuro = new THREE.MeshStandardMaterial({ color: 0x5f3c28, roughness: 0.9 });
-  const panno = new THREE.MeshStandardMaterial({ color: 0x7c2a26, roughness: 0.94 });
-  const pelle = new THREE.MeshStandardMaterial({ color: 0xc79a76, roughness: 0.9 });
-
-  // Punto sul BORDO ESTERNO del tufo, spostato di `prof` verso fuori. Stessa
-  // direzione (campoOutward) e stesso bordo che usano i palchi della scenografia,
-  // così il palco si allinea alle gradinate che gli stanno accanto.
-  const puntoFuori = (p, prof) => {
-    const s = sampleAt(p);
-    const cum = positiveMod(p, L);
-    const off = TRACK_HALF_WIDTH + mossaFlareAt(cum) - trackNarrowAt(cum) + prof;
-    const q = s.point.clone().addScaledVector(campoOutward(s.point), off);
-    q.y = trackHeightAt(cum);
-    return q;
-  };
-  // Legname LONGITUDINALE: corre lungo la pista da `da` a `a`, spesso `spess`
-  // in profondità. (Come i materassi: Z del box = direzione di marcia.)
-  const pezzo = (mat, da, a, prof, spess, alt, y) => {
-    const A = puntoFuori(da, prof), B = puntoFuori(a, prof);
-    const mid = A.clone().lerp(B, 0.5);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(spess, alt, A.distanceTo(B)), mat);
-    m.position.set(mid.x, mid.y + y, mid.z);
-    m.rotation.y = Math.atan2(B.x - A.x, B.z - A.z);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    group.add(m);
-    return m;
-  };
-  // Legname TRASVERSALE: attraversa in profondità da `prof1` a `prof2`.
-  const traverso = (mat, p, prof1, prof2, spess, alt, y) => {
-    const A = puntoFuori(p, prof1), B = puntoFuori(p, prof2);
-    const mid = A.clone().lerp(B, 0.5);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(A.distanceTo(B), alt, spess), mat);
-    m.position.set(mid.x, mid.y + y, mid.z);
-    m.rotation.y = sampleAt(p).yaw;
-    m.castShadow = true;
-    m.receiveShadow = true;
-    group.add(m);
-    return m;
-  };
-
-  // ── IL VERROCCHIO ─────────────────────────────────────────────────────────
-  // Stretto e alto, piantato esattamente sul canape anteriore (-1): da lì il
-  // Mossiere ha i cavalli sotto di sé e vede la fila per intero.
-  const V = { da: -3.4, a: -0.2, pi: 0.4, pf: 2.6 };
-  const Vc = (V.pi + V.pf) / 2, Vs = V.pf - V.pi;
-  pezzo(legnoScuro, V.da, V.a, Vc, Vs, 1.44, 0.72);            // cassa chiusa sotto
-  pezzo(panno, V.da, V.a, V.pi + 0.03, 0.1, 1.3, 0.68);        // drappo sul fronte pista
-  pezzo(legno, V.da, V.a, Vc, Vs + 0.16, 0.14, 1.51);          // piano di calpestio
-  // Il RECINTO: zoccolo pieno di tavole e corrimano, tutt'intorno.
-  [[V.pi + 0.07, 1], [V.pf - 0.07, 1]].forEach(([pr]) => {
-    pezzo(legno, V.da, V.a, pr, 0.12, 0.52, 1.84);
-    pezzo(legnoScuro, V.da, V.a, pr, 0.16, 0.08, 2.14);
-  });
-  [V.da + 0.08, V.a - 0.08].forEach((p) => {
-    traverso(legno, p, V.pi, V.pf, 0.12, 0.52, 1.84);
-    traverso(legnoScuro, p, V.pi, V.pf, 0.16, 0.08, 2.14);
-  });
-  // Quattro pilastrini e il tettuccio piano: è il pezzo che lo rende
-  // riconoscibile da lontano, in mezzo al buco delle gradinate.
-  [[V.da + 0.12, V.pi + 0.12], [V.da + 0.12, V.pf - 0.12],
-   [V.a - 0.12, V.pi + 0.12], [V.a - 0.12, V.pf - 0.12]].forEach(([p, pr]) => {
-    traverso(legnoScuro, p, pr - 0.06, pr + 0.06, 0.12, 1.15, 2.16);
-  });
-  pezzo(legnoScuro, V.da - 0.15, V.a + 0.15, Vc, Vs + 0.5, 0.11, 2.79);
-  // Scaletta di servizio sul retro, verso i palazzi.
-  [0.42, 0.86, 1.3].forEach((h, i) => traverso(legno, V.a - 0.75, V.pf, V.pf + 0.55 - i * 0.16, 0.62, 0.1, h));
-  // IL MOSSIERE, in piedi contro il parapetto che guarda i canapi.
-  const mq = puntoFuori(-1.5, V.pi + 0.45);
-  const mBusto = new THREE.Mesh(new THREE.CapsuleGeometry(0.11, 0.5, 3, 7), legnoScuro.clone());
-  mBusto.material.color.setHex(0x241f1a);
-  mBusto.position.set(mq.x, mq.y + 1.94, mq.z);
-  mBusto.castShadow = true;
-  group.add(mBusto);
-  const mTesta = new THREE.Mesh(new THREE.SphereGeometry(0.1, 9, 7), pelle);
-  mTesta.position.set(mq.x, mq.y + 2.31, mq.z);
-  group.add(mTesta);
-
-  // ── IL PALCO DEI CAPITANI ─────────────────────────────────────────────────
-  // Dietro il verrocchio, più largo e a gradoni, fino al fondo delle gradinate
-  // (PALCHI_FONDO 5.31): oltre comincia la cortina dei palazzi.
-  const C = { da: -10.4, a: -0.35, pi: 2.85 };
-  const gradoni = [[2.85, 3.55, 1.9], [3.55, 4.25, 2.36], [4.25, 5.25, 2.82]];
-  gradoni.forEach(([p1, p2, h]) => pezzo(legno, C.da, C.a, (p1 + p2) / 2, p2 - p1, h, h / 2));
-  pezzo(panno, C.da, C.a, C.pi - 0.06, 0.12, 1.86, 0.93);        // drappo che chiude il fronte
-  pezzo(legnoScuro, C.da, C.a, C.pi - 0.09, 0.2, 0.12, 1.9);     // corrimano del fronte
-  [C.da, C.a].forEach((p) => traverso(legnoScuro, p, C.pi, 5.25, 0.14, 1.0, 2.4));   // spalle laterali
-
-  // I Capitani seduti: tre file di abiti scuri, con qua e là il colore della
-  // propria Contrada. Due sole draw call, come il pubblico dei palchi.
-  const posti = [];
-  gradoni.forEach(([p1, p2, h], f) => {
-    const prof = p1 + (p2 - p1) * 0.55;
-    const n = 13;
-    for (let i = 0; i < n; i++) {
-      const p = C.da + 0.55 + (C.a - C.da - 1.1) * (i / (n - 1));
-      posti.push({ q: puntoFuori(p, prof), y: h, yaw: sampleAt(p).yaw, k: f * 31 + i });
-    }
-  });
-  const tinteCap = [0x241f1a, 0x2b2b33, 0x1e2a35, 0x33271f, 0x3a2f2a, 0x7a1f2b, 0x1f4a6b];
-  const busti = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.1, 0.3, 3, 6),
-    new THREE.MeshStandardMaterial({ roughness: 0.93 }), posti.length);
-  const teste = new THREE.InstancedMesh(new THREE.SphereGeometry(0.092, 7, 5),
-    new THREE.MeshStandardMaterial({ roughness: 0.9 }), posti.length);
-  const dm = new THREE.Object3D();
-  const col = new THREE.Color();
-  const rnd = (i, k) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
-  posti.forEach((s, i) => {
-    dm.position.set(s.q.x, s.q.y + s.y + 0.26, s.q.z);
-    dm.rotation.set(0, s.yaw + (rnd(s.k, 2) - 0.5) * 0.5, 0);
-    dm.scale.set(1, 0.92 + rnd(s.k, 1) * 0.2, 1);
-    dm.updateMatrix();
-    busti.setMatrixAt(i, dm.matrix);
-    col.setHex(tinteCap[Math.floor(rnd(s.k, 3) * tinteCap.length) % tinteCap.length]);
-    col.multiplyScalar(0.85 + rnd(s.k, 4) * 0.35);
-    busti.setColorAt(i, col);
-    dm.position.y = s.q.y + s.y + 0.53;
-    dm.scale.set(1, 1, 1);
-    dm.updateMatrix();
-    teste.setMatrixAt(i, dm.matrix);
-    col.setHex(0xc79a76);
-    col.multiplyScalar(0.82 + rnd(s.k, 6) * 0.3);
-    teste.setColorAt(i, col);
-  });
-  [busti, teste].forEach((im) => {
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    im.castShadow = false;
-    im.receiveShadow = false;
-    group.add(im);
-  });
-
-  scene.add(group);
 }
 
 // Crea il cartello/striscione "MOSSA" sopra la linea di partenza (alto a sinistra
