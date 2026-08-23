@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<title>Piazza del Campo — banco di prova (steccati e palchi)</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#c8924a;font-family:system-ui}
+  #hud{position:fixed;top:6px;left:8px;color:#fff;background:#0009;padding:6px 10px;border-radius:6px;font-size:12px;z-index:9;line-height:1.5}
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<div id="hud">…</div>
+<script type="module">
+import * as THREE from "three";
+import {
+  track, precomputeTrack, computeTrackNarrows, sampleAt, campoOutward,
+  mossaFlareAt, trackNarrowAt, trackHeightAt, createRibbonMesh, makeTufoTexture,
+  TRACK_HALF_WIDTH
+} from "./pista-ring.js";
+import { costruisciPiazza, PALCHI_FONDO, MIS } from "./piazza-lab.js";
+import { costruisciPalazzi } from "./palazzi-lab.js";
+
+const qp = new URLSearchParams(location.search);
+const num = (k, d) => parseFloat(qp.get(k) ?? d);
+const VISTA = qp.get("vista") || "pista";
+const P = num("p", 0.30);           // dove guardiamo, in frazione del giro
+const ZOOM = num("zoom", 1);
+
+// ── Pista vera del gioco (pista-ring.js = estratto verbatim di game-3d.js) ────
+precomputeTrack();
+computeTrackNarrows();
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbcd2e0);
+
+// Luci uguali a quelle di buildScene(): il colore dei pannelli va giudicato
+// sotto la stessa luce del gioco, non sotto una luce da studio.
+scene.add(new THREE.HemisphereLight(0xcdd6dc, 0x90764e, 1.7));
+const sun = new THREE.DirectionalLight(0xfff3e0, 2.8);
+sun.position.set(-28, 42, -22);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -75; sun.shadow.camera.right = 75;
+sun.shadow.camera.top = 75; sun.shadow.camera.bottom = -75;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.06;
+scene.add(sun);
+
+// Terreno + pista (stessi materiali/offset di game-3d.js).
+const matTufo = new THREE.MeshStandardMaterial({ color: 0xf2d486, roughness: 0.98, emissive: 0x5a4818, emissiveIntensity: 0.55 });
+const tex = makeTufoTexture();
+if (tex) { tex.repeat.set(44, 3.5); matTufo.map = tex; }
+const matTufoDark = new THREE.MeshStandardMaterial({ color: 0xcdac63, roughness: 0.97, emissive: 0x40340f, emissiveIntensity: 0.45 });
+const suolo = new THREE.Mesh(new THREE.PlaneGeometry(260, 240), new THREE.MeshStandardMaterial({ color: 0x8a5f42, roughness: 1 }));
+suolo.rotation.x = -Math.PI / 2; suolo.position.y = -1.45; suolo.receiveShadow = true;
+scene.add(suolo);
+const bordoEsterno = (s) => -TRACK_HALF_WIDTH - mossaFlareAt(s.cum) + trackNarrowAt(s.cum);
+const hPista = (s) => trackHeightAt(s.cum);
+const hZero = () => 0;
+scene.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, matTufo, 0.035));
+scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, matTufoDark, 0.025, hPista, hZero));
+// Lastricato del centro piazza (qui basta un disco: serve solo come sfondo).
+const conchiglia = new THREE.Mesh(new THREE.CircleGeometry(TRACK_HALF_WIDTH * 0 + 62, 48), new THREE.MeshStandardMaterial({ color: 0x9a5f42, roughness: 0.95 }));
+conchiglia.rotation.x = -Math.PI / 2;
+conchiglia.position.set(0, 0.02, -36);
+conchiglia.receiveShadow = true;
+scene.add(conchiglia);
+
+// ── LA SCENOGRAFIA (piazza-lab.js) ───────────────────────────────────────────
+const ctx = {
+  campioni: track.samples,
+  fuori: (p) => campoOutward(p),
+  largoEsterno: (s) => TRACK_HALF_WIDTH + mossaFlareAt(s.cum) - trackNarrowAt(s.cum),
+  largoInterno: () => TRACK_HALF_WIDTH,
+  quota: (s) => trackHeightAt(s.cum)
+};
+const piazza = costruisciPiazza(ctx, {
+  pubblico: qp.get("pubblico") !== "0",
+  risoluzione: parseInt(qp.get("res") || "1024", 10)
+});
+scene.add(piazza.gruppo);
+
+// ── I PALAZZI (palazzi-lab.js) ───────────────────────────────────────────────
+let palazzi = null;
+if (qp.get("facciate") !== "0") {
+  palazzi = costruisciPalazzi(ctx, {
+    fondoPalchi: PALCHI_FONDO,
+    risoluzione: parseInt(qp.get("resFacciate") || "512", 10),
+    // Il Palazzo Pubblico è un pezzo a sé: la cortina gli lascia il varco.
+    varchi: [{ da: 0.565, a: 0.635 }]
+  });
+  scene.add(palazzi.gruppo);
+}
+
+// ── Cavallo del gioco come RIGHELLO (stessa catena di montaggio) ─────────────
+if (qp.get("cavallo") !== "0") {
+  const { GLTFLoader } = await import("https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js");
+  new GLTFLoader().load("assets/horses/horse_master.glb", (gltf) => {
+    const inner = gltf.scene;
+    inner.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); if (o.material.color) o.material.color.set(0x6b4a2a); o.material.roughness = 1; o.castShadow = true; } });
+    const size = new THREE.Box3().setFromObject(inner).getSize(new THREE.Vector3());
+    const pivot = new THREE.Group();
+    pivot.scale.setScalar((1.7 / Math.max(1, size.y)) * 2);
+    pivot.add(inner);
+    pivot.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(pivot);
+    const c = bb.getCenter(new THREE.Vector3());
+    pivot.position.set(-c.x, -bb.min.y - 0.75, -c.z);
+    const grp = new THREE.Group();
+    grp.add(pivot);
+    const s = sampleAt(track.length * P);
+    const cum = track.length * P;
+    grp.position.copy(s.point.clone().addScaledVector(campoOutward(s.point), num("lane", 7.5)));
+    grp.position.y = trackHeightAt(cum);
+    grp.rotation.y = s.yaw;
+    scene.add(grp);
+    render();
+  });
+}
+
+// ── Viste ────────────────────────────────────────────────────────────────────
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.1, 900);
+function inquadra() {
+  const cum = track.length * P;
+  const s = sampleAt(cum);
+  const f = campoOutward(s.point);
+  const h = trackHeightAt(cum);
+  // punto(off, y): off positivo = verso i palchi, negativo = verso il Campo.
+  const punto = (off, y) => s.point.clone().addScaledVector(f, off).setY(h + y);
+  const BORDO = TRACK_HALF_WIDTH;
+  let occhio, mira;
+  if (VISTA === "pista") {            // in piedi sulla pista, verso i palchi
+    occhio = punto(BORDO - 17 / ZOOM, 1.9);
+    mira = punto(BORDO + 2.4, 2.4);
+  } else if (VISTA === "interno") {   // verso il colonnino e il Campo
+    occhio = punto(-BORDO + 13 / ZOOM, 1.9);
+    mira = punto(-BORDO - 2.5, 0.7);
+  } else if (VISTA === "gara") {      // dietro un cavallo, come in corsa
+    const dietro = sampleAt(cum - 11);
+    occhio = dietro.point.clone().addScaledVector(campoOutward(dietro.point), 6.5).setY(trackHeightAt(cum - 11) + 3.0);
+    mira = punto(7.5, 1.3);
+  } else if (VISTA === "palco") {     // in piedi sull'ultima fila dei palchi
+    occhio = punto(BORDO + PALCHI_FONDO * 0.8, 6.6);
+    mira = punto(-4, 0.2);
+  } else {                            // "alto": la curva vista dall'interno
+    occhio = punto(-BORDO - 26 / ZOOM, 17 / ZOOM);
+    mira = punto(BORDO + 2, 2.0);
+  }
+  camera.position.copy(occhio);
+  camera.lookAt(mira);
+}
+inquadra();
+
+function render() { renderer.render(scene, camera); }
+addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  inquadra(); render();
+});
+render();
+// Secondo giro dopo il caricamento delle texture (canvas asincroni del browser).
+setTimeout(render, 120);
+
+document.getElementById("hud").innerHTML =
+  `vista=<b>${VISTA}</b> (pista · interno · gara · palco · alto) · p=${P} · zoom=${ZOOM}<br>` +
+  `palancata h=${MIS.estAltezza} · palchi ${MIS.palcoFile} file, fondo ${PALCHI_FONDO.toFixed(2)} oltre il bordo pista · posti ${piazza.posti.length}` +
+  (palazzi ? `<br>palazzi: ${palazzi.blocchi} blocchi, filo facciate a ${palazzi.filo.toFixed(2)} dall'asse pista` : "");
+window.__piazza = piazza; window.__render = render; window.__scene = scene;
+</script>
+</body>
+</html>

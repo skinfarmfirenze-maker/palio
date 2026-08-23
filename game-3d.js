@@ -1170,7 +1170,17 @@ function buildScene() {
   };
   // try/catch: se un modulo della scenografia fallisce, il GIOCO deve partire
   // comunque (meglio una piazza spoglia che una schermata nera).
-  try { scene.add(costruisciPiazza(scenaCtx).gruppo); } catch (e) { console.error("scenografia piazza:", e); }
+  try {
+    const piazza = costruisciPiazza(scenaCtx);
+    // La staccionata INTERNA del modulo si deforma nelle curve (San Martino e
+    // Casato): la togliamo e la rifacciamo con la geometria storica del gioco,
+    // che segue la normale della pista. Il resto — palancata, palchi, pubblico —
+    // resta quello nuovo.
+    const dentro = piazza.gruppo.children.find((c) => c.name === "SteccatoInterno");
+    if (dentro) piazza.gruppo.remove(dentro);
+    scene.add(piazza.gruppo);
+    buildTrackBarriers({ soloInterno: true });
+  } catch (e) { console.error("scenografia piazza:", e); }
 
   for (let i = 0; i < track.samples.length; i += 11) {
     const s = track.samples[i];
@@ -1291,13 +1301,18 @@ function buildCampoShellRibs() {
   scene.add(fanArc);
 }
 
-function buildTrackBarriers() {
+function buildTrackBarriers(opts = {}) {
+  // soloInterno: costruisce SOLTANTO la staccionata del lato interno. Serve perché
+  // quella del modulo di scenografia si deforma nelle curve (vedi handoff §19):
+  // qui si usa la NORMALE della pista, che segue il bordo anche a San Martino e
+  // al Casato. Tutto il resto (palancata, palchi, pubblico) resta del modulo.
+  const soloInterno = !!opts.soloInterno;
   // ── PUBBLICO SUI PALCHI ESTERNI ────────────────────────────────────────────
   // Spettatori sulle tre file di panche che corrono lungo tutto l'anello, in
   // un'unica InstancedMesh (1 draw call). Stessi offset delle panche: svasatura
   // dei canapi, strettoie degli imbuti e quota altimetrica. Statici: le
   // reazioni animate restano al pubblico del centro piazza.
-  (() => {
+  if (!soloInterno) (() => {
     const cols = [0x7a6a58, 0x55606b, 0x8a8478, 0x6b4a3a, 0x9a9488, 0x40484f,
       0xb8a890, 0xcfc8ba, 0x736d63, 0x84725c, 0xa89a86, 0xc44135, 0x2e689b, 0x287b55, 0xe0b84a];
     const MAX_PALCHI = 4200;
@@ -1348,6 +1363,7 @@ function buildTrackBarriers() {
     const outwardSign = s.normal.dot(campoOutward(s.point)) >= 0 ? 1 : -1;
     [-1, 1].forEach((side) => {
       const outerSide = side > 0;
+      if (soloInterno && outerSide) return;   // l'esterno lo fa il modulo
       // La barriera ESTERNA deve seguire la svasatura dei canapi. Senza questo,
       // restava alla larghezza vecchia e tagliava in mezzo al corridoio della
       // rincorsa, che ora corre più fuori: la rincorsa si trovava la ringhiera
