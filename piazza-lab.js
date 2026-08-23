@@ -728,7 +728,7 @@ export function costruisciPalchi(ctx, opz = {}) {
         .addScaledVector(q.fuori, dd)
         .addScaledVector(tang, (r % 2 ? 0.22 : 0) + (gig(2) - 0.5) * 0.18);
       p.y = q.p.y + base + r * alzata;
-      posti.push({ p, yaw: Math.atan2(-q.fuori.x, -q.fuori.z), fila: r });
+      posti.push({ p, yaw: Math.atan2(-q.fuori.x, -q.fuori.z), fila: r, cum: q.cum });
     });
   }
   return { gruppo: g, posti, fondo: d + 0.25, altezza: y };
@@ -737,9 +737,16 @@ export function costruisciPalchi(ctx, opz = {}) {
 // ── PUBBLICO SUI PALCHI ──────────────────────────────────────────────────────
 // Seduti: busto + testa, due sole draw call. Colori spenti come la folla vera
 // del gioco (stessa tavolozza di game-3d.js), con qualche macchia di contrada.
+// Tinte "di contrada" per i settori delle comparse (blocchi monocolore).
+const TINTE_COMPARSE = [0xe0b84a, 0xc44135, 0x2e689b, 0x287b55, 0xf0ece2,
+  0xd97e2f, 0x7a1f2b, 0x5aa7c7, 0x8e5aa0, 0x27303a];
+
 export function costruisciPubblicoPalchi(posti, opz = {}) {
   const g = new THREE.Group();
   g.name = "PubblicoPalchi";
+  // opz.blocchi = { larghezza }: colore per SETTORE lungo l'anello (cum), non
+  // per persona — le comparse di una contrada siedono insieme, vestite uguali.
+  const blocchi = opz.blocchi || null;
   const tinte = opz.colori || [
     0xe8e4da, 0xf0ece2, 0xdcd6c8, 0xcfc8ba, 0xe6ddcb,     // bianchi/creme: la maggioranza
     0x9aa2ab, 0xb8a890, 0xa89a86, 0x8a8478, 0x736d63,     // grigi e beige
@@ -767,8 +774,16 @@ export function costruisciPubblicoPalchi(posti, opz = {}) {
     dummy.scale.set(1, alt, 1);
     dummy.updateMatrix();
     busto.setMatrixAt(i, dummy.matrix);
-    col.setHex(tinte[Math.floor(rnd(i, 3) * tinte.length) % tinte.length]);
-    col.multiplyScalar(0.72 + rnd(i, 4) * 0.5);
+    if (blocchi && s.cum != null) {
+      const settore = Math.floor(s.cum / (blocchi.larghezza || 4.6));
+      const tintaSettore = TINTE_COMPARSE[((settore * 7) % TINTE_COMPARSE.length + TINTE_COMPARSE.length) % TINTE_COMPARSE.length];
+      // Un po' di gente "normale" in mezzo (accompagnatori): il blocco respira.
+      col.setHex(rnd(i, 9) < 0.14 ? tinte[Math.floor(rnd(i, 3) * tinte.length) % tinte.length] : tintaSettore);
+      col.multiplyScalar(0.82 + rnd(i, 4) * 0.3);
+    } else {
+      col.setHex(tinte[Math.floor(rnd(i, 3) * tinte.length) % tinte.length]);
+      col.multiplyScalar(0.72 + rnd(i, 4) * 0.5);
+    }
     busto.setColorAt(i, col);
 
     dummy.position.y = s.p.y + 0.26 * alt + 0.25 * alt + 0.055;
@@ -848,7 +863,11 @@ export function costruisciPiazza(ctx, opz = {}) {
     });
     comparse.gruppo.name = "PalchiComparse";
     g.add(comparse.gruppo);
-    posti = posti.concat(comparse.posti);
+    if (opz.pubblico !== false) {
+      const pubComparse = costruisciPubblicoPalchi(comparse.posti, { blocchi: { larghezza: 4.6 } });
+      pubComparse.name = "PubblicoComparse";
+      g.add(pubComparse);
+    }
     g.add(costruisciCappella(ctx, { cum: pal.cappella.centro, ...opz.cappella, ...cond }));
     g.add(costruisciEntrone(ctx, { cum: pal.entrone.centro, ...opz.entrone, ...cond }));
   }
@@ -966,8 +985,11 @@ export function costruisciEntrone(ctx, opz = {}) {
   const buio = opaco({ color: 0x160f08, roughness: 1 });
   const legnoAnta = opaco({ map: opz.texturaLegno || texturaLegno({ tinta: "#4a3020" }), color: 0xffffff, roughness: 0.85 });
 
-  const W = opz.larghezza ?? 3.8;      // luce del portale
-  const H = opz.altezza ?? 5.4;        // all'imposta dell'arco
+  // Basso e largo, NON monumentale: le trifore dell'estrazione stanno a y 7.0
+  // (vano da 5.65 in su) e un portale alto le copriva — la prima contrada
+  // estratta spariva dietro l'arco (segnalato da Simone). Cima totale ≈ 5.3.
+  const W = opz.larghezza ?? 3.4;      // luce del portale
+  const H = opz.altezza ?? 3.3;        // all'imposta dell'arco
   const daFacciata = opz.daFacciata ?? 3.2;   // il portale sta NEL filo della facciata
 
   const box = (w, h, d, mat, x, y, z, ry = 0) => {
@@ -987,11 +1009,11 @@ export function costruisciEntrone(ctx, opz = {}) {
   // Cornice di pietra del portale: stipiti + arco a punta stilizzato.
   [-1, 1].forEach((sgn) => box(0.55, H, 0.5, pietra, sgn * (W / 2 + 0.45), H / 2, 0));
   [-1, 1].forEach((sgn) => {
-    const b = box(0.5, 2.9, 0.5, pietra, sgn * W * 0.27, H + 1.05, 0);
+    const b = box(0.42, 1.9, 0.5, pietra, sgn * W * 0.27, H + 0.7, 0);
     b.rotation.z = sgn * 0.55;
   });
-  box(1.0, 0.8, 0.6, pietra, 0, H + 2.15, 0);                  // chiave con stemma
-  box(0.72, 0.5, 0.12, cotto, 0, H + 2.15, 0.32);              // balzana (mezzo scudo)
+  box(0.85, 0.65, 0.6, pietra, 0, H + 1.45, 0);                // chiave con stemma
+  box(0.6, 0.42, 0.12, cotto, 0, H + 1.45, 0.32);              // balzana (mezzo scudo)
   // Ante di legno aperte, accostate al muro dentro il passaggio.
   [-1, 1].forEach((sgn) => box(0.14, H - 0.3, W * 0.52, legnoAnta, sgn * (W / 2 - 0.1), (H - 0.3) / 2, -0.95));
 
