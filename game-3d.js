@@ -8,7 +8,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi } from "./cavallo-lab.js";   // fronte viva + manti reali dei barberi
-import { costruisciPiazza, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -1168,6 +1168,7 @@ function buildScene() {
     largoInterno: () => TRACK_HALF_WIDTH,
     quota: (s) => trackHeightAt(s.cum),
   };
+  scenaCtxRef = scenaCtx;   // lo usa anche buildCurvePadding per la palizzata del Casato
   // try/catch: se un modulo della scenografia fallisce, il GIOCO deve partire
   // comunque (meglio una piazza spoglia che una schermata nera).
   // (Il workaround sulla staccionata interna è stato rimosso: la chat grafica ha
@@ -1209,7 +1210,11 @@ function buildScene() {
   // lascia il posto al Palazzo Pubblico + Torre del Mangia, che restano nostri
   // (ensurePalazzoObjects, già costruito qui sopra).
   try {
-    scene.add(costruisciPalazzi(scenaCtx, { fondoPalchi: PALCHI_FONDO, varchi: [{ da: 0.565, a: 0.635 }] }).gruppo);
+    scene.add(costruisciPalazzi(scenaCtx, {
+      fondoPalchi: PALCHI_FONDO,
+      varchi: [{ da: 0.565, a: 0.635 }],
+      strade: [{ giro: 0.813, larghezza: 6 }],   // bocca di via del Casato
+    }).gruppo);
   } catch (e) { console.error("scenografia palazzi:", e); }
   ensurePalazzoObjects();   // il Palazzo Pubblico accurato (unico), sempre visibile
   buildCrowdAndFlags();
@@ -1629,6 +1634,7 @@ function buildCampoLandmarks() {
   scene.add(fountain);
 }
 
+let scenaCtxRef = null;   // contesto geometrico condiviso coi moduli di scenografia
 function buildCurvePadding() {
   // Materassi di protezione SOLO a San Martino (al Casato, nella realtà, NON ci
   // sono): file di cuscini bianco-crema con fascia rossa addossati al muro
@@ -1668,28 +1674,12 @@ function buildCurvePadding() {
     band.rotation.y = yaw;
     scene.add(band);
   }
-  // Al CASATO, in uscita sul lato ESTERNO: solo una PALIZZATA di legno marrone
-  // un po' più alta del normale steccato (come nella realtà).
-  if (NARROW_READY) {
-    const palMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.92, metalness: 0 });
-    for (let i = 0; i < track.samples.length; i += step) {
-      const s = track.samples[i];
-      if (s.cum < CAS_IN + 6 || s.cum > CAS_OUT + NARROW_RELEASE + 6) continue;
-      const next = track.samples[(i + step) % track.samples.length];
-      // +0.15 (era +0.5): davanti alla palancata (+0.35), non dietro.
-      const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.15;
-      const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.15;
-      const a = s.point.clone().addScaledVector(campoOutward(s.point), offQui);
-      const b = next.point.clone().addScaledVector(campoOutward(next.point), offNext);
-      const mid = a.clone().lerp(b, 0.5);
-      const len = a.distanceTo(b) * 1.06;
-      const yaw = Math.atan2(b.x - a.x, b.z - a.z);
-      const pal = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.5, len), palMat);
-      pal.position.set(mid.x, 0.75 + trackHeightAt(s.cum), mid.z);
-      pal.rotation.y = yaw;
-      pal.castShadow = true;
-      scene.add(pal);
-    }
+  // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
+  // colmo e puntoni sul retro) al posto del vecchio loop di assi.
+  if (NARROW_READY && scenaCtxRef) {
+    try {
+      scene.add(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 6, a: CAS_OUT + NARROW_RELEASE + 6 }));
+    } catch (e) { console.error("palizzata Casato:", e); }
   }
 }
 
@@ -1833,12 +1823,11 @@ function buildCrowdAndFlags() {
     scene.add(body);
   };
 
-  for (let i = 0; i < 420; i += 1) {
-    const s = sampleAt((i / 420) * track.length + Math.random() * 2.5);
-    const outward = campoOutward(s.point);
-    const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + 1.8 + Math.random() * 3.2);
-    addPerson(new THREE.Vector3(p.x, 0.42 + Math.random() * 0.2, p.z), 0.82 + Math.random() * 0.34);
-  }
+  // (RIMOSSI i 420 figuranti in piedi lungo l'anello: stavano a un offset FISSO dal
+  // bordo e non tenevano conto della svasatura dei canapi, quindi alla mossa finivano
+  // SULLA PISTA di tufo, e altrove dentro le gradinate. Il pubblico esterno adesso è
+  // quello seduto sui palchi della scenografia — circa settemila. Resta la folla del
+  // centro piazza, che ha il suo test di contenimento.)
 
   // Pubblico nel cuore della piazza. Posizionamento con test di contenimento
   // reale: un punto candidato è accettato solo se sta dal lato INTERNO della
@@ -1928,7 +1917,7 @@ function buildCrowdAndFlags() {
     const contrada = CONTRADE[i % CONTRADE.length];
     const s = sampleAt((i / 54) * track.length);
     const outward = campoOutward(s.point);
-    const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + 5.2);
+    const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + PALCHI_FONDO + 0.6);
     const poleTop = p.clone().setY(3.2);
     const poleBottom = p.clone().setY(0.1);
     scene.add(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));

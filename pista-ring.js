@@ -435,5 +435,6 @@ export {
   clamp, lerp, positiveMod, angleDiff,
   track, precomputeTrack, sampleAt, campoOutward,
   mossaFlareAt, computeTrackNarrows, trackNarrowAt, trackHeightAt, outerLimitAt,
-  createRibbonMesh, makeCylinderBetween, makeTufoTexture
+  createRibbonMesh, makeCylinderBetween, makeTufoTexture,
+  createShapeMesh, campoShapeGeometry
 };

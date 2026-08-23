@@ -999,3 +999,86 @@ export function costruisciEntrone(ctx, opz = {}) {
   g.rotation.y = rif.yaw + Math.PI;    // fronte verso la pista
   return g;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 6. LA PALIZZATA DEL CASATO
+// ──────────────────────────────────────────────────────────────────────────────
+// All'uscita del Casato non ci sono materassi: c'è una palizzata di TAVOLONI
+// VERTICALI di legno scuro, più alta dello steccato normale, coi puntoni di
+// rinforzo sul retro. Sostituisce la striscia di box marroni di game-3d.js.
+// ══════════════════════════════════════════════════════════════════════════════
+export function texturaPalizzata({ risoluzione = 512 } = {}) {
+  const W = risoluzione, H = Math.round(risoluzione * 0.6);
+  const { c, x } = tela(W, H);
+  x.fillStyle = "#5a3b26";
+  x.fillRect(0, 0, W, H);
+  const asse = W / 14;                       // tavoloni verticali affiancati
+  for (let px = 0; px < W; px += asse) {
+    x.fillStyle = `rgba(${Math.random() < 0.5 ? "30,18,10" : "150,110,74"},${0.08 + Math.random() * 0.1})`;
+    x.fillRect(px + 1, 0, asse - 2, H);
+    x.fillStyle = "rgba(20,12,6,0.55)";
+    x.fillRect(px, 0, 1.6, H);               // fuga fra i tavoloni
+    for (let k = 0; k < 30; k += 1) {        // venatura verticale
+      x.strokeStyle = `rgba(${Math.random() < 0.5 ? "36,22,12" : "168,128,88"},${0.05 + Math.random() * 0.1})`;
+      x.lineWidth = 0.7 + Math.random();
+      x.beginPath();
+      const vx = px + 2 + Math.random() * (asse - 4);
+      x.moveTo(vx, 0);
+      x.bezierCurveTo(vx + (Math.random() - 0.5) * 3, H * 0.33, vx + (Math.random() - 0.5) * 3, H * 0.66, vx + (Math.random() - 0.5) * 2, H);
+      x.stroke();
+    }
+    x.fillStyle = "rgba(24,16,10,0.6)";      // chiodi in alto e in basso
+    [H * 0.08, H * 0.9].forEach((ny) => { x.beginPath(); x.arc(px + asse * 0.5, ny, 1.8, 0, TAU); x.fill(); });
+  }
+  // Polvere di tufo alla base.
+  const g = x.createLinearGradient(0, H, 0, H * 0.7);
+  g.addColorStop(0, "rgba(206,172,110,0.45)");
+  g.addColorStop(1, "rgba(206,172,110,0)");
+  x.fillStyle = g;
+  x.fillRect(0, H * 0.7, W, H * 0.3);
+  rumore(x, W, H, 0.06);
+  return finisci(c, 1, 1);
+}
+
+export function costruisciPalizzata(ctx, opz = {}) {
+  const H = opz.altezza ?? 1.7;
+  const SP = 0.09;
+  const g = new THREE.Group();
+  g.name = "PalizzataCasato";
+  const tavole = opaco({ map: opz.texturaPalizzata || texturaPalizzata(), roughness: 0.9 });
+  const legnoS = opaco({ color: 0x4a3020, roughness: 0.92 });
+
+  const staz = stazioni(ctx, { lato: "esterno", extra: opz.sporgenza ?? 0.15, passo: opz.passo || 2 });
+  const zone = { soloTra: [{ da: opz.da, a: opz.a }], varchi: opz.varchi || null };
+
+  g.add(spazza(staz, [
+    { d: 0, y: 0, v: 0, mat: 0 },
+    { d: 0, y: H, v: 1, mat: 0 },
+    { d: SP, y: H, v: 1, mat: 0 },
+    { d: SP, y: 0, v: 0 }
+  ], [tavole], { uScala: 3.4, ...zone }));
+  // Corrente di colmo e puntoni diagonali sul retro, come i cantieri veri.
+  g.add(spazza(staz, [
+    { d: -0.03, y: H, v: 0, mat: 0 },
+    { d: -0.03, y: H + 0.1, v: 0.3, mat: 0 },
+    { d: SP + 0.03, y: H + 0.1, v: 0.7, mat: 0 },
+    { d: SP + 0.03, y: H, v: 1 }
+  ], [legnoS], { uScala: 2, ...zone }));
+  const punti = passiRegolari(staz, 2.1, zone);
+  const imP = istanze(new THREE.BoxGeometry(0.1, H * 1.28, 0.1), legnoS, punti.length);
+  const d = new THREE.Object3D();
+  let n = 0;
+  punti.forEach((q) => {
+    d.position.copy(q.p).addScaledVector(q.fuori, 0.42);
+    d.position.y = q.p.y + H * 0.52;
+    d.rotation.set(0, q.yaw, 0);
+    d.rotation.x = -0.5;                      // puntone appoggiato alla palizzata
+    d.updateMatrix();
+    imP.setMatrixAt(n, d.matrix);
+    n += 1;
+  });
+  imP.count = n;
+  imP.instanceMatrix.needsUpdate = true;
+  g.add(imP);
+  return g;
+}

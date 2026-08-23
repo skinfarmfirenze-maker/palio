@@ -18,9 +18,9 @@ import * as THREE from "three";
 import {
   track, precomputeTrack, computeTrackNarrows, sampleAt, campoOutward,
   mossaFlareAt, trackNarrowAt, trackHeightAt, createRibbonMesh, makeTufoTexture,
-  TRACK_HALF_WIDTH
+  createShapeMesh, TRACK_HALF_WIDTH
 } from "./pista-ring.js";
-import { costruisciPiazza, PALCHI_FONDO, MIS } from "./piazza-lab.js";
+import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO, MIS } from "./piazza-lab.js";
 import { costruisciPalazzi } from "./palazzi-lab.js";
 
 const qp = new URLSearchParams(location.search);
@@ -70,10 +70,12 @@ const hZero = () => 0;
 scene.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, matTufo, 0.035));
 scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, matTufoDark, 0.025, hPista, hZero));
 // Lastricato del centro piazza (qui basta un disco: serve solo come sfondo).
-// Lastricato del centro: NASTRO che segue la sagoma della pista (un disco piatto
-// copriva la pista abbassata al rettilineo del Palazzo e "seppelliva" tutto).
+// Lastricato del centro: la SAGOMA VERA della conchiglia (createShapeMesh, come
+// buildCampoPaving del gioco). Il nastro largo si autointersecava nelle curve e
+// il disco copriva la pista abbassata al rettilineo.
 const matConchiglia = new THREE.MeshStandardMaterial({ color: 0x9a5f42, roughness: 0.95, side: THREE.DoubleSide });
-scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 1.5, TRACK_HALF_WIDTH + 34, matConchiglia, 0.02, hZero, hZero));
+scene.add(createShapeMesh(0.86, matConchiglia, 0.02));
+scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 1.5, TRACK_HALF_WIDTH + 6, matConchiglia, 0.018, hZero, hZero));
 // Striscia esterna alla quota della pista (i palchi scendono con lei, come in gioco).
 scene.add(createRibbonMesh((s) => bordoEsterno(s) - 8.5, (s) => bordoEsterno(s) - 0.2, new THREE.MeshStandardMaterial({ color: 0xcdac63, roughness: 0.97, side: THREE.DoubleSide }), 0.015, hPista, hPista));
 
@@ -107,6 +109,7 @@ const piazza = costruisciPiazza(ctx, {
   mossa: { da: track.length - 28, a: track.length },
   palazzo: { cum: centroRettilineo() }
 });
+scene.add(costruisciPalizzata(ctx, { da: 292.5, a: 323.5 }));
 // Facciata segnaposto del Palazzo nel banco: un muro a bordo+3.2 largo 34, per
 // vedere cappella/entrone/palchi delle comparse contro qualcosa.
 if (qp.get("palazzo") !== "0") {
@@ -129,7 +132,9 @@ if (qp.get("facciate") !== "0") {
     fondoPalchi: PALCHI_FONDO,
     risoluzione: parseInt(qp.get("resFacciate") || "512", 10),
     // Il Palazzo Pubblico è un pezzo a sé: la cortina gli lascia il varco.
-    varchi: [{ da: 0.565, a: 0.635 }]
+    varchi: [{ da: 0.565, a: 0.635 }],
+    // Via del Casato sbuca in piazza all'apice della curva.
+    strade: [{ giro: 0.813, larghezza: 6 }]
   });
   scene.add(palazzi.gruppo);
 }

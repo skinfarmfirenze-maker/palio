@@ -296,7 +296,20 @@ export function costruisciPalazzi(ctx, opz = {}) {
   let corsa = 0;
   staz.forEach((st, i) => { if (i > 0) corsa += st.p.distanceTo(staz[i - 1].p); st.s = corsa; });
 
-  const varchi = opz.varchi || [];
+  const varchi = opz.varchi ? [...opz.varchi] : [];
+  // Le STRADE che sbucano in piazza: convertite in varchi della cortina
+  // misurando la larghezza LUNGO la linea delle facciate (le frazioni di giro
+  // a raggio maggiore valgono più metri che sulla pista).
+  const strade = (opz.strade || []).map((v) => {
+    let i0 = 0, best = Infinity;
+    staz.forEach((st, i) => { const d = Math.abs(st.giro - v.giro); const dd = Math.min(d, 1 - d); if (dd < best) { best = dd; i0 = i; } });
+    const mezza = (v.larghezza ?? 6) / 2;
+    let iA = i0, iB = i0;
+    while (iA > 0 && staz[i0].s - staz[iA].s < mezza) iA -= 1;
+    while (iB < staz.length - 1 && staz[iB].s - staz[i0].s < mezza) iB += 1;
+    varchi.push({ da: staz[iA].giro, a: staz[iB].giro });
+    return { ...v, st: staz[i0] };
+  });
   const dentroVarco = (giro) => varchi.some((v) => (v.da <= v.a ? giro >= v.da && giro <= v.a : giro >= v.da || giro <= v.a));
 
   // 2) Spezzo l'anello in palazzi.
@@ -307,7 +320,11 @@ export function costruisciPalazzi(ctx, opz = {}) {
     let i1 = i0 + 1;
     while (i1 < staz.length - 1 && staz[i1].s - staz[i0].s < larg) i1 += 1;
     const a = staz[i0], b = staz[i1];
-    if (!dentroVarco(a.giro) && !dentroVarco(b.giro)) {
+    let attraversaVarco = false;
+    for (let k = i0; k <= i1; k += 1) {
+      if (dentroVarco(staz[k].giro)) { attraversaVarco = true; break; }
+    }
+    if (!attraversaVarco) {
       const gotico = semeGen() < 0.45;
       const stile = gotico ? "gotico" : "intonaco";
       const larghezza = b.s - a.s;
@@ -543,6 +560,47 @@ export function costruisciPalazzi(ctx, opz = {}) {
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     g.add(im);
   }
+
+  // Quinte delle strade: due fianchi di palazzo, il fondo in penombra e il
+  // selciato che SALE allontanandosi dalla piazza (le strade di Siena scendono
+  // tutte verso il Campo). Vista dalla pista è una fessura d'ombra fra i palazzi.
+  strade.forEach((v, vi) => {
+    const st = v.st;
+    const larg = v.larghezza ?? 6;
+    const prof = v.profondita ?? 16;
+    const salita = v.salita ?? 2.6;
+    const yaw = Math.atan2(st.f.x, st.f.z);
+    const tang = new THREE.Vector3(st.f.z, 0, -st.f.x);
+    const base = st.p.y - 1.2;
+    const sg = new THREE.Group();
+    sg.name = "Strada" + vi;
+    const muroMat = new THREE.MeshStandardMaterial({ color: TINTE.intonaco[(vi * 2 + 1) % TINTE.intonaco.length], roughness: 0.95 });
+    const fianco = (sgn) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(2.4, 13, prof), muroMat);
+      m.position.copy(st.p).addScaledVector(tang, sgn * (larg / 2 + 1.2)).addScaledVector(st.f, prof / 2);
+      m.position.y = base + 6.5;
+      m.rotation.y = yaw;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      sg.add(m);
+    };
+    fianco(-1); fianco(1);
+    const selciato = new THREE.Mesh(new THREE.BoxGeometry(larg + 0.4, 0.3, prof * 1.02),
+      new THREE.MeshStandardMaterial({ color: 0x6e5a48, roughness: 0.98 }));
+    selciato.position.copy(st.p).addScaledVector(st.f, prof / 2);
+    selciato.position.y = base + salita / 2;
+    selciato.rotation.y = yaw;
+    selciato.rotation.x = -Math.atan2(salita, prof);
+    selciato.receiveShadow = true;
+    sg.add(selciato);
+    const fondo = new THREE.Mesh(new THREE.BoxGeometry(larg + 2.6, 12, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x4a3a30, roughness: 1 }));
+    fondo.position.copy(st.p).addScaledVector(st.f, prof);
+    fondo.position.y = base + salita + 5;
+    fondo.rotation.y = yaw;
+    sg.add(fondo);
+    g.add(sg);
+  });
 
   return { gruppo: g, filo: R, blocchi: blocchi.length };
 }
