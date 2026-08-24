@@ -3832,6 +3832,8 @@ function openMenuScreen() {
   showScreen("menu");
   setHudVisible(false);
   ensureDemoScene();   // ripristina i cavalli-demo dello sfondo (dopo una gara)
+  setAllestimentoPalio(true);   // uscendo dall'estrazione la Piazza torna allestita
+  if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false;
 }
 
 function openSelectScreen() {
@@ -3840,6 +3842,8 @@ function openSelectScreen() {
   showScreen("select");
   setHudVisible(false);
   ensureDemoScene();   // ripristina i cavalli-demo dello sfondo (dopo una gara)
+  setAllestimentoPalio(true);   // uscendo dall'estrazione la Piazza torna allestita
+  if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false;
   // In setup campagna il tasto conferma diventa "Diventa Capitano".
   // ATTENZIONE: questa riga SOVRASCRIVE il testo scritto in index.html a ogni
   // ritorno sulla schermata. Se cambi la scritta del bottone, va cambiata QUI
