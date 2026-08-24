@@ -7624,34 +7624,53 @@ function ensureTrattaObjects() {
   // IL PALCO DEI CAPITANI (o "delle trifore"): la cerimonia non si fa per terra,
   // si fa su una pedana di legno davanti al Palazzo, dove stanno il Sindaco, i
   // Capitani delle dieci Contrade e i segretari con le urne.
-  const PALCO_H = 0.62;
-  const assito = new THREE.Mesh(new THREE.BoxGeometry(9.2, PALCO_H, 3.6), materials.wood);
-  assito.position.set(0, PALCO_H / 2, 0.1);
+  // Il palco sta in un SOTTOGRUPPO: cosi' si sposta tutto insieme con una riga.
+  // Va a DESTRA della fila dei cavalli, che arriva a x +12.15 — nelle foto le due
+  // cose sono affiancate, non sovrapposte.
+  const palco = new THREE.Group();
+  palco.position.x = 13.2;
+  grp.add(palco);
+  const PALCO_H = 0.86;                     // quota del piano di calpestio
+  const PALCO_L = 8.4, PALCO_P = 3.6;
+  // Assito sottile poggiato su MONTANTI che scendono fino al tufo: prima era un
+  // blocco pieno appoggiato a quota zero e, siccome davanti al Palazzo il tufo e'
+  // piu' basso, restava sospeso per aria.
+  const assito = new THREE.Mesh(new THREE.BoxGeometry(PALCO_L, 0.18, PALCO_P), materials.wood);
+  assito.position.set(0, PALCO_H, 0.1);
   assito.castShadow = true; assito.receiveShadow = true;
-  grp.add(assito);
+  palco.add(assito);
+  const montante = new THREE.MeshStandardMaterial({ color: 0x6b4530, roughness: 0.9 });
+  for (let mx = -PALCO_L / 2 + 0.35; mx <= PALCO_L / 2 - 0.34; mx += (PALCO_L - 0.7) / 4) {
+    [-1.45, 1.55].forEach((mz) => {
+      const g4 = new THREE.Mesh(new THREE.BoxGeometry(0.2, PALCO_H, 0.2), montante);
+      g4.position.set(mx, PALCO_H / 2, mz);
+      g4.castShadow = true;
+      palco.add(g4);
+    });
+  }
   // Telo chiaro che fascia il palco sul davanti, come nelle foto.
-  const telo = new THREE.Mesh(new THREE.BoxGeometry(9.3, PALCO_H * 0.92, 0.08),
+  const telo = new THREE.Mesh(new THREE.BoxGeometry(PALCO_L + 0.1, PALCO_H - 0.1, 0.08),
     new THREE.MeshStandardMaterial({ color: 0xe8e0cc, roughness: 0.95 }));
-  telo.position.set(0, PALCO_H / 2, 1.94);
-  grp.add(telo);
+  telo.position.set(0, (PALCO_H - 0.1) / 2, 1.94);
+  palco.add(telo);
   // Tavolo delle urne, sopra il palco.
   const top = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, 1.3), materials.wood);
-  top.position.y = PALCO_H + 1.0; grp.add(top);
+  top.position.y = PALCO_H + 1.0; palco.add(top);
   [[-1.5, -0.5], [1.5, -0.5], [-1.5, 0.5], [1.5, 0.5]].forEach(([x, z]) => {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.0, 0.14), materials.wood);
-    leg.position.set(x, PALCO_H + 0.5, z); grp.add(leg);
+    leg.position.set(x, PALCO_H + 0.5, z); palco.add(leg);
   });
   // Le AUTORITA' sul palco, ai lati del tavolo: il Sindaco che convalida e i
   // Capitani in giacca scura. Figure semplici, si vedono di spalle e di fianco.
   const abitoScuro = new THREE.MeshStandardMaterial({ color: 0x23242b, roughness: 0.92 });
   const carnagione = new THREE.MeshStandardMaterial({ color: 0xd7a781, roughness: 0.9 });
-  [-3.7, -3.0, -2.3, 2.3, 3.0, 3.7, 4.3].forEach((x, i) => {
+  [-3.4, -2.7, -2.0, 2.0, 2.7, 3.4, 3.9].forEach((x, i) => {
     const busto = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.62, 3, 7), abitoScuro);
     busto.position.set(x, PALCO_H + 0.72, -0.25 + (i % 2) * 0.35);
     busto.castShadow = true;
     const testa = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), carnagione);
     testa.position.set(busto.position.x, PALCO_H + 1.24, busto.position.z);
-    grp.add(busto, testa);
+    palco.add(busto, testa);
   });
 
   // Due urne in terracotta sul tavolo.
@@ -7666,7 +7685,7 @@ function ensureTrattaObjects() {
     return urn;
   };
   const urnL = makeUrn(-1.05), urnR = makeUrn(1.05);
-  grp.add(urnL, urnR);
+  palco.add(urnL, urnR);
 
   // Bambino che estrae (dietro il tavolo, verso i cavalli, rivolto alla camera).
   const child = new THREE.Group();
@@ -7681,7 +7700,7 @@ function ensureTrattaObjects() {
   child.add(legs, torso, head, cap, armL, armR);
   child.position.set(0, PALCO_H, -0.95);
   child.scale.setScalar(0.95);
-  grp.add(child);
+  palco.add(child);
 
   // ── I BOX DEI BARBERI ─────────────────────────────────────────────────────
   // Nelle foto della Tratta i cavalli non stanno sciolti: sono allineati sotto il
@@ -7749,6 +7768,9 @@ function ensureTrattaObjects() {
   const s = sampleAt(getStraightCenterP());
   const inner = s.normal.clone().normalize();
   grp.position.copy(s.point).addScaledVector(inner, -1.5);
+  // Davanti al Palazzo la pista e' ABBASSATA (e' il fondo della conchiglia): senza
+  // questa riga tutta la scena della Tratta galleggiava sopra il tufo.
+  grp.position.y = trackHeightAt(positiveMod(getStraightCenterP(), track.length));
   grp.rotation.y = Math.atan2(inner.x, inner.z);
   grp.visible = false;
   scene.add(grp);
