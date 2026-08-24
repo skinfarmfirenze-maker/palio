@@ -874,6 +874,28 @@ function trackHeightAt(cum) {
 // hA/hB (opzionali): quota per-vertice dei due bordi del nastro. Di default
 // entrambi seguono l'altimetria della pista; passare () => 0 su un bordo crea
 // una SPONDA che raccorda la pista abbassata al piano circostante.
+// ── L'ALLESTIMENTO DEL PALIO ─────────────────────────────────────────────────
+// Il tufo si stende e i palchi si montano solo per i giorni del Palio: quando si
+// estraggono le Contrade la Piazza e' ancora quella di tutti i giorni, mattoni
+// fino ai palazzi. Tutto cio' che appartiene all'allestimento passa da qui e
+// viene acceso o spento da setAllestimentoPalio().
+const allestimentoPalio = [];
+function addAllestimento(...objs) {
+  objs.forEach((o) => { if (o) { allestimentoPalio.push(o); scene.add(o); } });
+  return objs[0];
+}
+function setAllestimentoPalio(on) {
+  allestimentoPalio.forEach((o) => { o.visible = on; });
+  // Nella scenografia della piazza convivono cose che si smontano (palchi,
+  // palancata, verrocchio) e cose di pietra che restano sempre: la Cappella di
+  // Piazza e l'Entrone non si portano via dopo il Palio.
+  if (state.scenaPiazza) state.scenaPiazza.children.forEach((c) => {
+    if (c.name === "CappellaDiPiazza" || c.name === "Entrone") return;
+    c.visible = on;
+  });
+  if (state.piazzaNuda) state.piazzaNuda.visible = !on;
+}
+
 function createRibbonMesh(offsetA, offsetB, material, y = 0.02, hA, hB) {
   const vertices = [];
   const uvs = [];
@@ -1137,7 +1159,7 @@ function buildScene() {
   // Il bordo ESTERNO segue la svasatura dei canapi E il profilo di larghezza
   // variabile (imbuti di San Martino/cappella/Casato); l'interno resta fisso.
   const bordoEsterno = (s) => -TRACK_HALF_WIDTH - mossaFlareAt(s.cum) + trackNarrowAt(s.cum);
-  scene.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, materials.tufo, 0.035));
+  addAllestimento(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, materials.tufo, 0.035));
   // SPONDE dell'altimetria: raccordano la pista abbassata (San Martino → Casato)
   // al piano circostante, che resta a quota 0. Bordo vicino alla pista = quota
   // pista, bordo lontano = quota 0. Senza, il nastro abbassato finiva SOTTO la
@@ -1146,10 +1168,25 @@ function buildScene() {
   const hPista = (s) => trackHeightAt(s.cum);
   const hZero = () => 0;
   // Striscia esterna: segue la quota della pista (i palchi là fuori scendono con lei).
-  scene.add(createRibbonMesh((s) => bordoEsterno(s) - 1.5, (s) => bordoEsterno(s) - 0.25, materials.tufoDark, 0.025, hPista, hPista));
+  addAllestimento(createRibbonMesh((s) => bordoEsterno(s) - 1.5, (s) => bordoEsterno(s) - 0.25, materials.tufoDark, 0.025, hPista, hPista));
   // Striscia interna = SPONDA: dal bordo pista (quota pista) su fino alla
   // conchiglia del centro, che resta a quota 0 col suo pubblico.
-  scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, materials.tufoDark, 0.025, hPista, hZero));
+  addAllestimento(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, materials.tufoDark, 0.025, hPista, hZero));
+  // LA PIAZZA SENZA IL PALIO: lo stesso anello, ma di mattoni come il resto del
+  // Campo. Sta sotto al tufo e si vede solo quando il tufo non c'e' (estrazione).
+  {
+    const mattoni = makeHerringboneTexture();
+    mattoni.repeat.set(24, 3);
+    const matPiazza = new THREE.MeshStandardMaterial({ map: mattoni, color: 0xa89684, roughness: 0.97, metalness: 0 });
+    const nuda = new THREE.Group();
+    nuda.name = "PiazzaSenzaPalio";
+    nuda.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, matPiazza, 0.030));
+    nuda.add(createRibbonMesh((s) => bordoEsterno(s) - 1.5, (s) => bordoEsterno(s) - 0.25, matPiazza, 0.022, hPista, hPista));
+    nuda.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, matPiazza, 0.022, hPista, hZero));
+    nuda.visible = false;
+    scene.add(nuda);
+    state.piazzaNuda = nuda;
+  }
   // #2 — BORDO DI TRAVERTINO BIANCO (colonnino): la fascia chiara di marmo che cinge
   // il Campo fra il tufo della pista e il lastricato, come nella realtà. Solo grafica.
   const travMat = new THREE.MeshStandardMaterial({ color: 0xe9e3d3, roughness: 0.68, metalness: 0 });
@@ -1179,7 +1216,7 @@ function buildScene() {
   //  · `palazzo` = zona del Palazzo Pubblico: palchi delle comparse, Cappella di
   //               Piazza ai piedi della Torre ed Entrone, col varco nelle gradinate.
   try {
-    scene.add(costruisciPiazza(scenaCtx, {
+    state.scenaPiazza = costruisciPiazza(scenaCtx, {
       // LA MOSSA: il verrocchio del mossiere (pulpito ottagonale) al canape
       // anteriore, dietro di lui il palco dei Capitani nel varco delle gradinate,
       // e il fronte che si allarga 'a punta' invece di seguire la curva. Il varco
@@ -1192,7 +1229,8 @@ function buildScene() {
       // palazzi. Per una punta piu' marcata va allargato il filo della cortina.
       mossa: { verrocchioCum: positiveMod(MOSSA_FRONT_LIMIT, track.length), punta: 0.45 },
       palazzo: { cum: getStraightCenterP() },
-    }).gruppo);
+    }).gruppo;
+    scene.add(state.scenaPiazza);
   } catch (e) { console.error("scenografia piazza:", e); }
 
   for (let i = 0; i < track.samples.length; i += 11) {
@@ -1208,7 +1246,7 @@ function buildScene() {
       block.rotation.y = s.yaw;
       block.castShadow = true;
       block.receiveShadow = true;
-      scene.add(block);
+      addAllestimento(block);
     });
   }
 
@@ -1372,7 +1410,7 @@ function buildTrackBarriers(opts = {}) {
     im.castShadow = false;
     im.receiveShadow = false;
     im.name = "PubblicoPalchi";
-    scene.add(im);
+    addAllestimento(im);
   })();
 
   const step = 8;
@@ -1408,7 +1446,7 @@ function buildTrackBarriers(opts = {}) {
       // pomeriggio proiettano un ventaglio di ombre lunghe e rumorose sulla
       // pista. Niente ombra propria: l'atmosfera resta calda senza l'artefatto.
       post.castShadow = false;
-      scene.add(post);
+      addAllestimento(post);
 
       const topRail = makeCylinderBetween(p.clone().setY(railHeight), q.clone().setY(railHeightNext), outerSide ? 0.045 : 0.032, materials.barrier);
       const lowRail = makeCylinderBetween(p.clone().setY(lowerHeight), q.clone().setY(lowerHeightNext), outerSide ? 0.032 : 0.024, materials.barrierDark);
@@ -1416,7 +1454,7 @@ function buildTrackBarriers(opts = {}) {
       // tracciato, niente ombra propria per evitare la striatura sulla pista.
       topRail.castShadow = false;
       lowRail.castShadow = false;
-      scene.add(topRail, lowRail);
+      addAllestimento(topRail, lowRail);
 
       if (outerSide && i % (step * 2) === 0) {
         const mid = p.clone().lerp(q, 0.5);
@@ -1424,7 +1462,7 @@ function buildTrackBarriers(opts = {}) {
         banner.position.set(mid.x, 0.55 + (hQui + hNext) * 0.5, mid.z);
         banner.rotation.y = s.yaw;
         banner.castShadow = false;
-        scene.add(banner);
+        addAllestimento(banner);
       }
     });
 
@@ -1439,7 +1477,7 @@ function buildTrackBarriers(opts = {}) {
         bench.position.set(benchPos.x, 0.34 + row * 0.28 + trackHeightAt(s.cum), benchPos.z);
         bench.rotation.y = tangentYaw;
         bench.castShadow = true;
-        scene.add(bench);
+        addAllestimento(bench);
       }
     }
   }
@@ -1461,7 +1499,7 @@ function buildStartLine() {
     const box = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.035, 1.05), i % 2 === 0 ? materials.white : materials.black);
     box.position.set(p.x, 0.075, p.z);
     box.rotation.y = s.yaw + Math.PI / 2;
-    scene.add(box);
+    addAllestimento(box);
   }
   // Il canape ANTERIORE tocca i PALCHI ESTERNI: la ringhiera sta 0.72 oltre il
   // bordo svasato della pista, e il canapo si ancora lì — non deve restare un
@@ -1477,14 +1515,14 @@ function buildStartLine() {
   const groundCanapo = new THREE.Group();
   groundCanapo.add(makeCylinderBetween(a.clone().setY(0.095), b.clone().setY(0.095), 0.025, materials.rope));
   groundCanapo.add(makeCylinderBetween(c.clone().setY(0.1), d.clone().setY(0.1), 0.02, materials.redRope));
-  scene.add(groundCanapo);
+  addAllestimento(groundCanapo);
   [a, b, c, d].forEach((point) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.15, 8), materials.wood);
     post.position.set(point.x, 0.58, point.z);
     post.castShadow = true;
-    scene.add(post);
+    addAllestimento(post);
   });
-  scene.add(state.canapi);
+  addAllestimento(state.canapi);
 }
 
 // Verrocchino + canapo posteriore: il secondo canapo che chiude il corridoio
@@ -1602,7 +1640,7 @@ function buildTufoScuffs() {
   imScuff.renderOrder = 1; imHi.renderOrder = 1;
   imScuff.castShadow = false; imHi.castShadow = false;
   imScuff.name = "Tufo scuffs"; imHi.name = "Tufo scuffs hi";
-  scene.add(imScuff, imHi);
+  addAllestimento(imScuff, imHi);
 }
 
 function buildCampoLandmarks() {
@@ -1678,17 +1716,17 @@ function buildCurvePadding() {
     pad.rotation.y = yaw;
     pad.castShadow = true;
     pad.receiveShadow = true;
-    scene.add(pad);
+    addAllestimento(pad);
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, len), bandMat);
     band.position.set(mid.x, 0.78 + hQui, mid.z);
     band.rotation.y = yaw;
-    scene.add(band);
+    addAllestimento(band);
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
   // colmo e puntoni sul retro) al posto del vecchio loop di assi.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      scene.add(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 6, a: CAS_OUT + NARROW_RELEASE + 6 }));
+      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 6, a: CAS_OUT + NARROW_RELEASE + 6 }));
     } catch (e) { console.error("palizzata Casato:", e); }
   }
 }
@@ -1709,7 +1747,7 @@ function buildCurveChevrons() {
     chevron.rotation.y = s.yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
     chevron.rotation.z = Math.PI / 2;
     chevron.castShadow = true;
-    scene.add(chevron);
+    addAllestimento(chevron);
   }
 }
 
@@ -1830,7 +1868,7 @@ function buildCrowdAndFlags() {
     body.userData.baseY = body.position.y;
     body.userData.phase = Math.random() * TAU;
     state.crowd.push(body);
-    scene.add(body);
+    addAllestimento(body);
   };
 
   // (RIMOSSI i 420 figuranti in piedi lungo l'anello: stavano a un offset FISSO dal
@@ -1921,7 +1959,7 @@ function buildCrowdAndFlags() {
   dense.castShadow = false;
   dense.receiveShadow = false;
   dense.name = "FollaFitta";
-  scene.add(dense);
+  addAllestimento(dense);
 
   for (let i = 0; i < 54; i += 1) {
     const contrada = CONTRADE[i % CONTRADE.length];
@@ -1930,14 +1968,14 @@ function buildCrowdAndFlags() {
     const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + PALCHI_FONDO + 0.6);
     const poleTop = p.clone().setY(3.2);
     const poleBottom = p.clone().setY(0.1);
-    scene.add(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));
+    addAllestimento(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));
     const flag = new THREE.Mesh(shared.flagGeometry, makeMat(contrada.colors[0], 0.7));
     flag.position.copy(poleTop).addScaledVector(outward, -0.18).add(new THREE.Vector3(0, -0.35, 0));
     flag.rotation.y = Math.atan2(outward.x, outward.z) + Math.PI / 2;
     flag.userData.phase = Math.random() * TAU;
     flag.userData.baseRotation = flag.rotation.y;
     state.flags.push(flag);
-    scene.add(flag);
+    addAllestimento(flag);
   }
 }
 
@@ -5058,7 +5096,9 @@ function exposeFlag(contrada, floor, slotIndex, instant = false) {
   if (!slot) return;
   const flag = makeContradaFlagMesh(contrada);
   flag.position.copy(slot);
-  flag.position.y -= floor === 1 ? 1.2 : 1.0;           // pende sotto il davanzale
+  // Pende sotto il davanzale, ma non troppo: a −1.2 il bordo basso della prima
+  // bandiera finiva dietro l'ENTRONE, che le sta davanti e arriva a quota ~5.1.
+  flag.position.y -= floor === 1 ? 0.7 : 1.0;
   if (floor === 2) flag.scale.setScalar(0.82);          // secondo piano: più piccole/sobrie
   flag.userData.unroll = instant ? 1 : 0.001;
   flag.scale.y = (floor === 2 ? 0.82 : 1) * flag.userData.unroll;
@@ -5090,6 +5130,7 @@ function beginEstrazione(tipoId, precomputed) {
   setHudVisible(false);
   (state.demoHorses || []).forEach((h) => { if (h.group) h.group.visible = false; }); // niente cavalli sulla pista
   ensureEstrazioneCrowd().visible = true;                                        // pista piena di gente in attesa
+  setAllestimentoPalio(false);   // l'estrazione e' settimane prima: niente tufo, niente palchi
   const pal = ensurePalazzoObjects();
   clearPalazzoFlags();
   pal.grp.visible = true;
@@ -5155,6 +5196,7 @@ function estrazioneDone() {
 function endEstrazione() {
   const hud = document.getElementById("estrHud"); if (hud) hud.remove();
   if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false; // via il pubblico dalla pista
+  setAllestimentoPalio(true);    // da qui in poi (Tratta e corsa) la Piazza e' allestita
   // Il Palazzo e le bandiere restano esposti: fanno scena durante Tratta e corsa.
   if (state.estrazione && state.estrazione.campaign) campaignRoutePalio();   // campagna: corri/assisti/salta
   else {
