@@ -96,6 +96,10 @@ const CAMPO_BASE_Z = -36;
 // semi-larghezza pista (11.5): con un raggio più piccolo il bordo interno
 // avrebbe raggio negativo. A 16 il bordo interno ha raggio ~4.5: curva netta.
 const CAMPO_CORNER_RADIUS = 16;
+// Il CASATO e' piu' chiuso di San Martino, come in Piazza: raggio piu' stretto,
+// quindi angolo piu' vivo. Il bordo INTERNO resta a 11.5 dall'asse, percio' con
+// 13 la corda interna gira su un raggio di 1.5: praticamente uno spigolo.
+const CAMPO_CORNER_RADIUS_CASATO = 13;
 // Mossa poco dopo la curva a 90° del lato sinistro (in alto a sinistra dello
 // schermo): posizione speculare rispetto a prima (180° - 132° = 48°).
 const CAMPO_MOSSA_ANGLE = THREE.MathUtils.degToRad(48);
@@ -642,18 +646,30 @@ function createHorseCoatMaterial(variant, tone = "base", seed = 0) {
 }
 
 class SemicircleCampoCurve extends THREE.Curve {
-  constructor(radius, baseZ, cornerRadius, startAngle) {
+  // I due spigoli hanno raggi DIVERSI: `cornerRadiusCasato` e' il primo ramo
+  // percorso da getPoint (che nel verso di marcia e' il CASATO, cum ~285-310),
+  // `cornerRadius` il secondo (SAN MARTINO, cum ~156-181). Con raggi diversi i due
+  // archi finiscono a quote z diverse, quindi il tratto in mezzo non e' piu'
+  // orizzontale ma un segmento fra i due punti: la pendenza e' di un paio di gradi
+  // e le tangenti vengono comunque ricalcolate per differenze finite in
+  // precomputeTrack, che la smussa.
+  constructor(radius, baseZ, cornerRadius, startAngle, cornerRadiusCasato) {
     super();
     this.radius = radius;
     this.baseZ = baseZ;
     this.cornerRadius = cornerRadius;
+    this.cornerRadiusCasato = cornerRadiusCasato || cornerRadius;
     this.bottomZ = baseZ - cornerRadius;
     this.startAngle = startAngle;
     this.arcToRightLength = radius * startAngle;
     this.cornerLength = cornerRadius * Math.PI * 0.5;
-    this.straightLength = Math.max(1, radius * 2 - cornerRadius * 2);
+    this.cornerLengthCasato = this.cornerRadiusCasato * Math.PI * 0.5;
+    // Estremi del tratto fra i due spigoli, ciascuno alla quota del proprio arco.
+    this.straightA = new THREE.Vector3(radius - this.cornerRadiusCasato, 0, baseZ - this.cornerRadiusCasato);
+    this.straightB = new THREE.Vector3(-radius + cornerRadius, 0, baseZ - cornerRadius);
+    this.straightLength = Math.max(1, this.straightA.distanceTo(this.straightB));
     this.arcToStartLength = radius * (Math.PI - startAngle);
-    this.totalLength = this.arcToRightLength + this.cornerLength + this.straightLength + this.cornerLength + this.arcToStartLength;
+    this.totalLength = this.arcToRightLength + this.cornerLengthCasato + this.straightLength + this.cornerLength + this.arcToStartLength;
   }
 
   pointFromAngle(theta) {
@@ -670,17 +686,18 @@ class SemicircleCampoCurve extends THREE.Curve {
       return target.copy(this.pointFromAngle(this.startAngle - distance / this.radius));
     }
     distance -= this.arcToRightLength;
-    if (distance <= this.cornerLength) {
-      const phi = -distance / this.cornerRadius;
+    if (distance <= this.cornerLengthCasato) {          // ← il CASATO, il piu' chiuso
+      const r = this.cornerRadiusCasato;
+      const phi = -distance / r;
       return target.set(
-        this.radius - this.cornerRadius + Math.cos(phi) * this.cornerRadius,
+        this.radius - r + Math.cos(phi) * r,
         0,
-        this.baseZ + Math.sin(phi) * this.cornerRadius
+        this.baseZ + Math.sin(phi) * r
       );
     }
-    distance -= this.cornerLength;
+    distance -= this.cornerLengthCasato;
     if (distance <= this.straightLength) {
-      return target.set(this.radius - this.cornerRadius - distance, 0, this.bottomZ);
+      return target.copy(this.straightA).lerp(this.straightB, distance / this.straightLength);
     }
     distance -= this.straightLength;
     if (distance <= this.cornerLength) {
@@ -697,7 +714,7 @@ class SemicircleCampoCurve extends THREE.Curve {
 }
 
 function buildCampoCurve() {
-  return new SemicircleCampoCurve(CAMPO_RADIUS, CAMPO_BASE_Z, CAMPO_CORNER_RADIUS, CAMPO_MOSSA_ANGLE);
+  return new SemicircleCampoCurve(CAMPO_RADIUS, CAMPO_BASE_Z, CAMPO_CORNER_RADIUS, CAMPO_MOSSA_ANGLE, CAMPO_CORNER_RADIUS_CASATO);
 }
 
 const track = {
@@ -879,21 +896,37 @@ function trackHeightAt(cum) {
 // estraggono le Contrade la Piazza e' ancora quella di tutti i giorni, mattoni
 // fino ai palazzi. Tutto cio' che appartiene all'allestimento passa da qui e
 // viene acceso o spento da setAllestimentoPalio().
-const allestimentoPalio = [];
+// L'allestimento arriva in DUE tempi, come in Piazza: prima si stende il tufo e si
+// monta la pista, poi — piu' avanti — i palchi. Da qui le tre fasi:
+//   "nuda"  estrazione delle Contrade: mattoni e basta
+//   "tufo"  Tratta: il tufo c'e', i palchi non ancora
+//   "palio" il giorno del Palio: tutto montato
+const allestimentoPista = [];
+const allestimentoPalchi = [];
 function addAllestimento(...objs) {
-  objs.forEach((o) => { if (o) { allestimentoPalio.push(o); scene.add(o); } });
+  objs.forEach((o) => { if (o) { allestimentoPista.push(o); scene.add(o); } });
   return objs[0];
 }
-function setAllestimentoPalio(on) {
-  allestimentoPalio.forEach((o) => { o.visible = on; });
-  // Nella scenografia della piazza convivono cose che si smontano (palchi,
-  // palancata, verrocchio) e cose di pietra che restano sempre: la Cappella di
-  // Piazza e l'Entrone non si portano via dopo il Palio.
+function addPalchi(...objs) {
+  objs.forEach((o) => { if (o) { allestimentoPalchi.push(o); scene.add(o); } });
+  return objs[0];
+}
+// Pezzi della scenografia che sono PALCHI (si montano per ultimi) e pezzi di
+// PIETRA (Cappella ed Entrone: non si portano via dopo il Palio). Tutto il resto
+// della scenografia — palancata, colonnino — segue il tufo.
+const SCENA_PALCHI = new Set(["Palchi", "PubblicoPalchi", "PalchiComparse", "PubblicoComparse",
+  "SteccatoEsterno", "VerrocchioMossiere", "PalcoCapitani"]);
+const SCENA_PIETRA = new Set(["CappellaDiPiazza", "Entrone"]);
+function setAllestimento(fase) {
+  const tufo = fase !== "nuda";
+  const palchi = fase === "palio";
+  allestimentoPista.forEach((o) => { o.visible = tufo; });
+  allestimentoPalchi.forEach((o) => { o.visible = palchi; });
   if (state.scenaPiazza) state.scenaPiazza.children.forEach((c) => {
-    if (c.name === "CappellaDiPiazza" || c.name === "Entrone") return;
-    c.visible = on;
+    if (SCENA_PIETRA.has(c.name)) return;
+    c.visible = SCENA_PALCHI.has(c.name) ? palchi : tufo;
   });
-  if (state.piazzaNuda) state.piazzaNuda.visible = !on;
+  if (state.piazzaNuda) state.piazzaNuda.visible = !tufo;
 }
 
 function createRibbonMesh(offsetA, offsetB, material, y = 0.02, hA, hB) {
@@ -1410,7 +1443,7 @@ function buildTrackBarriers(opts = {}) {
     im.castShadow = false;
     im.receiveShadow = false;
     im.name = "PubblicoPalchi";
-    addAllestimento(im);
+    addPalchi(im);
   })();
 
   const step = 8;
@@ -1968,14 +2001,14 @@ function buildCrowdAndFlags() {
     const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + PALCHI_FONDO + 0.6);
     const poleTop = p.clone().setY(3.2);
     const poleBottom = p.clone().setY(0.1);
-    addAllestimento(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));
+    addPalchi(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));
     const flag = new THREE.Mesh(shared.flagGeometry, makeMat(contrada.colors[0], 0.7));
     flag.position.copy(poleTop).addScaledVector(outward, -0.18).add(new THREE.Vector3(0, -0.35, 0));
     flag.rotation.y = Math.atan2(outward.x, outward.z) + Math.PI / 2;
     flag.userData.phase = Math.random() * TAU;
     flag.userData.baseRotation = flag.rotation.y;
     state.flags.push(flag);
-    addAllestimento(flag);
+    addPalchi(flag);
   }
 }
 
@@ -3832,7 +3865,7 @@ function openMenuScreen() {
   showScreen("menu");
   setHudVisible(false);
   ensureDemoScene();   // ripristina i cavalli-demo dello sfondo (dopo una gara)
-  setAllestimentoPalio(true);   // uscendo dall'estrazione la Piazza torna allestita
+  setAllestimento("palio");     // uscendo dall'estrazione la Piazza torna allestita
   if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false;
 }
 
@@ -3842,7 +3875,7 @@ function openSelectScreen() {
   showScreen("select");
   setHudVisible(false);
   ensureDemoScene();   // ripristina i cavalli-demo dello sfondo (dopo una gara)
-  setAllestimentoPalio(true);   // uscendo dall'estrazione la Piazza torna allestita
+  setAllestimento("palio");     // uscendo dall'estrazione la Piazza torna allestita
   if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false;
   // In setup campagna il tasto conferma diventa "Diventa Capitano".
   // ATTENZIONE: questa riga SOVRASCRIVE il testo scritto in index.html a ogni
@@ -5134,7 +5167,7 @@ function beginEstrazione(tipoId, precomputed) {
   setHudVisible(false);
   (state.demoHorses || []).forEach((h) => { if (h.group) h.group.visible = false; }); // niente cavalli sulla pista
   ensureEstrazioneCrowd().visible = true;                                        // pista piena di gente in attesa
-  setAllestimentoPalio(false);   // l'estrazione e' settimane prima: niente tufo, niente palchi
+  setAllestimento("nuda");        // l'estrazione e' settimane prima: niente tufo, niente palchi
   const pal = ensurePalazzoObjects();
   clearPalazzoFlags();
   pal.grp.visible = true;
@@ -5200,7 +5233,7 @@ function estrazioneDone() {
 function endEstrazione() {
   const hud = document.getElementById("estrHud"); if (hud) hud.remove();
   if (state.estrazioneCrowd) state.estrazioneCrowd.visible = false; // via il pubblico dalla pista
-  setAllestimentoPalio(true);    // da qui in poi (Tratta e corsa) la Piazza e' allestita
+  setAllestimento("tufo");        // alla Tratta il tufo c'e' gia', i palchi no
   // Il Palazzo e le bandiere restano esposti: fanno scena durante Tratta e corsa.
   if (state.estrazione && state.estrazione.campaign) campaignRoutePalio();   // campagna: corri/assisti/salta
   else {
@@ -7457,6 +7490,7 @@ function beginTratta() {
   });
   state.tratta = { pairings };
   state.mode = "tratta";
+  setAllestimento("tufo");   // alla Tratta il tufo e' steso ma i palchi non ci sono ancora
   showScreen(null);
   setHudVisible(false);
   startTrattaCeremony3D(pairings);
@@ -8452,6 +8486,7 @@ function startMossa(fromTratta = false) {
     try { playPalioSound("SUNTO-NOTIFICASMS.mp3", { volume: 0.6 }); } catch (e) { /* niente */ }
   }, INGRESSO_PRIMA_DEL_SUNTO * 1000);
   state.mode = "mossa";
+  setAllestimento("palio");   // il giorno del Palio: palchi montati e Piazza gremita
   state.cameraMode = "follow";
   state.mossaTimer = 0;
   state.mossaDuration = 13.2 + Math.random() * 1.4;
