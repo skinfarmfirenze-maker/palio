@@ -13890,12 +13890,24 @@ function isAdminUrl() {
 }
 // Blocco DEMO: vale solo per un account REGISTRATO che non sia Mario Rossi.
 // Prima di avere un account si passa liberamente da login/registrazione.
+// Chi puo' GIOCARE durante la DEMO, oltre allo sviluppatore: elenco di email.
+// Login e registrazione restano aperti a tutti — chiunque puo' crearsi l'account —
+// ma chi non e' in questa lista si ferma alla schermata "gioco in aggiornamento".
+// Per abilitare qualcuno basta aggiungere qui la sua email, in minuscolo.
+const GIOCATORI_ABILITATI = new Set([
+  "papeusleonardus10@gmail.com",
+]);
+function accountAbilitato(acc) {
+  if (isMarioRossi(acc)) return true;                       // lo sviluppatore
+  const mail = ((acc && acc.email) || "").trim().toLowerCase();
+  return !!mail && GIOCATORI_ABILITATI.has(mail);
+}
 function demoBloccaQuesto() {
   if (isAdminUrl()) return false;                  // admin: sempre libero
   if (Date.now() < DEMO_CLOSE_AT) return false;    // demo non ancora iniziata
   const acc = getAccount();
   if (!acc) return false;                          // non ancora registrato: lascialo entrare a registrarsi
-  return !isMarioRossi(acc);                       // registrato e non sviluppatore → blocco
+  return !accountAbilitato(acc);                   // registrato ma non abilitato → blocco
 }
 function ensurePasswordGate() {
   // Dalle 21 del 21 ago: albo vittorie momentaneamente RIMOSSO per tutti (anche Mario Rossi).
