@@ -5478,7 +5478,11 @@ function resumeCampaign() {
   if (!s) { toastMsg("Nessuna campagna da riprendere."); return; }
   const contrada = CONTRADE.find((c) => c.id === s.contradaId);
   if (!contrada) { clearCampaignSave(); toastMsg("Salvataggio non valido."); return; }
-  const rival = s.rivalId ? CONTRADE.find((c) => c.id === s.rivalId) : null;
+  // La rivale si RICALCOLA sempre da RIVALS, non si legge dal salvataggio: una
+  // campagna salvata con un abbinamento sbagliato se lo portava dietro per
+  // sempre, anche dopo aver corretto la tabella. Le Contrade senza rivale
+  // (Bruco, Drago, Giraffa, Selva) restano giustamente senza.
+  const rival = pickRival(contrada);
   state.difficulty = "hard";
   const budgets = loadPersistentBudgets();
   state.campaign = {
