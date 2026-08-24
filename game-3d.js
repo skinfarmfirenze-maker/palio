@@ -915,7 +915,7 @@ function addPalchi(...objs) {
 // PIETRA (Cappella ed Entrone: non si portano via dopo il Palio). Tutto il resto
 // della scenografia — palancata, colonnino — segue il tufo.
 const SCENA_PALCHI = new Set(["Palchi", "PubblicoPalchi", "PalchiComparse", "PubblicoComparse",
-  "SteccatoEsterno", "VerrocchioMossiere", "PalcoCapitani"]);
+  "SteccatoEsterno", "VerrocchioMossiere", "PalcoCapitani", "PonteCapitani", "FollaInPiedi"]);
 const SCENA_PIETRA = new Set(["CappellaDiPiazza", "Entrone"]);
 function setAllestimento(fase) {
   const tufo = fase !== "nuda";
@@ -1294,7 +1294,15 @@ function buildScene() {
     scene.add(costruisciPalazzi(scenaCtx, {
       fondoPalchi: PALCHI_FONDO,
       varchi: [{ da: 0.565, a: 0.635 }],
-      strade: [{ giro: 0.813, larghezza: 6 }],   // bocca di via del Casato
+      strade: [
+        // La COSTARELLA dei Barbieri, che sbuca in piazza subito dopo il canape:
+        // sopra la sua bocca passa il ponte dei Capitani (modulo scenografia).
+        { giro: 5.5 / track.length, larghezza: 7 },
+        // Via del Casato, all'APICE della curva. Legata a CAS_IN/CAS_OUT e non a
+        // un numero fisso: il raggio del Casato e' stato stretto e l'apice si e'
+        // spostato, un valore scritto a mano sarebbe rimasto indietro.
+        { giro: (NARROW_READY ? (CAS_IN + CAS_OUT) * 0.5 / track.length : 0.813), larghezza: 6 },
+      ],
     }).gruppo);
   } catch (e) { console.error("scenografia palazzi:", e); }
   ensurePalazzoObjects();   // il Palazzo Pubblico accurato (unico), sempre visibile

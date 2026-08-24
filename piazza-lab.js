@@ -838,7 +838,9 @@ export function costruisciPiazza(ctx, opz = {}) {
     mossaCum = {
       verrocchio: vert,
       capitani: opz.mossa.capitaniCum ?? (vert - 0.4),
-      varcoPalchi: { da: vert - 4.6, a: vert + 2.0 }
+      via: opz.mossa.viaCum ?? (vert + 5.5),
+      viaLarga: opz.mossa.viaLarghezza ?? 7,
+      varcoPalchi: { da: vert - 3.5, a: vert + (opz.mossa.dopoSenzaPalchi ?? 11) }
     };
     varchiPalchi8.push(mossaCum.varcoPalchi);
 
@@ -929,10 +931,18 @@ export function costruisciPiazza(ctx, opz = {}) {
   if (opz.esterno?.varchi) varchiPalancata.push(...opz.esterno.varchi);
   g.add(costruisciSteccatoEsterno(ctxEst, { ...opz.esterno, varchi: varchiPalancata.length ? varchiPalancata : null, ...cond }));
   if (mossaCum) {
-    // Il pulpito del mossiere al canape e, dietro di lui nel varco delle
-    // gradinate, il palco dei capitani.
+    // Il pulpito del mossiere al canape; subito dopo, la bocca della via
+    // (Costarella) con la gente in piedi a terra e il PONTE DEI CAPITANI sopra.
     g.add(costruisciVerrocchio(ctxEst, { cum: mossaCum.verrocchio, ...cond }));
-    g.add(costruisciPalcoCapitani(ctxEst, { cum: mossaCum.capitani, daBordo: 1.3, ...cond }));
+    if (opz.pubblico !== false) {
+      g.add(costruisciFollaInPiedi(ctxEst, { da: mossaCum.varcoPalchi.da + 2.5, a: mossaCum.varcoPalchi.a - 0.5, file: opz.mossa.fileInPiedi ?? 4 }));
+    }
+    g.add(costruisciPonteCapitani(ctxEst, {
+      cum: mossaCum.via,
+      larghezzaVia: mossaCum.viaLarga,
+      dalBordoAlFilo: opz.mossa.viaDalBordo ?? 6.2,
+      ...cond
+    }));
   }
   g.add(costruisciSteccatoInterno(ctx, { ...opz.interno, ...cond }));
   if (opz.pubblico !== false) g.add(costruisciPubblicoPalchi(posti, opz.pubblicoOpz || {}));
@@ -1183,19 +1193,29 @@ export function costruisciVerrocchio(ctx, opz = {}) {
   const R = opz.raggio ?? 1.05;        // raggio del pulpito (ottagonale)
   const HB = opz.base ?? 0.95;         // base piena
   const HP = 0.85;                     // fascia dei balaustri
-  const cil = (rTop, rBot, h, mat, y) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 8), mat);
+  // ⚠️ Gli anelli in alto vanno APERTI (openEnded): un cilindro pieno ha il
+  // tappo e chiudeva il pulpito come un gabbiotto — il mossiere deve stare in
+  // un palco recintato ma a cielo aperto (segnalato da Simone sul gioco live).
+  const cil = (rTop, rBot, h, mat, y, aperto = false) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, 8, 1, aperto), mat);
     m.position.y = y;
     m.rotation.y = Math.PI / 8;
     m.castShadow = true;
     m.receiveShadow = true;
+    if (aperto) m.material = m.material.clone ? m.material : m.material;
     g.add(m);
     return m;
   };
-  cil(R, R * 1.04, HB, scuroOp, HB / 2);                       // base piena
+  cil(R, R * 1.04, HB, scuroOp, HB / 2);                       // base piena (il pavimento è il suo tappo)
   cil(R * 1.1, R * 1.1, 0.09, scuro, HB + 0.045);              // toro di imposta
-  cil(R * 1.09, R * 1.09, 0.1, scuro, HB + HP + 0.1);          // cimasa
-  cil(R * 1.14, R * 1.14, 0.05, scuroOp, HB + HP + 0.18);      // corrimano
+  cil(R * 1.09, R * 1.09, 0.12, scuro, HB + HP + 0.06, true);  // cimasa: SOLO fascia
+  // Corrimano: anello ottagonale (torus a 8 lati), niente piano sopra.
+  const anello = new THREE.Mesh(new THREE.TorusGeometry(R * 1.06, 0.05, 6, 8), scuroOp);
+  anello.rotation.x = Math.PI / 2;
+  anello.rotation.z = Math.PI / 8;
+  anello.position.y = HB + HP + 0.16;
+  anello.castShadow = true;
+  g.add(anello);
   // Balaustri torniti tutt'attorno (instanziati: 24 colonnine a doppia pancia).
   const nB = 24;
   const imB = istanze(new THREE.CylinderGeometry(0.045, 0.06, HP, 6), scuro, nB);
@@ -1316,7 +1336,7 @@ export function costruisciFollaInPiedi(ctx, opz = {}) {
     0x6b4a3a, 0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0x84725c];
   const punti = passiRegolari(staz, 0.55, zone);
   const im = new THREE.InstancedMesh(
-    new THREE.CapsuleGeometry(0.14, 0.55, 2, 6),
+    new THREE.CapsuleGeometry(0.155, 0.9, 2, 6),
     new THREE.MeshStandardMaterial({ roughness: 0.95 }),
     punti.length * file
   );
@@ -1336,7 +1356,7 @@ export function costruisciFollaInPiedi(ctx, opz = {}) {
       const off = 1.0 + r * 0.55 + (rnd(i, r + 3) - 0.5) * 0.3;
       const alt = 0.86 + rnd(i, r + 5) * 0.3;
       d.position.copy(q.p).addScaledVector(q.fuori, off);
-      d.position.y = q.p.y + 0.55 * alt;
+      d.position.y = q.p.y + 0.62 * alt;
       d.rotation.set(0, q.yaw + Math.PI + (rnd(i, r + 7) - 0.5) * 0.5, 0);
       d.scale.set(1, alt, 1);
       d.updateMatrix();
@@ -1344,7 +1364,7 @@ export function costruisciFollaInPiedi(ctx, opz = {}) {
       col.setHex(tinte[Math.floor(rnd(i, r + 9) * tinte.length) % tinte.length]);
       col.multiplyScalar(0.78 + rnd(i, r + 11) * 0.4);
       im.setColorAt(n, col);
-      d.position.y = q.p.y + 0.55 * alt + 0.5 * alt + 0.06;
+      d.position.y = q.p.y + 0.62 * alt + 0.62 * alt + 0.28;
       d.scale.set(1, 1, 1);
       d.updateMatrix();
       teste.setMatrixAt(n, d.matrix);
@@ -1359,5 +1379,67 @@ export function costruisciFollaInPiedi(ctx, opz = {}) {
   if (im.instanceColor) im.instanceColor.needsUpdate = true;
   if (teste.instanceColor) teste.instanceColor.needsUpdate = true;
   g.add(im, teste);
+  return g;
+}
+
+// ── IL PONTE DEI CAPITANI sulla Costarella ───────────────────────────────────
+// Subito dopo la mossa sbuca in piazza la via (la Costarella dei Barbieri):
+// niente palchi né palazzi per una decina di unità, gente in piedi a terra, e
+// SOPRA la via il palco dei capitani — una galleria di legno scuro a DUE
+// LIVELLI che scavalca la strada fra i due palazzi (foto di Simone).
+export function costruisciPonteCapitani(ctx, opz = {}) {
+  const rif = riferimentoA(ctx, opz.cum);
+  const g = new THREE.Group();
+  g.name = "PonteCapitani";
+  const legno = opaco({ color: 0x3a2718, roughness: 0.85 });
+  const legnoS = opaco({ color: 0x2a1c10, roughness: 0.9 });
+
+  const S = (opz.larghezzaVia ?? 7) + 2;   // luce del ponte (entra nei fianchi)
+  const D = opz.profondita ?? 2.2;
+  const box = (w, h, d, mat, x, y, z) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  // Coordinate locali: x lungo l'anello (attraversa la via), z verso la pista.
+  const livello = (y, hBal, conCapitani) => {
+    box(S, 0.2, D, legno, 0, y, -D / 2);                              // impalcato
+    [0.02, -D - 0.02].forEach((z) => {                                // balaustre
+      box(S, 0.08, 0.07, legnoS, 0, y + hBal, z);
+      box(S, 0.07, 0.06, legno, 0, y + hBal * 0.45, z);
+      for (let x = -S / 2 + 0.25; x <= S / 2 - 0.25; x += 0.42) {
+        box(0.07, hBal - 0.1, 0.05, legno, x, y + hBal * 0.48, z);
+      }
+    });
+    if (conCapitani) {
+      const tinte = [0x23262e, 0x2e2a26, 0x1f2c38, 0x33262a];
+      const n = opz.capitani ?? 9;
+      for (let i = 0; i < n; i += 1) {
+        const x = -S / 2 + 0.8 + (i / (n - 1)) * (S - 1.6);
+        const cap = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.5, 3, 8), opaco({ color: tinte[i % tinte.length], roughness: 0.92 }));
+        cap.position.set(x, y + 0.62, -0.42);
+        cap.castShadow = true;
+        g.add(cap);
+        const t = new THREE.Mesh(new THREE.SphereGeometry(0.1, 7, 5), opaco({ color: 0xd0a37e, roughness: 0.9 }));
+        t.position.set(x, y + 1.12, -0.42);
+        g.add(t);
+      }
+    }
+  };
+  livello(opz.quotaBassa ?? 3.2, 0.95, false);      // passerella bassa
+  livello(opz.quotaAlta ?? 6.0, 1.0, true);         // galleria dei capitani
+  // Montanti alle due estremità (dentro i fianchi della via) e mensole.
+  [-1, 1].forEach((sgn) => {
+    box(0.24, (opz.quotaAlta ?? 6.0) + 1.2, 0.24, legnoS, sgn * (S / 2 - 0.4), ((opz.quotaAlta ?? 6.0) + 1.2) / 2, -0.3);
+    box(0.2, 0.9, D, legnoS, sgn * (S / 2 - 0.4), (opz.quotaBassa ?? 3.2) - 0.55, -D / 2);
+  });
+
+  // Sta sul filo delle facciate, sopra la bocca della via.
+  const largoQui = ctx.largoEsterno ? 0 : 0;
+  g.position.copy(rif.bordo).addScaledVector(rif.fuori, opz.dalBordoAlFilo ?? 6.2);
+  g.rotation.y = rif.yaw + Math.PI;
   return g;
 }
