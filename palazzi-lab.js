@@ -315,15 +315,19 @@ export function costruisciPalazzi(ctx, opz = {}) {
   // 2) Spezzo l'anello in palazzi.
   const blocchi = [];
   let i0 = 0;
+  // Se il punto di partenza cade in un varco, si esce dal varco prima di
+  // aprire il blocco; se il blocco INCONTRA un varco, si CHIUDE lì (spezzato
+  // sul bordo), non si scarta intero: prima un varco largo 7 apriva buchi
+  // larghi quanto il palazzo scartato (15-27) e il ponte non arrivava mai
+  // ai fronti veri.
   while (i0 < staz.length - 1) {
+    while (i0 < staz.length - 1 && dentroVarco(staz[i0].giro)) i0 += 1;
+    if (i0 >= staz.length - 1) break;
     const larg = MISP.bloccoMin + semeGen() * (MISP.bloccoMax - MISP.bloccoMin);
     let i1 = i0 + 1;
-    while (i1 < staz.length - 1 && staz[i1].s - staz[i0].s < larg) i1 += 1;
+    while (i1 < staz.length - 1 && staz[i1].s - staz[i0].s < larg && !dentroVarco(staz[i1].giro)) i1 += 1;
     const a = staz[i0], b = staz[i1];
-    let attraversaVarco = false;
-    for (let k = i0; k <= i1; k += 1) {
-      if (dentroVarco(staz[k].giro)) { attraversaVarco = true; break; }
-    }
+    const attraversaVarco = b.s - a.s < 4;   // moncone troppo corto: non vale un palazzo
     if (!attraversaVarco) {
       const gotico = semeGen() < 0.45;
       const stile = gotico ? "gotico" : "intonaco";
@@ -574,17 +578,20 @@ export function costruisciPalazzi(ctx, opz = {}) {
     const base = st.p.y - 1.2;
     const sg = new THREE.Group();
     sg.name = "Strada" + vi;
-    const muroMat = new THREE.MeshStandardMaterial({ color: TINTE.intonaco[(vi * 2 + 1) % TINTE.intonaco.length], roughness: 0.95 });
-    const fianco = (sgn) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(2.4, 13, prof), muroMat);
-      m.position.copy(st.p).addScaledVector(tang, sgn * (larg / 2 + 1.2)).addScaledVector(st.f, prof / 2);
-      m.position.y = base + 6.5;
-      m.rotation.y = yaw;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      sg.add(m);
-    };
-    fianco(-1); fianco(1);
+    // Le quinte laterali si aggiungono solo su richiesta ({ quinte: true }):
+    // di norma i fianchi della via sono i palazzi veri della cortina.
+    if (v.quinte) {
+      const muroMat = new THREE.MeshStandardMaterial({ color: TINTE.intonaco[(vi * 2 + 1) % TINTE.intonaco.length], roughness: 0.95 });
+      [-1, 1].forEach((sgn) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(2.4, 13, prof), muroMat);
+        m.position.copy(st.p).addScaledVector(tang, sgn * (larg / 2 + 1.2)).addScaledVector(st.f, prof / 2);
+        m.position.y = base + 6.5;
+        m.rotation.y = yaw;
+        m.castShadow = true;
+        m.receiveShadow = true;
+        sg.add(m);
+      });
+    }
     const selciato = new THREE.Mesh(new THREE.BoxGeometry(larg + 0.4, 0.3, prof * 1.02),
       new THREE.MeshStandardMaterial({ color: 0x6e5a48, roughness: 0.98 }));
     selciato.position.copy(st.p).addScaledVector(st.f, prof / 2);
@@ -593,7 +600,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
     selciato.rotation.x = -Math.atan2(salita, prof);
     selciato.receiveShadow = true;
     sg.add(selciato);
-    const fondo = new THREE.Mesh(new THREE.BoxGeometry(larg + 2.6, 12, 0.6),
+    const fondo = new THREE.Mesh(new THREE.BoxGeometry(larg + 8, 13.5, 0.6),
       new THREE.MeshStandardMaterial({ color: 0x4a3a30, roughness: 1 }));
     fondo.position.copy(st.p).addScaledVector(st.f, prof);
     fondo.position.y = base + salita + 5;

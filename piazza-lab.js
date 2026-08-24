@@ -1394,7 +1394,7 @@ export function costruisciPonteCapitani(ctx, opz = {}) {
   const legno = opaco({ color: 0x3a2718, roughness: 0.85 });
   const legnoS = opaco({ color: 0x2a1c10, roughness: 0.9 });
 
-  const S = (opz.larghezzaVia ?? 7) + 2;   // luce del ponte (entra nei fianchi)
+  const S = (opz.larghezzaVia ?? 7) + 8;     // da palazzo a palazzo: le teste entrano bene nei fronti veri
   const D = opz.profondita ?? 2.2;
   const box = (w, h, d, mat, x, y, z) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
