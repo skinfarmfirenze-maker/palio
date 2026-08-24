@@ -131,7 +131,9 @@ const UP_AXIS = new THREE.Vector3(0, 1, 0);   // asse verticale mondo (riuso: ca
 const MOSSA_BACK_LIMIT = -7.0;
 // Timeout di sicurezza della mossa (secondi): se la rincorsa non entra, si
 // forza comunque la partenza per non bloccare il gioco.
-const MOSSA_MAX_DURATION = 300.0;       // tempo massimo della mossa: 5 minuti
+// Tempo massimo della mossa. Non e' piu' fisso: dalle impostazioni (rotellina in
+// home) si sceglie fra 5, 10, 20 e 30 minuti. Cinque e' il default, come prima.
+let MOSSA_MAX_DURATION = 300.0;
 // Durata minima della mossa: la rincorsa non può entrare (e quindi la corsa non
 // può partire) prima di questo tempo. Tiene la mossa lunga e tesa.
 const MOSSA_MIN_DURATION = 30.0;
@@ -3865,6 +3867,62 @@ function drawMinimap() {
   });
 }
 
+// ── SCHERMATA IMPOSTAZIONI ──────────────────────────────────────────────────
+// Si apre dalla rotellina in basso a sinistra della home. Due sole scelte, ma
+// pesanti: quale Palio si corre (che cambia cavalli e fantini) e quanto puo'
+// durare la mossa. Si applicano subito e restano salvate sul dispositivo.
+function openSettingsScreen() {
+  if (document.getElementById("settingsOv")) return;
+  const s = leggiImpostazioni();
+  const ov = document.createElement("div");
+  ov.id = "settingsOv";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;align-items:center;justify-content:center;"
+    + "background:rgba(9,6,3,.82);color:#f3e7cf;font-family:inherit;padding:22px;overflow:auto";
+  const card = "background:rgba(255,246,225,.06);border:1px solid rgba(240,203,53,.28);border-radius:12px;padding:13px 15px;"
+    + "cursor:pointer;text-align:left;font:inherit;color:#f3e7cf;width:100%;box-sizing:border-box;transition:border-color .15s";
+  const attivo = "border-color:#f0cb35;background:rgba(240,203,53,.14)";
+  const epoche = [
+    { id: "storico", tit: "Palio storico", sub: "Fino ad Aceto \u2014 i barberi e i fantini dei Palii di quella generazione" },
+    { id: "moderno", tit: "Palio moderno", sub: "Dal Duemila in poi \u2014 da Trecciolino ai giorni nostri" },
+  ];
+  ov.innerHTML =
+    '<div style="width:min(520px,96vw);display:flex;flex-direction:column;gap:16px">'
+    + '<div style="font-size:clamp(19px,4vw,26px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#f0cb35;text-align:center">Impostazioni</div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px">'
+    +   '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.75">Quale Palio si corre</div>'
+    +   epoche.map((e) => '<button type="button" data-epoca="' + e.id + '" style="' + card + (s.epoca === e.id ? ";" + attivo : "") + '">'
+          + '<b style="font-size:16px">' + e.tit + '</b><br><span style="font-size:13px;opacity:.75">' + e.sub + '</span></button>').join("")
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;gap:8px">'
+    +   '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.75">Durata massima della mossa</div>'
+    +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +   MOSSA_MINUTI_SCELTE.map((m) => '<button type="button" data-min="' + m + '" style="font:inherit;font-weight:700;padding:11px 0;border-radius:10px;'
+          + 'border:1px solid rgba(240,203,53,.28);background:rgba(255,246,225,.06);color:#f3e7cf;cursor:pointer;flex:1;min-width:64px'
+          + (s.mossaMinuti === m ? ";" + attivo : "") + '">' + m + ' min</button>').join("")
+    +   '</div>'
+    +   '<div style="font-size:12.5px;opacity:.7">Oltre questo tempo il mossiere dà il via comunque.</div>'
+    + '</div>'
+    + '<button type="button" id="settingsClose" style="font:inherit;font-size:16px;font-weight:800;padding:12px 30px;border-radius:10px;'
+    +   'border:none;background:#f0cb35;color:#1a1206;cursor:pointer;align-self:center">Chiudi</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+
+  const applica = (nuove) => {
+    salvaImpostazioni(nuove);
+    applicaImpostazioni();
+    ov.remove();
+    openSettingsScreen();   // ridisegna con la scelta evidenziata
+  };
+  ov.querySelectorAll("[data-epoca]").forEach((b) => b.addEventListener("click", () => {
+    applica({ ...leggiImpostazioni(), epoca: b.dataset.epoca });
+  }));
+  ov.querySelectorAll("[data-min]").forEach((b) => b.addEventListener("click", () => {
+    applica({ ...leggiImpostazioni(), mossaMinuti: parseInt(b.dataset.min, 10) });
+  }));
+  ov.querySelector("#settingsClose").addEventListener("click", () => ov.remove());
+  ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+}
+
 function openMenuScreen() {
   state.mode = "menu";
   stopAllAudio();      // tornando al menu si toglie l'audio (riparte alla prossima gara)
@@ -7035,50 +7093,101 @@ function showCampaignFinal() {
 // ai canapi. calma 1-5 = 1 molto agitato (scalcia ai canapi), 5 fermo piantato.
 // scossoStamina = stamina che il cavallo guadagna/perde quando resta SCOSSO.
 // terzoGiroStamina = stamina extra nell'ultimo giro.
-const HORSE_ROSTER = {
-  "Panezio":            { tier: "bono",      stamina: 90,  potenza: 4, calma: 5, turns: 5 },
-  "Topolone":           { tier: "bombolone", stamina: 92,  potenza: 4, calma: 2, turns: 3 },
-  "Volpino":            { tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
-  "Trattu de Zamaglia": { tier: "brenna",    stamina: 71,  potenza: 1, calma: 5, turns: 5, scossoStamina: 16 },
-  "Uberta de Mores":    { tier: "brenna",    stamina: 78,  potenza: 2, calma: 2, turns: 2 },
-  "Gaudenzia":          { tier: "bono",      stamina: 85,  potenza: 3, calma: 3, turns: 4 },
-  "Mirabella":          { tier: "bono",      stamina: 86,  potenza: 4, calma: 2, turns: 3, scossoStamina: -15 },
-  "Fedora Saura":       { tier: "bombolone", stamina: 80,  potenza: 3, calma: 3, turns: 3 },
-  "Pytheos":            { tier: "bono",      stamina: 80,  potenza: 3, calma: 3, turns: 4, scossoStamina: -15 },
-  "Quebel":             { tier: "bono",      stamina: 80,  potenza: 3, calma: 4, turns: 4 },
-  "Rimini":             { tier: "bombolone", stamina: 97,  potenza: 2, calma: 2, turns: 2 },
-  "Arestetulesu":       { tier: "bono",      stamina: 87,  potenza: 1, calma: 2, turns: 4 },
-  "Urbino de Ozieri":   { tier: "brenna",    stamina: 72,  potenza: 1, calma: 1, turns: 2 },
-  "Tale e Quale":       { tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 3, scossoStamina: -15 },
-  "Quarnero":           { tier: "brenna",    stamina: 75,  potenza: 4, calma: 5, turns: 5 },
-  "Comancio":           { tier: "bono",      stamina: 88,  potenza: 3, calma: 5, turns: 5 },
-  "Selvaggia":          { tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
-  "Uberto":             { tier: "brenna",    stamina: 76,  potenza: 3, calma: 4, turns: 4 },
-  "Vipera":             { tier: "bombolone", stamina: 94,  potenza: 5, calma: 1, turns: 1, scossoStamina: 13 },
-  "Oppio":              { tier: "bombolone", stamina: 96,  potenza: 3, calma: 1, turns: 1, scossoStamina: -10 },
-  "Benitos":            { tier: "bombolone", stamina: 89,  potenza: 5, calma: 1, turns: 1 },
-  "Diodoro":            { tier: "bombolone", stamina: 98,  potenza: 5, calma: 2, turns: 3 },
-  "Ungaros":            { tier: "bono",      stamina: 82,  potenza: 2, calma: 2, turns: 2 },
-  "Zenis":              { tier: "brenna",    stamina: 79,  potenza: 4, calma: 2, turns: 2 },
-  "Figaro":             { tier: "brenna",    stamina: 76,  potenza: 2, calma: 2, turns: 3 },
-  "Oriolu de Zamaglia": { tier: "brenna",    stamina: 70,  potenza: 1, calma: 1, turns: 2 },
-  "Re Artù":            { tier: "brenna",    stamina: 73,  potenza: 2, calma: 3, turns: 4 },
-  "Zodiach":            { tier: "bombolone", stamina: 90,  potenza: 4, calma: 3, turns: 2 },
-  "Remorex":            { tier: "bombolone", stamina: 97,  potenza: 4, calma: 2, turns: 3, scossoStamina: 10 },
-  "Urbino":             { tier: "bono",      stamina: 85,  potenza: 3, calma: 4, turns: 5 },
-  "Zio Frac":           { tier: "bombolone", stamina: 95,  potenza: 1, calma: 4, turns: 3, scossoStamina: -15 },
-  "Preziosa Penelope":  { tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 4 },
-  "Galleggiante":       { tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
-  "Anda e Bola":        { tier: "bono",      stamina: 84,  potenza: 3, calma: 5, turns: 5 },
-  "Reo Confesso":       { tier: "bono",      stamina: 84,  potenza: 2, calma: 3, turns: 4 },
-  "Viso d'Angelo":      { tier: "bono",      stamina: 86,  potenza: 1, calma: 4, turns: 5 },
-  "Violenta da Clodia": { tier: "bombolone", stamina: 100, potenza: 2, calma: 3, turns: 2, terzoGiroStamina: 2, scossoStamina: -10 },
-  "Indianos":           { tier: "bono",      stamina: 88,  potenza: 1, calma: 5, turns: 1 },
-  "Berio":              { tier: "bono",      stamina: 85,  potenza: 5, calma: 4, turns: 4 },
-  "Brivido Sardo":      { tier: "brenna",    stamina: 77,  potenza: 5, calma: 5, turns: 5 },
-  "Mocambo":            { tier: "brenna",    stamina: 80,  potenza: 5, calma: 5, turns: 2 },
+// ── I DUE PALII: STORICO e MODERNO ──────────────────────────────────────────
+// Ogni barbero appartiene a un'epoca. "storico" = i cavalli dei Palii fino agli
+// anni Novanta, quelli montati dai fantini di Aceto e della sua generazione;
+// "moderno" = dal Duemila in poi, da Trecciolino in avanti. La scelta si fa dalla
+// rotellina in home e riempie HORSE_ROSTER/TRATTA_HORSE_NAMES con la sola epoca
+// attiva, cosi' Tratta, voto dei Capitani e accoppiate restano dentro l'epoca.
+const ROSTER_CAVALLI = {
+  "Panezio":            { epoca: "storico", tier: "bono",      stamina: 90,  potenza: 4, calma: 5, turns: 5 },
+  "Topolone":           { epoca: "storico", tier: "bombolone", stamina: 92,  potenza: 4, calma: 2, turns: 3 },
+  "Volpino":            { epoca: "storico", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
+  "Trattu de Zamaglia": { epoca: "storico", tier: "brenna",    stamina: 71,  potenza: 1, calma: 5, turns: 5, scossoStamina: 16 },
+  "Uberta de Mores":    { epoca: "storico", tier: "brenna",    stamina: 78,  potenza: 2, calma: 2, turns: 2 },
+  "Gaudenzia":          { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 3, turns: 4 },
+  "Mirabella":          { epoca: "storico", tier: "bono",      stamina: 86,  potenza: 4, calma: 2, turns: 3, scossoStamina: -15 },
+  "Fedora Saura":       { epoca: "storico", tier: "bombolone", stamina: 80,  potenza: 3, calma: 3, turns: 3 },
+  "Pytheos":            { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 3, turns: 4, scossoStamina: -15 },
+  "Quebel":             { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 4, turns: 4 },
+  "Rimini":             { epoca: "storico", tier: "bombolone", stamina: 97,  potenza: 2, calma: 2, turns: 2 },
+  "Arestetulesu":       { epoca: "moderno", tier: "bono",      stamina: 87,  potenza: 1, calma: 2, turns: 4 },
+  "Urbino de Ozieri":   { epoca: "storico", tier: "brenna",    stamina: 72,  potenza: 1, calma: 1, turns: 2 },
+  "Tale e Quale":       { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 3, scossoStamina: -15 },
+  "Quarnero":           { epoca: "storico", tier: "brenna",    stamina: 75,  potenza: 4, calma: 5, turns: 5 },
+  "Comancio":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 3, calma: 5, turns: 5 },
+  "Selvaggia":          { epoca: "storico", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
+  "Uberto":             { epoca: "storico", tier: "brenna",    stamina: 76,  potenza: 3, calma: 4, turns: 4 },
+  "Vipera":             { epoca: "moderno", tier: "bombolone", stamina: 94,  potenza: 5, calma: 1, turns: 1, scossoStamina: 13 },
+  "Oppio":              { epoca: "moderno", tier: "bombolone", stamina: 96,  potenza: 3, calma: 1, turns: 1, scossoStamina: -10 },
+  "Benitos":            { epoca: "storico", tier: "bombolone", stamina: 89,  potenza: 5, calma: 1, turns: 1 },
+  "Diodoro":            { epoca: "moderno", tier: "bombolone", stamina: 98,  potenza: 5, calma: 2, turns: 3 },
+  "Ungaros":            { epoca: "moderno", tier: "bono",      stamina: 82,  potenza: 2, calma: 2, turns: 2 },
+  "Zenis":              { epoca: "moderno", tier: "brenna",    stamina: 79,  potenza: 4, calma: 2, turns: 2 },
+  "Figaro":             { epoca: "storico", tier: "brenna",    stamina: 76,  potenza: 2, calma: 2, turns: 3 },
+  "Oriolu de Zamaglia": { epoca: "storico", tier: "brenna",    stamina: 70,  potenza: 1, calma: 1, turns: 2 },
+  "Re Artù":            { epoca: "storico", tier: "brenna",    stamina: 73,  potenza: 2, calma: 3, turns: 4 },
+  "Zodiach":            { epoca: "moderno", tier: "bombolone", stamina: 90,  potenza: 4, calma: 3, turns: 2 },
+  "Remorex":            { epoca: "moderno", tier: "bombolone", stamina: 97,  potenza: 4, calma: 2, turns: 3, scossoStamina: 10 },
+  "Urbino":             { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 4, turns: 5 },
+  "Zio Frac":           { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 1, calma: 4, turns: 3, scossoStamina: -15 },
+  "Preziosa Penelope":  { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 4 },
+  "Galleggiante":       { epoca: "moderno", tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
+  "Anda e Bola":        { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 3, calma: 5, turns: 5 },
+  "Reo Confesso":       { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 2, calma: 3, turns: 4 },
+  "Viso d'Angelo":      { epoca: "moderno", tier: "bono",      stamina: 86,  potenza: 1, calma: 4, turns: 5 },
+  "Violenta da Clodia": { epoca: "moderno", tier: "bombolone", stamina: 100, potenza: 2, calma: 3, turns: 2, terzoGiroStamina: 2, scossoStamina: -10 },
+  "Indianos":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 1, calma: 5, turns: 1 },
+  "Berio":              { epoca: "moderno", tier: "bono",      stamina: 85,  potenza: 5, calma: 4, turns: 4 },
+  "Brivido Sardo":      { epoca: "moderno", tier: "brenna",    stamina: 77,  potenza: 5, calma: 5, turns: 5 },
+  "Mocambo":            { epoca: "moderno", tier: "brenna",    stamina: 80,  potenza: 5, calma: 5, turns: 2 },
 };
-const TRATTA_HORSE_NAMES = Object.keys(HORSE_ROSTER);
+// Riempiti da applicaEpoca(): contengono SOLO i cavalli dell'epoca scelta. Restano
+// gli stessi oggetti (mai riassegnati) perche' il resto del gioco ci tiene dei
+// riferimenti — e perche' i cavalli proposti dai giocatori ci vengono aggiunti.
+const HORSE_ROSTER = {};
+const TRATTA_HORSE_NAMES = [];
+
+// ── IMPOSTAZIONI (rotellina in home) ────────────────────────────────────────
+const MOSSA_MINUTI_SCELTE = [5, 10, 20, 30];
+let propostiCavalli = null, propostiFantini = null;   // accettati dall'admin, validi in ogni epoca
+const IMPOSTAZIONI_KEY = "palio.impostazioni";
+function leggiImpostazioni() {
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(IMPOSTAZIONI_KEY)) || {}; } catch (e) { s = {}; }
+  return {
+    epoca: s.epoca === "storico" ? "storico" : "moderno",
+    mossaMinuti: MOSSA_MINUTI_SCELTE.indexOf(s.mossaMinuti) >= 0 ? s.mossaMinuti : 5,
+  };
+}
+function salvaImpostazioni(s) {
+  try { localStorage.setItem(IMPOSTAZIONI_KEY, JSON.stringify(s)); } catch (e) { /* niente */ }
+}
+// Riempie i roster ATTIVI con la sola epoca scelta. Gli oggetti non vengono mai
+// riassegnati (svuotati e riempiti): altrove nel codice ci sono riferimenti, e i
+// cavalli/fantini proposti dai giocatori vengono aggiunti a questi stessi.
+function applicaEpoca(epoca) {
+  const storica = epoca === "storico";
+  Object.keys(HORSE_ROSTER).forEach((k) => { delete HORSE_ROSTER[k]; });
+  Object.keys(ROSTER_CAVALLI).forEach((nome) => {
+    const c = ROSTER_CAVALLI[nome];
+    if ((c.epoca === "storico") === storica) HORSE_ROSTER[nome] = c;
+  });
+  TRATTA_HORSE_NAMES.length = 0;
+  TRATTA_HORSE_NAMES.push(...Object.keys(HORSE_ROSTER));
+  JOCKEYS.length = 0;
+  JOCKEYS.push(...(storica ? JOCKEYS_STORICI : JOCKEYS_MODERNI));
+  // I cavalli e i fantini PROPOSTI DAI GIOCATORI e accettati non appartengono a
+  // un'epoca: restano in tutt'e due, altrimenti sparirebbero al primo cambio.
+  if (propostiCavalli) applyAcceptedHorses(propostiCavalli);
+  if (propostiFantini) applyAcceptedJockeys(propostiFantini);
+}
+function applicaImpostazioni() {
+  const s = leggiImpostazioni();
+  applicaEpoca(s.epoca);
+  MOSSA_MAX_DURATION = s.mossaMinuti * 60;
+  return s;
+}
 
 function shuffleInPlace(arr) {
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -7845,25 +7954,56 @@ function endTratta() {
 //   Difesa  — quanto tiene la posizione / marca / non si fa passare;
 //   Terzo giro — quanto rende nel finale (tenuta nell'ultimo giro).
 // Fantini reali (dal più forte al più scarso) + tre fittizi.
-const JOCKEYS = [
+const JOCKEYS_MODERNI = [
   // fedelta 1-5 = lealtà alla contrada che lo ingaggia (bassa = corruttibile); ingaggio = costo.
   // curva 1-5 = tenuta in curva: alta = cade di rado su un urto (5 ≈ 10%), bassa = cade spesso (1 ≈ 90%).
-  { nome: "Giovanni Atzeni", nick: "Tittìa", mossa: 5, difesa: 1, terzo: 3, fedelta: 3, curva: 3, ingaggio: 130 },
-  { nome: "Jonatan Bartoletti", nick: "Scompiglio", mossa: 4, difesa: 3, terzo: 4, fedelta: 2, curva: 4, ingaggio: 105 },
-  { nome: "Andrea Mari", nick: "Brio", mossa: 4, difesa: 4, terzo: 3, fedelta: 5, curva: 4, ingaggio: 90 },
-  { nome: "Giuseppe Zedde", nick: "Gingillo", mossa: 3, difesa: 4, terzo: 5, fedelta: 3, curva: 4, ingaggio: 95 },
-  { nome: "Andrea Coghe", nick: "Tempesta", mossa: 3, difesa: 3, terzo: 3, fedelta: 2, curva: 3, ingaggio: 80 },
-  { nome: "Carlo Sanna", nick: "Brigante", mossa: 3, difesa: 3, terzo: 3, fedelta: 2, curva: 3, ingaggio: 50 },
-  { nome: "Sebastiano Murtas", nick: "Grandine", mossa: 3, difesa: 3, terzo: 2, fedelta: 2, curva: 2, ingaggio: 45 },
-  { nome: "Federico Guglielmi", nick: "Tamurè", mossa: 2, difesa: 3, terzo: 2, fedelta: 4, curva: 3, ingaggio: 28 },
-  { nome: "Battista Corda", nick: "Grido", mossa: 3, difesa: 5, terzo: 5, fedelta: 2, curva: 1, ingaggio: 80, fittizio: true },
-  { nome: "Efisio Melis", nick: "Veleno", mossa: 2, difesa: 5, terzo: 1, fedelta: 4, curva: 2, ingaggio: 40, fittizio: true },
-  { nome: "Enrico Bruschelli", nick: "Bellocchio", mossa: 2, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 42, fittizio: true },
-  { nome: "Salvatore Loi", nick: "Peto", mossa: 1, difesa: 4, terzo: 4, fedelta: 1, curva: 1, ingaggio: 8, fittizio: true },
-  { nome: "Diego Minucci", nick: "Fastidio", mossa: 1, difesa: 2, terzo: 4, fedelta: 4, curva: 5, ingaggio: 32, fittizio: true },
+  { epoca: "moderno", nome: "Giovanni Atzeni", nick: "Tittìa", mossa: 5, difesa: 1, terzo: 3, fedelta: 3, curva: 3, ingaggio: 130 },
+  { epoca: "moderno", nome: "Jonatan Bartoletti", nick: "Scompiglio", mossa: 4, difesa: 3, terzo: 4, fedelta: 2, curva: 4, ingaggio: 105 },
+  { epoca: "moderno", nome: "Andrea Mari", nick: "Brio", mossa: 4, difesa: 4, terzo: 3, fedelta: 5, curva: 4, ingaggio: 90 },
+  { epoca: "moderno", nome: "Giuseppe Zedde", nick: "Gingillo", mossa: 3, difesa: 4, terzo: 5, fedelta: 3, curva: 4, ingaggio: 95 },
+  { epoca: "moderno", nome: "Andrea Coghe", nick: "Tempesta", mossa: 3, difesa: 3, terzo: 3, fedelta: 2, curva: 3, ingaggio: 80 },
+  { epoca: "moderno", nome: "Carlo Sanna", nick: "Brigante", mossa: 3, difesa: 3, terzo: 3, fedelta: 2, curva: 3, ingaggio: 50 },
+  { epoca: "moderno", nome: "Sebastiano Murtas", nick: "Grandine", mossa: 3, difesa: 3, terzo: 2, fedelta: 2, curva: 2, ingaggio: 45 },
+  { epoca: "moderno", nome: "Federico Guglielmi", nick: "Tamurè", mossa: 2, difesa: 3, terzo: 2, fedelta: 4, curva: 3, ingaggio: 28 },
+  { epoca: "moderno", nome: "Battista Corda", nick: "Grido", mossa: 3, difesa: 5, terzo: 5, fedelta: 2, curva: 1, ingaggio: 80, fittizio: true },
+  { epoca: "moderno", nome: "Efisio Melis", nick: "Veleno", mossa: 2, difesa: 5, terzo: 1, fedelta: 4, curva: 2, ingaggio: 40, fittizio: true },
+  { epoca: "moderno", nome: "Enrico Bruschelli", nick: "Bellocchio", mossa: 2, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 42, fittizio: true },
+  { epoca: "moderno", nome: "Salvatore Loi", nick: "Peto", mossa: 1, difesa: 4, terzo: 4, fedelta: 1, curva: 1, ingaggio: 8, fittizio: true },
+  { epoca: "moderno", nome: "Diego Minucci", nick: "Fastidio", mossa: 1, difesa: 2, terzo: 4, fedelta: 4, curva: 5, ingaggio: 32, fittizio: true },
   // Il "fedelissimo": incorruttibile (fedeltà 5) ma scarso in tutto e GRATIS.
-  { nome: "Michele Serra", nick: "Fedele", mossa: 1, difesa: 1, terzo: 1, fedelta: 5, curva: 1, ingaggio: 0, fittizio: true },
+  { epoca: "moderno", nome: "Michele Serra", nick: "Fedele", mossa: 1, difesa: 1, terzo: 1, fedelta: 5, curva: 1, ingaggio: 0, fittizio: true },
 ];
+
+// ── I FANTINI DEL PALIO STORICO (fino ad Aceto) ─────────────────────────────
+// La generazione che ha corso dagli anni Cinquanta alla meta' dei Novanta. In
+// testa Andrea Degortes detto Aceto, quattordici Palii: nel gioco e' il piu'
+// forte in assoluto, come lo era in Piazza. Come per i moderni, accanto ai
+// fantini veri ci sono alcuni nomi di fantasia (fittizio: true) che servono a
+// riempire il lotto: le statistiche inventate non vanno messe in bocca a
+// persone realmente esistite.
+const JOCKEYS_STORICI = [
+  { epoca: "storico", nome: "Andrea Degortes", nick: "Aceto", mossa: 5, difesa: 5, terzo: 4, fedelta: 3, curva: 4, ingaggio: 140 },
+  { epoca: "storico", nome: "Silvano Vigni", nick: "Bazzino", mossa: 4, difesa: 4, terzo: 4, fedelta: 3, curva: 4, ingaggio: 100 },
+  { epoca: "storico", nome: "Giuseppe Gentili", nick: "Ciancone", mossa: 4, difesa: 4, terzo: 3, fedelta: 4, curva: 3, ingaggio: 95 },
+  { epoca: "storico", nome: "Sebastiano Deledda", nick: "Bastiano", mossa: 3, difesa: 4, terzo: 4, fedelta: 3, curva: 4, ingaggio: 90 },
+  { epoca: "storico", nome: "Salvatore Ladu", nick: "Il Pesse", mossa: 4, difesa: 3, terzo: 3, fedelta: 2, curva: 3, ingaggio: 85 },
+  { epoca: "storico", nome: "Leonardo Viti", nick: "Legno", mossa: 3, difesa: 3, terzo: 4, fedelta: 4, curva: 3, ingaggio: 70 },
+  { epoca: "storico", nome: "Massimo Coghe", nick: "Falchino", mossa: 3, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 60 },
+  { epoca: "storico", nome: "Vittorio Pisani", nick: "Vittorino", mossa: 3, difesa: 2, terzo: 3, fedelta: 3, curva: 3, ingaggio: 48 },
+  { epoca: "storico", nome: "Ottavio Bertini", nick: "Ganascia", mossa: 4, difesa: 2, terzo: 2, fedelta: 1, curva: 2, ingaggio: 55, fittizio: true },
+  { epoca: "storico", nome: "Nello Vanni", nick: "Tramonto", mossa: 2, difesa: 4, terzo: 4, fedelta: 3, curva: 3, ingaggio: 44, fittizio: true },
+  { epoca: "storico", nome: "Pietro Serra", nick: "Zurlino", mossa: 2, difesa: 3, terzo: 3, fedelta: 2, curva: 4, ingaggio: 35, fittizio: true },
+  { epoca: "storico", nome: "Bruno Cinelli", nick: "Nespola", mossa: 3, difesa: 2, terzo: 2, fedelta: 2, curva: 2, ingaggio: 26, fittizio: true },
+  { epoca: "storico", nome: "Antonio Marras", nick: "Sbigo", mossa: 1, difesa: 4, terzo: 3, fedelta: 1, curva: 1, ingaggio: 14, fittizio: true },
+  // Il "fedelissimo" dell'epoca: incorruttibile ma scarso, e gratis.
+  { epoca: "storico", nome: "Renzo Bindi", nick: "Il Sordo", mossa: 1, difesa: 1, terzo: 1, fedelta: 5, curva: 1, ingaggio: 0, fittizio: true },
+];
+
+// Riempito da applicaEpoca(): i fantini della sola epoca scelta. Resta lo stesso
+// array (mai riassegnato) perche' i fantini proposti dai giocatori ci finiscono
+// dentro con push.
+const JOCKEYS = [];
+
 
 // "Forza" complessiva del fantino (per far scegliere le AI dai più bravi).
 function jockeyStrength(j) { return j.mossa + j.difesa + j.terzo; }
@@ -13159,6 +13299,7 @@ function bindEvents() {
   const suggestBtn = document.getElementById("suggestBtn");
   if (suggestBtn) suggestBtn.addEventListener("click", openSuggestOverlay);
   ui.backToMenuButton.addEventListener("click", openMenuScreen);
+  { const sb = document.getElementById("settingsBtn"); if (sb) sb.addEventListener("click", openSettingsScreen); }
   // "Vai alla Mossa" / "Corri di nuovo": prima si sceglie il Palio (luglio /
   // agosto / straordinario) → ESTRAZIONE delle Contrade (bandiere al Palazzo)
   // → TRATTA (sorteggio dei cavalli) → mossa/tondino.
@@ -13483,6 +13624,7 @@ function statsForAcceptedHorse(tier, name) {
 }
 function applyAcceptedHorses(map) {
   if (!map) return;
+  propostiCavalli = map;   // da rimettere dopo un cambio d'epoca
   Object.keys(map).forEach((name) => {
     const nm = String(name || "").trim();
     if (!nm) return;
@@ -13561,6 +13703,7 @@ function statsForAcceptedJockey(name) {
 const JOCKEY_DUP_SKIP = new Set(["Michel putzu", "Andrea sanna", "Bruschelli"]);
 function applyAcceptedJockeys(map) {
   if (!map) return;
+  propostiFantini = map;   // idem
   Object.keys(map).forEach((name) => {
     const nm = String(name || "").trim().slice(0, 24);
     if (!nm || JOCKEY_DUP_SKIP.has(nm)) return;
@@ -14945,6 +15088,7 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
 }
 
 function init() {
+  applicaImpostazioni();  // epoca (cavalli+fantini) e durata massima della mossa
   maybeOpenAdmin();       // ?admin → pannello amministratore (sopra tutto)
   ensurePasswordGate();   // gate password: copre tutto finché non entri
   // WATCHDOG DEMO: chi era GIÀ dentro quando scatta l'ora resterebbe a giocare col

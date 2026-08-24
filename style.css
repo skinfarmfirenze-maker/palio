@@ -905,6 +905,32 @@ textarea {
   .support-btn { font-size: 12px; padding: 7px 11px; }
 }
 
+.home-settings {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  z-index: 5;
+}
+.settings-btn {
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(240, 203, 53, 0.45);
+  background: rgba(26, 18, 6, 0.55);
+  color: #f0cb35;
+  cursor: pointer;
+  transition: transform 0.25s ease, background 0.2s ease;
+}
+.settings-btn:hover { background: rgba(240, 203, 53, 0.18); transform: rotate(45deg); }
+.settings-btn:focus-visible { outline: 2px solid #f0cb35; outline-offset: 2px; }
+@media (max-width: 640px) {
+  .home-settings { left: 10px; bottom: 10px; }
+  .settings-btn { width: 38px; height: 38px; font-size: 17px; }
+}
+
 /* ---- Albo delle Vittorie ---- */
 #alboOverlay {
   position: fixed;
