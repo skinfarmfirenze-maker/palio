@@ -7621,12 +7621,37 @@ function ensureTrattaObjects() {
   const skin = new THREE.MeshStandardMaterial({ color: 0xe6b58c, roughness: 0.85 });
   const grp = new THREE.Group();
 
-  // Tavolo (piano + 4 gambe).
+  // IL PALCO DEI CAPITANI (o "delle trifore"): la cerimonia non si fa per terra,
+  // si fa su una pedana di legno davanti al Palazzo, dove stanno il Sindaco, i
+  // Capitani delle dieci Contrade e i segretari con le urne.
+  const PALCO_H = 0.62;
+  const assito = new THREE.Mesh(new THREE.BoxGeometry(9.2, PALCO_H, 3.6), materials.wood);
+  assito.position.set(0, PALCO_H / 2, 0.1);
+  assito.castShadow = true; assito.receiveShadow = true;
+  grp.add(assito);
+  // Telo chiaro che fascia il palco sul davanti, come nelle foto.
+  const telo = new THREE.Mesh(new THREE.BoxGeometry(9.3, PALCO_H * 0.92, 0.08),
+    new THREE.MeshStandardMaterial({ color: 0xe8e0cc, roughness: 0.95 }));
+  telo.position.set(0, PALCO_H / 2, 1.94);
+  grp.add(telo);
+  // Tavolo delle urne, sopra il palco.
   const top = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.16, 1.3), materials.wood);
-  top.position.y = 1.0; grp.add(top);
+  top.position.y = PALCO_H + 1.0; grp.add(top);
   [[-1.5, -0.5], [1.5, -0.5], [-1.5, 0.5], [1.5, 0.5]].forEach(([x, z]) => {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.0, 0.14), materials.wood);
-    leg.position.set(x, 0.5, z); grp.add(leg);
+    leg.position.set(x, PALCO_H + 0.5, z); grp.add(leg);
+  });
+  // Le AUTORITA' sul palco, ai lati del tavolo: il Sindaco che convalida e i
+  // Capitani in giacca scura. Figure semplici, si vedono di spalle e di fianco.
+  const abitoScuro = new THREE.MeshStandardMaterial({ color: 0x23242b, roughness: 0.92 });
+  const carnagione = new THREE.MeshStandardMaterial({ color: 0xd7a781, roughness: 0.9 });
+  [-3.7, -3.0, -2.3, 2.3, 3.0, 3.7, 4.3].forEach((x, i) => {
+    const busto = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, 0.62, 3, 7), abitoScuro);
+    busto.position.set(x, PALCO_H + 0.72, -0.25 + (i % 2) * 0.35);
+    busto.castShadow = true;
+    const testa = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), carnagione);
+    testa.position.set(busto.position.x, PALCO_H + 1.24, busto.position.z);
+    grp.add(busto, testa);
   });
 
   // Due urne in terracotta sul tavolo.
@@ -7637,7 +7662,7 @@ function ensureTrattaObjects() {
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.28, 14), terra); neck.position.y = 0.95;
     const rim = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16), terra); rim.rotation.x = Math.PI / 2; rim.position.y = 1.08;
     urn.add(foot, body, neck, rim);
-    urn.position.set(x, 1.08, 0);
+    urn.position.set(x, PALCO_H + 1.08, 0);
     return urn;
   };
   const urnL = makeUrn(-1.05), urnR = makeUrn(1.05);
@@ -7654,9 +7679,70 @@ function ensureTrattaObjects() {
   const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.5, 8), skin); armL.position.set(-0.26, 0.92, 0.14); armL.rotation.set(-1.0, 0, 0.3);
   const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.5, 8), skin); armR.position.set(0.26, 0.92, 0.14); armR.rotation.set(-1.0, 0, -0.3);
   child.add(legs, torso, head, cap, armL, armR);
-  child.position.set(0, 0, -0.95);
+  child.position.set(0, PALCO_H, -0.95);
   child.scale.setScalar(0.95);
   grp.add(child);
+
+  // ── I BOX DEI BARBERI ─────────────────────────────────────────────────────
+  // Nelle foto della Tratta i cavalli non stanno sciolti: sono allineati sotto il
+  // Palazzo dentro box aperti, divisi da paratie scure, legati a una transenna di
+  // legno, ognuno col suo NUMERO e col barbaresco che lo tiene. La fila dei
+  // cavalli la schiera startTrattaCeremony3D: qui si costruisce quello che li
+  // contiene, alle stesse coordinate (X = lungo la facciata, Z = verso il Campo).
+  {
+    const N = 10, PASSO = 2.7, X0 = -12.15;      // gli stessi di startTrattaCeremony3D
+    const Z_CAV = TRATTA_ROW_LANE + 1.5;         // i cavalli, in coordinate del gruppo
+    const paratia = new THREE.MeshStandardMaterial({ color: 0x3b3a38, roughness: 0.94 });
+    const numeroTex = (n) => {
+      const c = document.createElement("canvas"); c.width = 128; c.height = 128;
+      const x = c.getContext("2d");
+      x.fillStyle = "#f2ede0"; x.fillRect(0, 0, 128, 128);
+      x.fillStyle = "#1a1206"; x.font = "bold 86px system-ui, sans-serif";
+      x.textAlign = "center"; x.textBaseline = "middle";
+      x.fillText(String(n), 64, 70);
+      return new THREE.CanvasTexture(c);
+    };
+    for (let i = 0; i < N; i += 1) {
+      const x = X0 + i * PASSO;
+      // Paratia che divide un barbero dall'altro (una in più per chiudere in fondo).
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.35, 2.3), paratia);
+      p.position.set(x - PASSO / 2, 0.68, Z_CAV - 0.2);
+      p.castShadow = true; p.receiveShadow = true;
+      grp.add(p);
+      if (i === N - 1) {
+        const ult = p.clone(); ult.position.x = x + PASSO / 2; grp.add(ult);
+      }
+      // Il NUMERO del barbero, sul montante davanti al suo box.
+      const targa = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.44),
+        new THREE.MeshBasicMaterial({ map: numeroTex(i + 1), side: THREE.DoubleSide }));
+      targa.position.set(x, 1.16, Z_CAV + 1.36);   // appesa alla transenna
+      grp.add(targa);
+      // IL BARBARESCO: sta davanti al suo cavallo e lo tiene alla capezza.
+      const camicia = new THREE.MeshStandardMaterial({ color: [0xdedad0, 0x9fb3c8, 0xc9a89a, 0xb9c4a8][i % 4], roughness: 0.93 });
+      const busto = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.6, 3, 7), camicia);
+      busto.position.set(x - 0.55, 0.7, Z_CAV + 0.7);   // fra il suo barbero e la transenna
+      busto.castShadow = true;
+      const testa = new THREE.Mesh(new THREE.SphereGeometry(0.155, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd7a781, roughness: 0.9 }));
+      testa.position.set(busto.position.x, 1.2, busto.position.z);
+      grp.add(busto, testa);
+    }
+    // La TRANSENNA davanti alla fila: due correnti di legno su montanti, la
+    // barriera oltre la quale sta la folla.
+    const LUNG = (N - 1) * PASSO + PASSO;
+    [1.02, 0.62].forEach((h) => {
+      const corr = new THREE.Mesh(new THREE.BoxGeometry(LUNG, 0.09, 0.09), materials.wood);
+      corr.position.set(X0 + (N - 1) * PASSO / 2, h, Z_CAV + 1.4);
+      corr.castShadow = true;
+      grp.add(corr);
+    });
+    for (let x = X0 - PASSO / 2; x <= X0 + (N - 1) * PASSO + PASSO / 2 + 0.01; x += PASSO) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), materials.wood);
+      m.position.set(x, 0.55, Z_CAV + 1.4);
+      m.castShadow = true;
+      grp.add(m);
+    }
+  }
 
   // Colloca il tavolo al CENTRO DEL RETTILINEO, sotto il Palazzo, girato verso
   // il Campo (la camera): il bambino resta dietro il tavolo, spalle al Palazzo.
