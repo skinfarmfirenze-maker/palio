@@ -4755,7 +4755,14 @@ function spectateSkipToStart() {
     h.mossaTurn = 0;                                           // dritte verso la pista
     h.called = true; h.entering = false;
   });
-  if (rincorsa) { rincorsa.prevProgress = MOSSA_BACK_LIMIT; rincorsa.progress = MOSSA_BACK_LIMIT + 0.15; rincorsa.lane = 0; }
+  if (rincorsa) {
+    // NON si sposta di forza chi sta gia' arrivando: qui la rincorsa veniva
+    // teletrasportata al canapo e buttata in mezzo alla pista (lane 0) proprio nell'istante del via, e per il
+    // giocatore era uno scatto in piena corsa. Adesso si porta avanti solo chi e'
+    // rimasto indietro, e la linea che si e' scelto non gliela tocca nessuno.
+    rincorsa.progress = Math.max(rincorsa.progress, MOSSA_BACK_LIMIT + 0.15);
+    rincorsa.prevProgress = rincorsa.progress - 0.01;
+  }
   releaseRace();
   showMessage("Ha fiancato, la mossa è valida!", 1.8, "good");   // dopo il Via, così resta a schermo il messaggio giusto
 }
@@ -10546,7 +10553,14 @@ function updateMossa(dt, time) {
     state.forcedStartWindow -= dt;
     if (rincorsa) rincorsa.wantsToEnter = true;   // spingi la rincorsa a lanciarsi
     if (state.forcedStartWindow <= 0) {           // 10s scaduti: entra a forza e VIA (valida)
-      if (rincorsa) { rincorsa.prevProgress = MOSSA_BACK_LIMIT; rincorsa.progress = MOSSA_BACK_LIMIT + 0.15; }
+    if (rincorsa) {
+      // NON si sposta di forza chi sta gia' arrivando: qui la rincorsa veniva
+      // teletrasportata al canapo proprio nell'istante del via, e per il
+      // giocatore era uno scatto in piena corsa. Adesso si porta avanti solo chi e'
+      // rimasto indietro, e la linea che si e' scelto non gliela tocca nessuno.
+      rincorsa.progress = Math.max(rincorsa.progress, MOSSA_BACK_LIMIT + 0.15);
+      rincorsa.prevProgress = rincorsa.progress - 0.01;
+    }
       releaseRace();
       return;
     }
@@ -10794,12 +10808,23 @@ function updateRincorsa(rincorsa, dt) {
   // esterno, dove c'è il varco), MAI a destra. Se col muso libero il giocatore prova
   // a varcare il canapo stando sul lato INTERNO del paletto (lane > VERROCCHINO_LANE),
   // il paletto+canapo lo fermano: resta dietro finché non torna nel varco a sinistra.
-  if (rincorsa.lane > VERROCCHINO_LANE + 0.2 && rincorsa.progress > MOSSA_BACK_LIMIT - 0.4) {
-    rincorsa.progress = MOSSA_BACK_LIMIT - 0.4;
-    if (rincorsa.rincorsaSpeed > 0) rincorsa.rincorsaSpeed = 0;
-    if (state.messageTimer <= 0 && (state.verroMsgCd ?? 0) <= 0) {
-      showMessage("La rincorsa entra a SINISTRA del verrocchino", 1.4, "danger");
-      state.verroMsgCd = 3.0;
+  // Il paletto SCANSA, non inchioda. Prima qui c'era un muro secco: chi arrivava
+  // al canapo anche solo un po' interno si vedeva riportare indietro il progress
+  // di forza e azzerare lo slancio, un frame dopo l'altro — il cavallo restava
+  // incollato al canapo e il movimento andava a scatti. Adesso, avvicinandosi al
+  // canapo con la linea sbagliata, il cavallo viene scivolato verso il varco: la
+  // regola resta (si entra a sinistra del verrocchino) ma la corsa non si ferma
+  // mai e il progress non viene MAI toccato.
+  {
+    const DA = MOSSA_BACK_LIMIT - 2.8;
+    if (rincorsa.progress > DA && rincorsa.lane > VERROCCHINO_LANE + 0.2) {
+      const vicino = clamp((rincorsa.progress - DA) / 2.4, 0, 1);
+      rincorsa.lane = lerp(rincorsa.lane, VERROCCHINO_LANE - 0.4, clamp(dt * 4.5 * vicino, 0, 1));
+      rincorsa.mossaLane = rincorsa.lane;
+      if (state.messageTimer <= 0 && (state.verroMsgCd ?? 0) <= 0) {
+        showMessage("La rincorsa entra a SINISTRA del verrocchino", 1.4, "danger");
+        state.verroMsgCd = 3.0;
+      }
     }
   }
   state.verroMsgCd = Math.max(0, (state.verroMsgCd ?? 0) - dt);
