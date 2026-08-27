@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva, mantoDi } from "./cavallo-lab.js";   // fronte viva + manti reali dei barberi
+import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
@@ -3187,6 +3187,10 @@ function attaccaHorseGlbInner(horse) {
       spenn.userData.baseY = spenn.position.y;
       spenn.userData.baseZ = spenn.position.z;
       spenn.userData.baseRotX = spenn.rotation.x;
+      // ALLA TRATTA il barbero e' ancora di nessuno: la spennacchiera porta i
+      // colori della Contrada, quindi non puo' stare sulla fronte prima che il
+      // mossiere l'abbia chiamata. Spunta in announceTrattaContrada.
+      if (state.mode === "tratta" && !horse.spennRivelata) nascondiSpennacchiera(spenn);
     }
     // FANTINO GLB in sella: usa la bbox del cavallo (bb) per la seduta sul dorso.
     horse.group.userData.horseBB = bb;
@@ -3239,6 +3243,7 @@ function updateHorseGlb(dt) {
       // (cavallo-lab). Prima si ondeggiava con un seno NON sincronizzato ai morph:
       // la fronte si muove di 0.69 in altezza per falcata e la spennacchiera si
       // staccava dalla testa. L'offset di montaggio iniziale viene preservato.
+      aggiornaComparsa(spenn, dt);   // la molla della comparsa (tratta)
       ancoraFronteViva(r.morphMesh, r.horse.group, _spennPos);
       if (!spenn.userData.offReady) {
         spenn.userData.offX = spenn.position.x - _spennPos.x;
@@ -7954,6 +7959,9 @@ function announceTrattaContrada(p) {
   scene.add(spr);
   T.labels.push({ spr, entrant: p.entrant, alpha: 1, fading: false });
   p.entrant.revealPulse = 1;
+  // Adesso il barbero ha una Contrada: la spennacchiera compare sulla sua fronte.
+  p.entrant.spennRivelata = true;
+  mostraSpennacchiera(p.entrant.group.userData && p.entrant.group.userData.spennObj);
   if (state.trattaObjects) state.trattaObjects.popTimer = 0.4;
   speakContrada(p.entrant.name);                 // voce del mossiere: la contrada
   // Canto/grido della Contrada appena assegnata (sfuma alla chiamata successiva).
@@ -7979,6 +7987,12 @@ function announceTrattaContrada(p) {
 
 function trattaAllRevealed() {
   if (state.tratta.timeline) state.tratta.timeline.done = true;
+  // Rete di sicurezza: a cerimonia finita tutti hanno la loro spennacchiera,
+  // anche i barberi la cui chiamata fosse stata saltata.
+  (state.horses || []).forEach((h) => {
+    h.spennRivelata = true;
+    mostraSpennacchiera(h.group.userData && h.group.userData.spennObj, true);
+  });
   const skip = document.getElementById("trattaSkipBtn");
   const go = document.getElementById("trattaGoBtn");
   if (skip) skip.style.display = "none";
@@ -9528,16 +9542,41 @@ function triggerMossaFalsa(motivo) {
   try { fadeBusta(0.6); } catch (e) { /* niente */ }
   try { playStartMossa(); } catch (e) { /* niente */ }
   // I cavalli SCATTANO in avanti come a una partenza vera (galoppo breve).
-  state.horses.forEach((h) => { h.falseStartSpeed = 9 + Math.random() * 3; h.canapeStop = false; });
+  // Si parte da FERMI e si accelera (updateFalseStartRunout): prima si partiva
+  // gia' a velocita' piena, e si vedeva che era una finta.
+  state.horses.forEach((h) => {
+    h.falseStartSpeed = 0;
+    h.falseStartTarget = 8.5 + Math.random() * 4;
+    h.canapeStop = false;
+  });
 }
 
 // Avanzamento del FALSO AVVIO (4s): galoppo → 2s mortaretto → 4s ritorno al tondino.
 function updateFalseStartRunout(dt, time) {
   state.falseStartTimer += dt;
   state.canapiDrop += dt;                                 // il canapo frontale resta giù
+  const player = getPlayer();
+  const controls = getControls();
   state.horses.forEach((h) => {
-    h.progress += (h.falseStartSpeed || 9) * dt;
+    // SI RADDRIZZANO. Ai canapi ogni cavallo e' girato per conto suo (mossaTurn):
+    // se non lo si azzera, alla mossa falsa partono di traverso — era il difetto
+    // segnalato, sembravano lanciati storti invece che scattati verso la curva.
+    h.mossaTurn = lerp(h.mossaTurn || 0, 0, clamp(dt * 7, 0, 1));
+    // PARTENZA VERA, non una velocita' piatta: si scatta da fermi e si prende
+    // velocita' in circa mezzo secondo, ognuno con la propria foga.
+    if (h.falseStartTarget == null) h.falseStartTarget = 8.5 + Math.random() * 4;
+    h.falseStartSpeed = Math.min(h.falseStartTarget, (h.falseStartSpeed || 0) + dt * 26);
+    h.progress += h.falseStartSpeed * dt;
     h.mossaProgress = h.progress;
+    // E CERCANO LA LORO CORSIA, come farebbero al via: chi punta il muro interno,
+    // chi si allarga. Il giocatore la sua la sceglie con le sue mani.
+    if (h === player && !h.autopilot) {
+      const steer = (controls.right ? 1 : 0) - (controls.left ? 1 : 0);
+      if (steer) h.targetLane = h.targetLane + steer * dt * 6;
+    }
+    const lim = outerLimitAt(h.progress);
+    h.targetLane = clamp(h.targetLane ?? h.lane, -lim, AI_LANE_LIMIT);
+    h.lane = clamp(lerp(h.lane, h.targetLane, clamp(dt * 2.4, 0, 1)), -lim, AI_LANE_LIMIT);
     h.speedLevel = 8;                                     // gambe in galoppo
     placeHorse(h, time);
   });
@@ -9562,7 +9601,7 @@ function resetMossaAfterFalsa() {
     h.called = false;
     h.entering = false; h.enterPhase = undefined; h.mossaTurn = 0; h.behaviorState = "idle";
     h.nervBackState = null; h.nervBackTimer = 0;   // si riparte dal tondino: nessuno resta "agitato"
-    h.blockingRincorsa = false; h.falseStartSpeed = 0;
+    h.blockingRincorsa = false; h.falseStartSpeed = 0; h.falseStartTarget = null;
     h.returningToTondino = true;
     // TAGLIO: dopo la mossa FALSA si riparte DIRETTAMENTE dal tondino (snap immediato),
     // non col rientro lento a piedi. dt enorme → il passo copre tutta la distanza in 1 frame.

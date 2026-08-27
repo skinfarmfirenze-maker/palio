@@ -100,3 +100,47 @@ export function mantoDi(nomeCavallo) {
   const m = MANTI_REALI[nomeCavallo];
   return m ? (COLORE_MANTO[m] || null) : null;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 3) COMPARSA DELLA SPENNACCHIERA ALL'ASSEGNAZIONE
+// Alla tratta il barbero è ancora "nudo": la spennacchiera porta i colori della
+// Contrada, quindi non può esserci prima che la Contrada gli sia stata assegnata.
+// Deve spuntare sulla fronte nel momento in cui il mossiere la chiama, un cavallo
+// per volta. Qui la meccanica: nascondi → mostra con una comparsa a molla.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const COMPARSA_DURATA = 0.55;   // secondi
+
+// Il pennacchio non c'è ancora (barbero non assegnato).
+export function nascondiSpennacchiera(spenn) {
+  if (!spenn) return;
+  spenn.visible = false;
+  spenn.userData.comparsa = null;
+  spenn.scale.setScalar(0.001);
+}
+
+// La Contrada è stata chiamata: il pennacchio spunta sulla fronte.
+export function mostraSpennacchiera(spenn, immediata = false) {
+  if (!spenn) return;
+  spenn.visible = true;
+  if (immediata) {
+    spenn.userData.comparsa = null;
+    spenn.scale.setScalar(1);
+    return;
+  }
+  spenn.userData.comparsa = 0;
+  spenn.scale.setScalar(0.001);
+}
+
+// Da chiamare nel loop, insieme all'aggiornamento della posizione: fa crescere il
+// pennacchio con un piccolo rimbalzo (sorpasso e assestamento), così si nota che
+// è appena comparso invece di apparire di scatto.
+export function aggiornaComparsa(spenn, dt) {
+  if (!spenn || spenn.userData.comparsa == null) return;
+  const t = Math.min(1, spenn.userData.comparsa + dt / COMPARSA_DURATA);
+  spenn.userData.comparsa = t;
+  // molla smorzata: parte veloce, supera l'1 e rientra
+  const s = t >= 1 ? 1 : 1 - Math.pow(2, -9 * t) * Math.cos(t * 13.5);
+  spenn.scale.setScalar(Math.max(0.001, s));
+  if (t >= 1) { spenn.userData.comparsa = null; spenn.scale.setScalar(1); }
+}
