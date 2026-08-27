@@ -60,8 +60,8 @@ export const PALCHI_FONDO = MIS.palcoFronte + MIS.palcoFile * MIS.palcoPedata;
 
 // ── Tinte ────────────────────────────────────────────────────────────────────
 export const COL = {
-  salvia: "#a3ab7a",       // il verde dei pannelli
-  salviaScuro: "#6f7850",
+  salvia: "#8f7452",       // il MARRONE dei pannelli (era verde: corretto da Simone)
+  salviaScuro: "#63503a",
   crema: "#e7dfc4",
   avorio: "#f0ead6",
   ocra: "#b9964e",
@@ -301,7 +301,7 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
         x0 + Math.random() * P, Math.random() * H, P * (0.06 + Math.random() * 0.18)
       );
       const scuro = Math.random() < 0.5;
-      g.addColorStop(0, scuro ? "rgba(70,78,48,0.16)" : "rgba(226,224,190,0.16)");
+      g.addColorStop(0, scuro ? "rgba(64,50,34,0.16)" : "rgba(226,216,186,0.16)");
       g.addColorStop(1, "rgba(0,0,0,0)");
       x.fillStyle = g;
       x.fillRect(x0, 0, P, H);
@@ -372,7 +372,7 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
 
     // Ogni tavolato ha preso il sole in modo diverso: velatura per pannello.
     const vel = ((i * 37) % 5) / 4;
-    x.fillStyle = `rgba(${vel < 0.5 ? "236,228,190" : "84,92,58"},${0.05 + vel * 0.07})`;
+    x.fillStyle = `rgba(${vel < 0.5 ? "232,218,184" : "70,56,38"},${0.05 + vel * 0.07})`;
     x.fillRect(x0, 0, P, H);
 
     // Cucitura fra un pannello e l'altro + cerniere.
@@ -516,7 +516,7 @@ export function costruisciSteccatoEsterno(ctx, opz = {}) {
   });
   dipinto.map.repeat.set(1, 1);
   const legno = opaco({ map: opz.texturaLegno || texturaLegno(), color: 0xffffff, roughness: 0.8 });
-  const retro = opaco({ color: 0x7d855e, roughness: 0.88 });
+  const retro = opaco({ color: 0x7a6448, roughness: 0.88 });
 
   const staz = stazioni(ctx, { lato: "esterno", extra: opz.sporgenza ?? MIS.estSporgenza, passo: opz.passo || 3 });
   const zone = { varchi: opz.varchi || null, soloTra: opz.soloTra || null };
@@ -1441,5 +1441,94 @@ export function costruisciPonteCapitani(ctx, opz = {}) {
   const largoQui = ctx.largoEsterno ? 0 : 0;
   g.position.copy(rif.bordo).addScaledVector(rif.fuori, opz.dalBordoAlFilo ?? 6.2);
   g.rotation.y = rif.yaw + Math.PI;
+  return g;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 8. LA FOLLA DEL CENTRO PIAZZA
+// ──────────────────────────────────────────────────────────────────────────────
+// All'assegnazione dei cavalli la piazza è PIENA: migliaia di persone in piedi
+// dentro la conchiglia (richiesta di Simone: «molto più pubblico»). Instanziata
+// (corpi + teste = 2 draw call qualunque sia `quanti`), con il test di
+// contenimento vero: dentro il perimetro interno della staccionata, MAI sul
+// tufo. Più fitta verso la pista (tutti vogliono vedere), dirada verso il
+// centro. Il gioco la monta per fase: tratta/assegnazione piena, gara più
+// scarica, estrazione vuota.
+export function costruisciFollaCentro(ctx, opz = {}) {
+  const g = new THREE.Group();
+  g.name = "FollaCentro";
+  const quanti = opz.quanti ?? 6000;
+  const margine = opz.margine ?? 1.6;          // dal bordo pista (staccionata a 0.35)
+  const camp = ctx.campioni;
+
+  // Bounding box dell'anello, per campionare i punti candidati.
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  camp.forEach((s) => {
+    minX = Math.min(minX, s.point.x); maxX = Math.max(maxX, s.point.x);
+    minZ = Math.min(minZ, s.point.z); maxZ = Math.max(maxZ, s.point.z);
+  });
+
+  const tinte = [0xe8e4da, 0xf0ece2, 0xdcd6c8, 0xcfc8ba, 0xe6ddcb, 0x9aa2ab,
+    0xb8a890, 0xa89a86, 0x8a8478, 0x736d63, 0x55606b, 0x6b4a3a, 0x84725c,
+    0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0xb85a8c, 0xd97e2f];
+  const pelle = [0xd8ac86, 0xc59468, 0xe3c19c, 0xa87b52, 0x8a5f3c];
+  const corpi = new THREE.InstancedMesh(
+    new THREE.CapsuleGeometry(0.15, 0.85, 2, 6),
+    new THREE.MeshStandardMaterial({ roughness: 0.95 }),
+    quanti
+  );
+  const teste = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.1, 6, 5),
+    new THREE.MeshStandardMaterial({ roughness: 0.9 }),
+    quanti
+  );
+  const d = new THREE.Object3D();
+  const col = new THREE.Color();
+  let seme = opz.seme ?? 12345;
+  const rnd = () => { seme = (seme * 9301 + 49297) % 233280; return seme / 233280; };
+  let n = 0, guardia = 0;
+  const passoCampioni = Math.max(1, Math.floor(camp.length / 180));
+  while (n < quanti && guardia < quanti * 12) {
+    guardia += 1;
+    const qx = minX + rnd() * (maxX - minX);
+    const qz = minZ + rnd() * (maxZ - minZ);
+    let migliore = null, d2min = Infinity;
+    for (let k = 0; k < camp.length; k += passoCampioni) {
+      const dx = camp[k].point.x - qx, dz = camp[k].point.z - qz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < d2min) { d2min = d2; migliore = camp[k]; }
+    }
+    const dist = Math.sqrt(d2min);
+    const dal = dist - (ctx.largoInterno ? ctx.largoInterno(migliore) : 11.5);
+    if (dal < margine) continue;                                  // troppo vicino: tufo/staccionata
+    const vx = qx - migliore.point.x, vz = qz - migliore.point.z;
+    const f = ctx.fuori(migliore.point);
+    if (vx * f.x + vz * f.z >= 0) continue;                       // lato esterno: scarta
+    // Più fitta vicino alla pista: oltre i 9 dal bordo la densità cala.
+    if (dal > 9 && rnd() < (dal - 9) / 18) continue;
+    const alt = 0.86 + rnd() * 0.3;
+    d.position.set(qx, 0.62 * alt, qz);
+    d.rotation.set(0, rnd() * TAU, 0);
+    d.scale.set(1, alt, 1);
+    d.updateMatrix();
+    corpi.setMatrixAt(n, d.matrix);
+    col.setHex(tinte[Math.floor(rnd() * tinte.length) % tinte.length]);
+    col.multiplyScalar(0.75 + rnd() * 0.45);
+    corpi.setColorAt(n, col);
+    d.position.y = 1.24 * alt + 0.28;
+    d.scale.set(1, 1, 1);
+    d.updateMatrix();
+    teste.setMatrixAt(n, d.matrix);
+    col.setHex(pelle[Math.floor(rnd() * pelle.length) % pelle.length]);
+    teste.setColorAt(n, col);
+    n += 1;
+  }
+  corpi.count = n; teste.count = n;
+  corpi.instanceMatrix.needsUpdate = true;
+  teste.instanceMatrix.needsUpdate = true;
+  if (corpi.instanceColor) corpi.instanceColor.needsUpdate = true;
+  if (teste.instanceColor) teste.instanceColor.needsUpdate = true;
+  corpi.castShadow = false; teste.castShadow = false;
+  g.add(corpi, teste);
   return g;
 }

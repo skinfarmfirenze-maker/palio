@@ -30,7 +30,7 @@ export const MISP = {
   gap: 0.45,          // stacco fra il fondo dei palchi e il filo delle facciate
   profondita: 7.0,    // quanto sono profondi i volumi (verso fuori)
   piano: 3.55,        // altezza di un piano
-  altezzaMin: 11.5,
+  altezzaMin: 20.0,    // cortina alta e omogenea (richiesta utente)
   altezzaMax: 24.5,
   bloccoMin: 15.0,    // larghezza di un palazzo: pochi e LUNGHI (richiesta utente)
   bloccoMax: 27.0,
@@ -332,7 +332,14 @@ export function costruisciPalazzi(ctx, opz = {}) {
       const gotico = semeGen() < 0.45;
       const stile = gotico ? "gotico" : "intonaco";
       const larghezza = b.s - a.s;
-      const piani = Math.max(3, Math.min(7, Math.round((MISP.altezzaMin + semeGen() * (MISP.altezzaMax - MISP.altezzaMin)) / MISP.piano)));
+      let piani = Math.max(6, Math.min(7, Math.round((MISP.altezzaMin + semeGen() * (MISP.altezzaMax - MISP.altezzaMin)) / MISP.piano)));
+      // opz.bassi = [{ giro }]: l'unico palazzo BASSO della piazza (alla curva
+      // di San Martino). Se il punto cade nel blocco, il blocco scende a 3 piani.
+      if ((opz.bassi || []).some((v) => {
+        const g0 = a.giro, g1 = b.giro >= a.giro ? b.giro : b.giro + 1;
+        const gg = v.giro >= g0 ? v.giro : v.giro + 1;
+        return gg >= g0 && gg <= g1;
+      })) piani = 3;
       const tinta = semeGen();
       blocchi.push({
         a, b, stile, piani, tinta,

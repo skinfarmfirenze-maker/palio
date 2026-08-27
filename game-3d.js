@@ -1296,6 +1296,10 @@ function buildScene() {
     scene.add(costruisciPalazzi(scenaCtx, {
       fondoPalchi: PALCHI_FONDO,
       varchi: [{ da: 0.565, a: 0.635 }],
+      // Cortina alta e uniforme, tranne UNO: quello basso alla curva di San
+      // Martino. Legato a SM_IN/SM_OUT come la via del Casato, non a un numero
+      // scritto a mano: se il tracciato cambia, il palazzo basso lo segue.
+      bassi: NARROW_READY ? [{ giro: (SM_IN + SM_OUT) * 0.5 / track.length }] : [],
       strade: [
         // La COSTARELLA dei Barbieri, che sbuca in piazza subito dopo il canape:
         // sopra la sua bocca passa il ponte dei Capitani (modulo scenografia).
@@ -1911,7 +1915,9 @@ function buildCrowdAndFlags() {
     body.userData.baseY = body.position.y;
     body.userData.phase = Math.random() * TAU;
     state.crowd.push(body);
-    addAllestimento(body);
+    // Sempre in scena, in ogni fase: all'estrazione e alla Tratta la Piazza e'
+    // piena di contradaioli anche se il tufo non e' ancora steso.
+    scene.add(body);
   };
 
   // (RIMOSSI i 420 figuranti in piedi lungo l'anello: stavano a un offset FISSO dal
@@ -2002,7 +2008,7 @@ function buildCrowdAndFlags() {
   dense.castShadow = false;
   dense.receiveShadow = false;
   dense.name = "FollaFitta";
-  addAllestimento(dense);
+  scene.add(dense);   // idem: la conchiglia e' gremita in ogni fase
 
   for (let i = 0; i < 54; i += 1) {
     const contrada = CONTRADE[i % CONTRADE.length];
