@@ -901,6 +901,16 @@ export function costruisciPiazza(ctx, opz = {}) {
     varchiPalchi8.push(pal.tutto);
   }
 
+  const vie = (opz.vie || []).map((v) => ({
+    cum: v.cum,
+    larghezza: v.larghezza ?? 6,
+    impalcatura: v.impalcatura !== false,
+    figure: v.figure ?? 6,
+    dalBordo: v.dalBordo ?? 6.2,
+    varco: { da: v.cum - (v.larghezza ?? 6) / 2 - 1.8, a: v.cum + (v.larghezza ?? 6) / 2 + 1.8 }
+  }));
+  vie.forEach((v) => varchiPalchi8.push(v.varco));
+
   const palchi = costruisciPalchi(ctxEst, { ...opz.palchi, varchi: varchiPalchi8, ...cond });
   g.add(palchi.gruppo);
   let posti = palchi.posti;
@@ -944,6 +954,17 @@ export function costruisciPiazza(ctx, opz = {}) {
       ...cond
     }));
   }
+  vie.forEach((v) => {
+    g.add(costruisciFotografi(ctxEst, { da: v.varco.da + 0.4, a: v.varco.a - 0.4 }));
+    if (v.impalcatura) {
+      // Impalcatura sopra la via, come il ponte dei capitani ma con poche
+      // figure scure (operatori/fotografi), non i capitani schierati.
+      g.add(costruisciPonteCapitani(ctxEst, {
+        cum: v.cum, larghezzaVia: v.larghezza, dalBordoAlFilo: v.dalBordo,
+        capitani: v.figure, ...cond
+      }));
+    }
+  });
   g.add(costruisciSteccatoInterno(ctx, { ...opz.interno, ...cond }));
   if (opz.pubblico !== false) g.add(costruisciPubblicoPalchi(posti, opz.pubblicoOpz || {}));
   return { gruppo: g, posti, palchi, zone: pal };
@@ -1302,16 +1323,18 @@ export function costruisciFotografi(ctx, opz = {}) {
   punti.forEach((q, i) => {
     const acc = ((Math.sin((i + 1) * 12.9898) * 43758.5453) % 1 + 1) % 1;
     if (acc < 0.25) return;                       // qualche buco
-    const kneel = acc < 0.62;                     // molti accovacciati, alcuni in piedi
-    const h = kneel ? 0.44 : 0.66;
-    const corpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.155, h * 0.8, 3, 7), opaco({ color: tinte[i % tinte.length], roughness: 0.92 }));
+    const kneel = acc < 0.55;                     // metà accovacciati, metà in piedi
+    // In piedi ~1.75 (testa e macchina SOPRA la palancata da 1.47), accovacciati
+    // ~1.35: spunta solo la testa. Prima erano nani e sparivano dietro il pannello.
+    const h = kneel ? 0.55 : 0.85;
+    const corpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, h, 3, 7), opaco({ color: tinte[i % tinte.length], roughness: 0.92 }));
     corpo.position.copy(q.p).addScaledVector(q.fuori, 0.1);
-    corpo.position.y = q.p.y + h;
+    corpo.position.y = q.p.y + h * 0.62 + (kneel ? 0.18 : 0.32);
     corpo.rotation.y = q.yaw + Math.PI;           // guardano la pista
     corpo.castShadow = true;
     g.add(corpo);
-    const testa = new THREE.Mesh(new THREE.SphereGeometry(0.095, 7, 5), opaco({ color: 0xd4a87f, roughness: 0.9 }));
-    testa.position.copy(corpo.position).setY(corpo.position.y + h * 0.62 + 0.12);
+    const testa = new THREE.Mesh(new THREE.SphereGeometry(0.098, 7, 5), opaco({ color: 0xd4a87f, roughness: 0.9 }));
+    testa.position.copy(corpo.position).setY(corpo.position.y + h * 0.62 + 0.16);
     g.add(testa);
     // La macchina fotografica al viso, verso la pista.
     const cam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.12), opaco({ color: 0x111114, roughness: 0.6 }));
