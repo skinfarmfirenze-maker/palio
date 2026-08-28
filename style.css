@@ -866,7 +866,7 @@ textarea {
   margin: 4px 0 2px;
 }
 
-/* ---- Home: sostegno al gioco (dona / consiglio) in basso a destra ---- */
+/* ---- Home: il bottone dei consigli, in basso a destra ---- */
 .home-support {
   position: absolute;
   right: 18px;
@@ -893,12 +893,6 @@ textarea {
   text-align: center;
 }
 .support-btn:hover { transform: translateY(-1px); }
-.support-donate {
-  background: #f0cb35;
-  color: #1a1206;
-  border-color: #f0cb35;
-}
-.support-donate:hover { background: #f5d34e; }
 .support-suggest:hover { background: rgba(240, 203, 53, 0.14); }
 @media (max-width: 640px) {
   .home-support { right: 10px; bottom: 10px; gap: 6px; }

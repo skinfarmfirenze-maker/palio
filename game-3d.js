@@ -13489,8 +13489,6 @@ function bindEvents() {
     // e intanto riscarico l'albo GLOBALE: se cambia, ridisegno l'overlay aperto.
     fetchGlobalAlbo().then((a) => { if (a && document.getElementById("alboOverlay")) openAlboVittorie(); });
   });
-  const donateBtn = document.getElementById("donateBtn");
-  if (donateBtn) donateBtn.addEventListener("click", openDonate);
   const suggestBtn = document.getElementById("suggestBtn");
   if (suggestBtn) suggestBtn.addEventListener("click", openSuggestOverlay);
   ui.backToMenuButton.addEventListener("click", openMenuScreen);
@@ -14393,10 +14391,6 @@ function registraCreazioneAccount() {
   arr.push(Date.now());
   try { localStorage.setItem("palio.acctCreations", JSON.stringify(arr)); } catch (e) { /* niente */ }
 }
-// Link Stripe per le donazioni. VUOTO finché non creiamo il Payment Link: appena
-// pronto, incolla qui l'URL (es. "https://buy.stripe.com/xxxxxxxx") e i bottoni
-// "Dona" ci mandano. Con stringa vuota il bottone mostra "presto disponibile".
-const STRIPE_DONATE_URL = "";
 function getAccount() {
   try { const a = JSON.parse(localStorage.getItem(ACCOUNT_KEY)); return (a && a.email) ? a : null; } catch (e) { return null; }
 }
@@ -14743,11 +14737,7 @@ function openAccountManage() {
   setTimeout(() => { try { $("amNome").focus(); } catch (e) { /* niente */ } }, 60);
 }
 
-// ── SOSTEGNO AL GIOCO: bottoni "Dona" e "Dacci un consiglio" (home) ───────────
-function openDonate() {
-  if (STRIPE_DONATE_URL) { window.open(STRIPE_DONATE_URL, "_blank", "noopener"); return; }
-  showMessage("La pagina per donare sarà presto disponibile. Grazie!", 3.0, "good");
-}
+// ── SOSTEGNO AL GIOCO: il bottone "Dacci un consiglio" in home ───────────────
 
 // Overlay per inviare un consiglio (finisce nella sezione admin via /api/account).
 // Popup FEEDBACK una tantum: dopo che il giocatore ha corso 3 palii, gli si chiede
