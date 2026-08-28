@@ -1264,10 +1264,16 @@ function buildScene() {
       // palazzi. Per una punta piu' marcata va allargato il filo della cortina.
       mossa: { verrocchioCum: positiveMod(MOSSA_FRONT_LIMIT, track.length), punta: 0.45 },
       // LE VIE che sboccano in Piazza: dove entrano non ci sono gradinate, ma i
-      // fotografi a delimitare la pista e un'impalcatura che scavalca la bocca
-      // della via. La Costarella (quella del palco dei Capitani) e' gia' dentro
-      // l'opzione `mossa` qui sopra: qui va solo San Martino.
-      vie: NARROW_READY ? [{ cum: (SM_IN + SM_OUT) * 0.5, larghezza: 7, figure: 6 }] : [],
+      // fotografi a delimitare la pista. La Costarella — la terza — e' gia' dentro
+      // l'opzione `mossa` qui sopra, col suo ponte dei Capitani.
+      // Due: quella all'esterno di SAN MARTINO (sbocca PRIMA dell'ingresso in
+      // curva, non all'apice) con la sua impalcatura, e quella dal lato
+      // dell'UFFICIO TURISTICO, fra il Casato e la mossa, che impalcatura non ha.
+      // ⚠️ La seconda e' una posizione STIMATA: da correggere guardandola.
+      vie: NARROW_READY ? [
+        { cum: SM_IN - 3.5, larghezza: 6, impalcatura: true, figure: 6 },
+        { cum: CAS_OUT + 25.5, larghezza: 6, impalcatura: false },
+      ] : [],
       palazzo: { cum: getStraightCenterP() },
     }).gruppo;
     scene.add(state.scenaPiazza);
@@ -1306,9 +1312,12 @@ function buildScene() {
       // scritto a mano: se il tracciato cambia, il palazzo basso lo segue.
       bassi: NARROW_READY ? [{ giro: (SM_IN + SM_OUT) * 0.5 / track.length }] : [],
       strade: [
-        // La via che sbuca all'esterno di SAN MARTINO: come la Costarella, li' i
-        // palchi non ci sono (il varco lo apre la chiamata a costruisciPiazza).
-        ...(NARROW_READY ? [{ giro: (SM_IN + SM_OUT) * 0.5 / track.length, larghezza: 7 }] : []),
+        // Le bocche in cortina delle due vie qui sopra (stessi cum, se no la via
+        // e' aperta nei palchi ma murata nei palazzi, o viceversa).
+        ...(NARROW_READY ? [
+          { giro: (SM_IN - 3.5) / track.length, larghezza: 6 },
+          { giro: (CAS_OUT + 25.5) / track.length, larghezza: 6 },
+        ] : []),
         // La COSTARELLA dei Barbieri, che sbuca in piazza subito dopo il canape:
         // sopra la sua bocca passa il ponte dei Capitani (modulo scenografia).
         { giro: 5.5 / track.length, larghezza: 7 },
