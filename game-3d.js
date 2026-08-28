@@ -14363,10 +14363,13 @@ function showPasswordPrompt() {
 // dispositivo). Solo l'owner, con la password admin, vede l'elenco di tutti.
 const ACCOUNT_API = "/api/account";
 const ACCOUNT_KEY = "palioAccount";
-// ISCRIZIONI: aperte ora, si CHIUDONO dal 23 agosto 2026 alle 12:00 (a tempo
-// indeterminato). Il login degli account esistenti resta sempre attivo.
-const SIGNUP_BLOCK_START = new Date(2026, 7, 23, 12, 0, 0).getTime();   // 23 ago 2026, 12:00 (mese 7 = agosto)
-const SIGNUP_BLOCKED = Date.now() >= SIGNUP_BLOCK_START;
+// ISCRIZIONI: APERTE. C'era una chiusura a tempo fissata al 23 agosto 2026, ma il
+// 24 Simone ha chiesto l'opposto — «consenti ancora alle persone di registrarsi ma
+// non di giocare» — e quel blocco, piu' vecchio, era rimasto lì a chiudere il form
+// mentre il gate della DEMO faceva il suo lavoro a valle: chi arrivava non poteva
+// nemmeno iscriversi. Chi non e' fra gli abilitati si registra e si ferma alla
+// schermata "stiamo aggiornando" (vedi demoBloccaQuesto), che e' quello che serve.
+const SIGNUP_BLOCKED = false;
 const SIGNUP_BLOCK_MSG = "Al momento non è possibile iscriversi al Palio.";
 // Max 3 account creati dallo STESSO DISPOSITIVO in 30 giorni: al 3° si aspetta.
 const DEVICE_MAX_ACCOUNTS = 3;
@@ -14435,7 +14438,7 @@ function ensureAccountGate() {
     // ── SIGNUP
     + '<div id="paneSignup" style="display:none;flex-direction:column;align-items:center;gap:10px">'
     + `<div id="suBlockMsg" style="display:none;font-size:15px;line-height:1.4;color:#f0cb35;font-weight:700;max-width:min(360px,86vw);border:1px solid rgba(240,203,53,.5);background:rgba(240,203,53,.08);border-radius:12px;padding:16px 18px">${SIGNUP_BLOCK_MSG}</div>`
-    + '<div id="suForm" style="display:flex;flex-direction:column;align-items:center;gap:10px">'
+    + '<div id="suForm" class="acc-campi" style="display:flex;flex-direction:column;align-items:center;gap:10px">'
     + `<input id="suNome" type="text" placeholder="Nome" autocapitalize="words" style="${inCss}" />`
     + `<input id="suCognome" type="text" placeholder="Cognome" autocapitalize="words" style="${inCss}" />`
     + `<input id="suEmail" type="email" placeholder="Email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" style="${inCss}" />`
