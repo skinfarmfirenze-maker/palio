@@ -40,9 +40,9 @@ export const MISP = {
 
 // Tinte vere del Campo: cotto senese, intonaci crema/rosa/ocra, pietra chiara.
 const TINTE = {
-  gotico: ["#a55c39", "#9c5334", "#b0674a", "#96522f"],
-  intonaco: ["#e8d5ab", "#dfa683", "#d3ab6c", "#e9dcbc", "#cf8f6b", "#dcc396"],
-  pietra: "#efe7d4",
+  gotico: ["#b06a45", "#a55c39", "#b87350", "#9c5334"],
+  intonaco: ["#e9ddc2", "#e3c1a8", "#e8d3a4", "#dbb385", "#ece4d2", "#dfc9a6"],
+  pietra: "#f2ede1",
   cotto: "#8f4a2f",
   tetto: "#a4522c",
   legnoScuro: "#4a3524"
@@ -130,32 +130,43 @@ function trifora(x, X, Y, W, H, luci, pietra) {
   x.strokeRect(X - W * 0.06, Y - H * 0.06, W * 1.12, H * 1.12);
 }
 
-// Finestra riquadrata con davanzale e persiane (le facciate a intonaco).
-function finestraPersiane(x, X, Y, W, H, pietra, r) {
-  x.fillStyle = pietra;                                   // mostra di pietra
-  x.fillRect(X - W * 0.12, Y - H * 0.08, W * 1.24, H * 1.18);
-  x.fillStyle = "#2b241c";
+// Finestra vera delle facciate a intonaco (foto): più alta che larga, cornice
+// bianca che stacca forte, persiane grigio chiaro (aperte o accostate), e nei
+// giorni del Palio il DRAPPO ROSSO appeso al davanzale.
+function finestraVera(x, X, Y, W, H, pietra, r) {
+  x.fillStyle = pietra;                                   // cornice bianca
+  x.fillRect(X - W * 0.2, Y - H * 0.1, W * 1.4, H * 1.2);
+  x.fillStyle = "#3a3630";                                // vano
   x.fillRect(X, Y, W, H);
-  const g = x.createLinearGradient(X, Y, X, Y + H);
-  g.addColorStop(0, "rgba(170,192,208,0.5)");
-  g.addColorStop(1, "rgba(28,26,24,0.35)");
+  const g = x.createLinearGradient(X, Y, X, Y + H);       // vetro
+  g.addColorStop(0, "rgba(188,204,216,0.55)");
+  g.addColorStop(0.5, "rgba(74,80,84,0.3)");
+  g.addColorStop(1, "rgba(30,28,26,0.25)");
   x.fillStyle = g;
   x.fillRect(X, Y, W, H);
-  // Persiane: a volte chiuse (l'estate senese), a volte accostate ai lati.
-  const verde = r() < 0.45 ? "#6e7358" : "#8a7a5e";
-  const chiuse = r() < 0.42;
-  const disegnaAnta = (ax, aw) => {
-    x.fillStyle = verde;
-    x.fillRect(ax, Y, aw, H);
-    x.fillStyle = "rgba(0,0,0,0.22)";
-    for (let ly = Y + 2; ly < Y + H - 1; ly += Math.max(2.4, H / 14)) x.fillRect(ax + 1, ly, aw - 2, 1.1);
+  x.fillStyle = "rgba(58,54,48,0.9)";                     // traversa
+  x.fillRect(X, Y + H * 0.48, W, Math.max(1, H * 0.035));
+  const grigio = r() < 0.5 ? "#a8adb0" : "#9aa4ad";       // persiane chiare
+  const chiuse = r() < 0.3;
+  const anta = (ax, aw) => {
+    x.fillStyle = grigio;
+    x.fillRect(ax, Y - H * 0.02, aw, H * 1.04);
+    x.fillStyle = "rgba(40,44,48,0.28)";
+    for (let ly = Y + 1; ly < Y + H - 1; ly += Math.max(2.2, H / 15)) x.fillRect(ax + 1, ly, aw - 2, 1);
   };
-  if (chiuse) { disegnaAnta(X, W * 0.5); disegnaAnta(X + W * 0.5, W * 0.5); }
-  else { disegnaAnta(X - W * 0.18, W * 0.2); disegnaAnta(X + W * 0.98, W * 0.2); }
+  if (chiuse) { anta(X, W * 0.5); anta(X + W * 0.5, W * 0.5); }
+  else { anta(X - W * 0.24, W * 0.26); anta(X + W * 0.98, W * 0.26); }
   x.fillStyle = pietra;                                   // davanzale
-  x.fillRect(X - W * 0.2, Y + H * 1.06, W * 1.4, H * 0.09);
-  x.fillStyle = "rgba(70,52,36,0.28)";
-  x.fillRect(X - W * 0.2, Y + H * 1.15, W * 1.4, H * 0.03);
+  x.fillRect(X - W * 0.26, Y + H * 1.08, W * 1.52, H * 0.08);
+  if (r() < 0.36) {                                       // drappo del Palio
+    const dw = W * 1.15, dh = H * 0.6;
+    x.fillStyle = r() < 0.5 ? "#8e1f26" : "#7e1a20";
+    x.fillRect(X - W * 0.08, Y + H * 1.16, dw, dh);
+    x.fillStyle = "rgba(224,184,74,0.85)";                // bordino giallo
+    x.fillRect(X - W * 0.08, Y + H * 1.16 + dh - 2.5, dw, 2.5);
+    x.fillStyle = "rgba(30,10,8,0.25)";                   // pieghe
+    for (let k = 1; k < 4; k += 1) x.fillRect(X - W * 0.08 + (dw / 4) * k, Y + H * 1.16, 1.2, dh);
+  }
 }
 
 // ── LA TEXTURA DI UNA FACCIATA ───────────────────────────────────────────────
@@ -201,11 +212,10 @@ export function texturaFacciata({ stile = "intonaco", piani = 5, tinta, seme = 1
       if (stile === "gotico") {
         trifora(x, X0 + B * 0.17, y0 + hPiano * 0.16, B * 0.66, hPiano * 0.66, p === 0 ? 3 : (r() < 0.4 ? 2 : 3), pietra);
       } else {
-        // Le finestre non stanno tutte alla stessa quota né hanno tutte la stessa
-        // luce: nelle facciate vere l'ultimo piano è più basso e più piccolo.
+        // Finestre alte e strette come nelle foto; ultimo piano più piccolo.
         const stretta = p === piani - 1 ? 0.82 : 1;
-        const ww = B * 0.3 * stretta;
-        finestraPersiane(x, X0 + B * 0.5 - ww * 0.5, y0 + hPiano * (0.22 + r() * 0.04), ww, hPiano * 0.5 * stretta, pietra, r);
+        const ww = B * 0.26 * stretta;
+        finestraVera(x, X0 + B * 0.5 - ww * 0.5, y0 + hPiano * (0.16 + r() * 0.03), ww, hPiano * 0.62 * stretta, pietra, r);
       }
     }
   }
@@ -228,8 +238,22 @@ export function texturaFacciata({ stile = "intonaco", piani = 5, tinta, seme = 1
   // Cornicione dipinto sotto la gronda (il rilievo vero è geometria).
   x.fillStyle = stile === "gotico" ? "rgba(232,214,186,0.55)" : "rgba(255,250,238,0.6)";
   x.fillRect(0, 0, W, alt * 0.022);
-  x.fillStyle = "rgba(46,32,22,0.35)";
-  for (let px = 0; px < W; px += B * 0.11) x.fillRect(px, alt * 0.022, B * 0.055, alt * 0.014);
+  if (stile === "gotico") {
+    // ARCHETTI PENSILI: la fila di piccoli archi di pietra sotto la gronda.
+    const passoA = B * 0.055;
+    x.fillStyle = "rgba(238,226,202,0.8)";
+    x.fillRect(0, alt * 0.022, W, alt * 0.008);
+    for (let px = passoA / 2; px < W; px += passoA) {
+      x.beginPath();
+      x.arc(px, alt * 0.052, passoA * 0.36, Math.PI, TAU);
+      x.lineWidth = Math.max(1.2, passoA * 0.16);
+      x.strokeStyle = "rgba(238,226,202,0.8)";
+      x.stroke();
+    }
+  } else {
+    x.fillStyle = "rgba(46,32,22,0.35)";
+    for (let px = 0; px < W; px += B * 0.11) x.fillRect(px, alt * 0.022, B * 0.055, alt * 0.014);
+  }
 
   sporca(x, W, alt, r);
   const t = new THREE.CanvasTexture(c);
