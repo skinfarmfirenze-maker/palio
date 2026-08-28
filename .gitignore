@@ -22,3 +22,7 @@ game-3d.js.bak
 # Sistema
 .DS_Store
 .Rhistory
+
+# Script di deploy: contiene il token Vercel, non deve MAI finire nel repo.
+*.sh
+*.command
