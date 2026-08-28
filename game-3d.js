@@ -8,7 +8,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
-import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPiazza, costruisciPalizzata, costruisciFotografi, costruisciPonteCapitani, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -1263,6 +1263,10 @@ function buildScene() {
       // quindi 0.50 secchi: con 1.6 il fronte dei palchi entrava 1.10 DENTRO i
       // palazzi. Per una punta piu' marcata va allargato il filo della cortina.
       mossa: { verrocchioCum: positiveMod(MOSSA_FRONT_LIMIT, track.length), punta: 0.45 },
+      // Niente gradinate dove sbocca la via di San Martino.
+      palchi: NARROW_READY
+        ? { varchi: [{ da: (SM_IN + SM_OUT) * 0.5 - 4.5, a: (SM_IN + SM_OUT) * 0.5 + 4.5 }] }
+        : undefined,
       palazzo: { cum: getStraightCenterP() },
     }).gruppo;
     scene.add(state.scenaPiazza);
@@ -1301,6 +1305,9 @@ function buildScene() {
       // scritto a mano: se il tracciato cambia, il palazzo basso lo segue.
       bassi: NARROW_READY ? [{ giro: (SM_IN + SM_OUT) * 0.5 / track.length }] : [],
       strade: [
+        // La via che sbuca all'esterno di SAN MARTINO: come la Costarella, li' i
+        // palchi non ci sono (il varco lo apre la chiamata a costruisciPiazza).
+        ...(NARROW_READY ? [{ giro: (SM_IN + SM_OUT) * 0.5 / track.length, larghezza: 7 }] : []),
         // La COSTARELLA dei Barbieri, che sbuca in piazza subito dopo il canape:
         // sopra la sua bocca passa il ponte dei Capitani (modulo scenografia).
         { giro: 5.5 / track.length, larghezza: 7 },
@@ -1311,6 +1318,27 @@ function buildScene() {
       ],
     }).gruppo);
   } catch (e) { console.error("scenografia palazzi:", e); }
+  // ── LA VIA DI SAN MARTINO ──────────────────────────────────────────────────
+  // All'esterno della curva sbuca una via: li' non ci sono gradinate ma i
+  // FOTOGRAFI, accovacciati e in piedi a delimitare la pista, e un'IMPALCATURA
+  // che scavalca la bocca della via — la stessa struttura del ponte dei Capitani
+  // alla mossa, ma senza i Capitani: qui ci stanno operatori e fotografi.
+  if (NARROW_READY) {
+    const SM_MID = (SM_IN + SM_OUT) * 0.5;
+    const VIA = 4.5;                       // mezza bocca della via
+    try {
+      addPalchi(costruisciFotografi(scenaCtx, { da: SM_MID - VIA, a: SM_MID + VIA }));
+      // Quanto sta fuori il filo delle facciate: alla mossa sono 6.2 dal bordo, ma
+      // a San Martino la pista e' piu' STRETTA (trackNarrowAt) mentre la cortina
+      // resta sullo stesso anello, quindi il muro e' piu' lontano. Ricavato, non
+      // scritto a mano, se no l'impalcatura resterebbe sospesa a mezz'aria.
+      const filo = 6.2 + (mossaOuterEdge()
+        - (TRACK_HALF_WIDTH + mossaFlareAt(SM_MID) - trackNarrowAt(SM_MID)));
+      addPalchi(costruisciPonteCapitani(scenaCtx, {
+        cum: SM_MID, larghezzaVia: 7, dalBordoAlFilo: filo, capitani: 6,
+      }));
+    } catch (e) { console.error("via di San Martino:", e); }
+  }
   ensurePalazzoObjects();   // il Palazzo Pubblico accurato (unico), sempre visibile
   buildCrowdAndFlags();
   buildSpeedLines();
