@@ -60,16 +60,20 @@ export const PALCHI_FONDO = MIS.palcoFronte + MIS.palcoFile * MIS.palcoPedata;
 
 // ── Tinte ────────────────────────────────────────────────────────────────────
 export const COL = {
-  salvia: "#8f7452",       // il MARRONE dei pannelli (era verde: corretto da Simone)
-  salviaScuro: "#63503a",
+  // Fondo dei pannelli della palancata. Ha cambiato pelle due volte su richiesta
+  // di Simone: verde -> marrone -> ROSSO-MARRONE (28/08), terra di Siena bruciata:
+  // rosso mattone con dentro il bruno, non un bordeaux violaceo. Il nome della chiave
+  // e' rimasto quello vecchio per non rompere i riferimenti del modulo.
+  salvia: "#7f3d2d",
+  salviaScuro: "#5a2a1f",   // ombre e venature del rosso-marrone
   crema: "#e7dfc4",
   avorio: "#f0ead6",
   ocra: "#b9964e",
   rossoDec: "#9d4a44",
-  verdeDec: "#4f5c3a",
+  verdeDec: "#5f4a34",     // era verde: ora marrone scuro (richiesta di Simone)
   marmoRosa: "#b06a6a",
   marmoRosso: "#a2515a",
-  marmoGrigio: "#7f8994",
+  marmoGrigio: "#93876f",  // era grigio-azzurro: ora beige caldo
   legnoPalco: 0x6b4430,
   legnoPalcoScuro: 0x4a2d20,
   legnoCorrimano: 0x5a3a28,
@@ -345,12 +349,12 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
       quadrilobo(x, cx, cy, rh * 0.3, COL.crema, COL.verdeDec);
     } else if (variante === 1) {
       const mw = rw * 0.33, mh = rh * 0.84;
-      finteVene(x, x0 + P * 0.1, cy - mh / 2, mw, mh, COL.marmoGrigio, "#dfe6ec");
-      finteVene(x, x0 + P * 0.9 - mw, cy - mh / 2, mw, mh, COL.marmoGrigio, "#dfe6ec");
+      finteVene(x, x0 + P * 0.1, cy - mh / 2, mw, mh, COL.marmoGrigio, "#e8dfc8");
+      finteVene(x, x0 + P * 0.9 - mw, cy - mh / 2, mw, mh, COL.marmoGrigio, "#e8dfc8");
       quadrilobo(x, cx, cy, rh * 0.42, COL.marmoRosso, COL.crema);
     } else {
       const mw = rw * 0.66, mh = rh * 0.86;
-      finteVene(x, cx - mw / 2, cy - mh / 2, mw, mh, COL.marmoGrigio, "#e4eaf0");
+      finteVene(x, cx - mw / 2, cy - mh / 2, mw, mh, COL.marmoGrigio, "#e8dfc8");
       x.strokeStyle = COL.crema; x.lineWidth = P * 0.012;
       x.strokeRect(cx - mw / 2, cy - mh / 2, mw, mh);
       // Scudo ovale: di suo è crema liscio, ma il gioco può dipingerci lo stemma.
