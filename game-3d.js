@@ -12054,7 +12054,7 @@ function updateRace(dt, time) {
   // (muro 1°–2° a 30 e muro 1°–3° ≤9). Si vedevano come inchiodate. Al loro posto
   // c'è SOLO il rallentatore graduale di leaderBrakeMult, basato sul gap dal 3°.
 
-  // ── LIMITE SORPASSI: max 2 sorpassi FATTI (e 3 subìti) per GIRO ────────────
+  // ── LIMITE SORPASSI: max 3 sorpassi FATTI e 3 subìti per GIRO ─────────────
   // Realismo: sul rettilineo NON si possono passare 4-5 Contrade tutte d'un fiato.
   // A ogni inizio giro si fotografa la posizione in classifica; chi ha già
   // guadagnato/perso 3 posizioni nel giro non passa (né si fa passare) oltre:
@@ -12086,7 +12086,7 @@ function updateRace(dt, time) {
       if (!bloccabile(A) || !bloccabile(B)) continue;
       const bGained = startIdx[B.id] - (i + 1);       // posizioni guadagnate da B nel giro
       const aLost = i - startIdx[A.id];               // posizioni perse da A nel giro
-      if (bGained >= 2 || aLost >= 3) {               // B ha già fatto 2 sorpassi, oppure A ne ha già subìti 3
+      if (bGained >= 3 || aLost >= 3) {               // B ha già fatto 3 sorpassi, oppure A ne ha già subìti 3
         const cap = A.progress - MARGINE;             // B resta in scia ad A, non lo passa
         if (B.progress > cap) {
           // rientro GRADUALE (non uno stop secco): si recupera una frazione
