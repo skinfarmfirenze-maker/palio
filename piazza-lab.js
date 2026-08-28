@@ -426,13 +426,15 @@ export function texturaLegno({ risoluzione = 512, tinta = "#6b4430" } = {}) {
   return finisci(c, 1, 1);
 }
 
-// ── Legno chiaro verniciato della staccionata interna ────────────────────────
+// ── Legno VERDE SALVIA-GRIGIO della staccionata interna ──────────────────────
+// (i pilastrini sono di marmo; il legno fra loro è dipinto salvia-grigio,
+// come nelle foto — il verde della piazza sta QUI, non sulla palancata).
 export function texturaLegnoChiaro({ risoluzione = 256 } = {}) {
   const W = risoluzione, H = risoluzione;
   const { c, x } = tela(W, H);
-  x.fillStyle = "#e3dac1"; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#96a08c"; x.fillRect(0, 0, W, H);
   for (let i = 0; i < 90; i += 1) {
-    x.strokeStyle = `rgba(${Math.random() < 0.6 ? "150,136,108" : "255,252,240"},${0.06 + Math.random() * 0.12})`;
+    x.strokeStyle = `rgba(${Math.random() < 0.6 ? "104,114,96" : "214,222,206"},${0.06 + Math.random() * 0.12})`;
     x.lineWidth = 0.7 + Math.random();
     x.beginPath();
     const y = Math.random() * H;
