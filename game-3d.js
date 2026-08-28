@@ -5761,7 +5761,9 @@ function openModeChooser() {
         }
         segnaPaliataVeloce();
         resetCampaign();          // azzera l'eventuale campagna (mette quickBudgets a null)
-        resetQuickBudgets();      // …poi ogni contrada riparte da 800 denari
+        // NIENTE reset dei tesori: i denari delle Contrade NON ripartono da capo a
+        // ogni paliata. Sono l'unico universo di questo account e si portano dietro
+        // tutto quello che e' stato speso e incassato, palio dopo palio.
         closeCampaignOverlay(); openSelectScreen();
       }),
       col("Campagna", "Diventa Capitano: 8 palii in 4 anni.", "#2e6b46", () => {
@@ -5864,15 +5866,29 @@ function campaignNameScreen() {
 }
 
 // ── BUDGET PERSISTENTE ───────────────────────────────────────────────────────
-// Il tesoro di OGNI Contrada si porta dietro di palio in palio (localStorage):
-// tutte partono da 400 denari, poi ognuna sale o scende con quello che spende e
-// incassa (ingaggi, corruzioni, accordi, aste, +100/anno in campagna). Vale sia
-// per la paliata veloce sia per la Campagna: il tesoro è UNO solo.
-const BUDGET_STORE_KEY = "palio.budgets.v1";
+// L'UNIVERSO DI OGNI ACCOUNT. Il tesoro delle 17 Contrade non si azzera MAI: tutte
+// partono da 5000 denari la primissima volta, poi ognuna sale o scende con quello
+// che spende e incassa (ingaggi, corruzioni, accordi, aste, +100/anno in campagna)
+// e resta com'è, palio dopo palio. Vale sia per la paliata veloce sia per la
+// Campagna — il tesoro è UNO solo — ed è legato all'ACCOUNT, non al dispositivo.
 const BUDGET_START = 5000;
+// UN UNIVERSO PER ACCOUNT. La chiave porta l'email di chi ha fatto il login: due
+// persone che giocano sullo stesso computer hanno due tesori distinti, e chi
+// rientra col suo account ritrova i suoi. (Chi non ha ancora un account gioca su
+// una chiave "ospite", che diventa la sua appena si registra.)
+function budgetStoreKey() {
+  let mail = "";
+  try { const a = JSON.parse(localStorage.getItem(ACCOUNT_KEY)); mail = (a && a.email) || ""; } catch (e) { mail = ""; }
+  return "palio.budgets.v1" + (mail ? ":" + mail.trim().toLowerCase() : ":ospite");
+}
 function loadPersistentBudgets() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(BUDGET_STORE_KEY)) || {}; } catch (e) { saved = {}; }
+  try { saved = JSON.parse(localStorage.getItem(budgetStoreKey())) || {}; } catch (e) { saved = {}; }
+  // Chi giocava prima che i tesori fossero per-account si porta dietro i suoi:
+  // si travasa la vecchia chiave unica la prima volta, invece di ripartire da 5000.
+  if (!Object.keys(saved).length) {
+    try { saved = JSON.parse(localStorage.getItem("palio.budgets.v1")) || {}; } catch (e) { saved = {}; }
+  }
   const budgets = {};
   CONTRADE.forEach((c) => {
     const v = Number(saved[c.id]);
@@ -5882,15 +5898,7 @@ function loadPersistentBudgets() {
 }
 function savePersistentBudgets(budgets) {
   if (!budgets) return;
-  try { localStorage.setItem(BUDGET_STORE_KEY, JSON.stringify(budgets)); } catch (e) { /* storage pieno/disabilitato */ }
-}
-// PALIATA VELOCE: ogni contrada riparte da 800 denari a ogni paliata veloce.
-const QUICK_BUDGET_START = 5000;
-function resetQuickBudgets() {
-  const b = {};
-  CONTRADE.forEach((c) => { b[c.id] = QUICK_BUDGET_START; });
-  state.quickBudgets = b;
-  savePersistentBudgets(b);
+  try { localStorage.setItem(budgetStoreKey(), JSON.stringify(budgets)); } catch (e) { /* storage pieno/disabilitato */ }
 }
 // ── I SOLDI GIRANO IN OGNI MODALITÀ ──────────────────────────────────────────
 // budgetsRef() restituisce SEMPRE un oggetto tesoro valido: quello della campagna
@@ -8067,8 +8075,8 @@ function setupQuickEconomy() {
   const rid = (player && topRunningRivalId(player.id))
     || (RIVALS[contrada.id] ? Object.keys(RIVALS[contrada.id])[0] : null);
   const rival = CONTRADE.find((c) => c.id === rid) || CONTRADE.find((c) => c.id !== contrada.id) || contrada;
-  // Tesoro PERSISTENTE: niente più sorteggio 300..500 a ogni palio — ognuna
-  // riparte da dove era rimasta (400 alla primissima partita).
+  // Tesoro PERSISTENTE: ognuna riparte da dove era rimasta (5000 alla primissima
+  // partita di questo account), mai da capo.
   const budgets = loadPersistentBudgets();
   // Le 10 estratte: servono al voto dei cavalli (quanti Capitani AI votano).
   const draw = (state.estrazione && (state.estrazione.participants || state.estrazione.drawn)) || [];
