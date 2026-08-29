@@ -4953,7 +4953,7 @@ function getStaminaRateForHorse(horse, demandSpeed) {
   // questa è una zavorra voluta): SOLO al 2° giro, se tieni andatura 4 o 5, la
   // stamina cala del 5% in più. Al 3° giro NON si applica. Solo il giocatore,
   // solo consumo (baseRate>0). Indice giro: 0=primo, 1=secondo, 2=terzo.
-  if (isHuman(horse) && !state.playerFavored && baseRate > 0 && demandSpeed >= 4 && state.mode === "race"
+  if (isHuman(horse) && baseRate > 0 && demandSpeed >= 4 && state.mode === "race"
       && Math.floor(Math.max(0, horse.progress) / track.length) === 1) {
     baseRate *= 1.05;
   }
@@ -8184,10 +8184,14 @@ function tierSpeedMult(horse) { return TIER_SPEED[horse.horseTier] || 1; }
 // Frazione di palii in cui il giocatore è "favorito" (handicap tolti). Regola il
 // win rate MEDIO verso ~4%: alzala per farlo vincere più spesso, abbassala per meno.
 // (È la manopola da tarare sui dati reali del win rate in admin.)
-const WIN_FAVORE_PROB = 0.02;   // tasso medio di vittoria del giocatore ≈ 2% (richiesto)
+// OBIETTIVO DICHIARATO: su 10.000 palii corsi dai giocatori, 200-250 vinti da
+// loro (2,0%-2,5%). Non c'è più una costante che lo impone: quel numero deve
+// USCIRE dagli ostacoli in pista (handicap di posizione, del terzo giro, freno
+// del leader, aggressività delle AI, limite dei sorpassi). Si misura sul database
+// — campi `palii` e `vinti` degli account — e si tara agendo su quegli ostacoli.
+// Alla rimozione del gate il dato reale era 333 vittorie su 7.857 palii = 4,24%.
 function playerThirdLapHandicap(horse) {
   if (!horse.player) return 1;
-  if (state.playerFavored) return 1.03;   // giornata di favore: niente handicap + un filo di spinta
   // Handicap giocatore SEMPRE: −0,02 di velocità (oltre al deficit-stamina già impostato).
   let h = 0.02;
   // Ultimo giro: extra per fascia — bono −0,03, bombolone −0,02 (in aggiunta).
@@ -9279,11 +9283,10 @@ function releaseRace() {
   chiudiAstaRincorsa();                                    // aggiudica l'asta e rimborsa i blocchi non onorati
   const oldAsta = document.getElementById("astaPanel"); if (oldAsta) oldAsta.remove();
   recordPalioRun();                                        // +1 al totale palii corsi (globale)
-  // GATE DI FAVORE (win rate ~4%): in una piccola frazione dei palii il giocatore
-  // è "favorito" → gli tolgo gli handicap e gli do un filo di spinta, così ha una
-  // buona chance di vincere. Nel resto dei palii restano gli handicap pieni. Invisibile:
-  // sembra solo una "buona giornata". WIN_FAVORE_PROB regola la % media di vittorie.
-  state.playerFavored = Math.random() < WIN_FAVORE_PROB;
+  // NIENTE "gate di favore". Prima, in una piccola frazione dei palii, al giocatore
+  // venivano tolti tutti gli handicap: la percentuale di vittorie usciva da quel
+  // sorteggio, non dalla corsa. Ora gli ostacoli valgono SEMPRE e allo stesso modo,
+  // e la percentuale è quella che ne risulta davvero in pista.
   state.mode = "race";
   if (state.chiamataA5) { const p = getPlayer(); if (p) p.chiamataNoStaminaT = 2; state.chiamataA5 = false; }   // partenza a chiamata: 0 stamina per 2s
   state.raceClock = 0;
