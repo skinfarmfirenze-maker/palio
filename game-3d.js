@@ -3213,7 +3213,10 @@ function attaccaHorseGlbInner(horse) {
       // ALLA TRATTA il barbero e' ancora di nessuno: la spennacchiera porta i
       // colori della Contrada, quindi non puo' stare sulla fronte prima che il
       // mossiere l'abbia chiamata. Spunta in announceTrattaContrada.
-      if (state.mode === "tratta" && !horse.spennRivelata) nascondiSpennacchiera(spenn);
+      // Si guarda un FLAG SUL CAVALLO e non state.mode: i cavalli (e i loro GLB)
+      // nascono molto prima che la modalita' diventi "tratta", quindi al momento
+      // dell'attach quel controllo era sempre falso e la spennacchiera restava.
+      if (horse.attendeSpenn && !horse.spennRivelata) nascondiSpennacchiera(spenn);
     }
     // FANTINO GLB in sella: usa la bbox del cavallo (bb) per la seduta sul dorso.
     horse.group.userData.horseBB = bb;
@@ -7651,6 +7654,15 @@ function beginTratta() {
     }
   });
   state.tratta = { pairings };
+  // Da qui in poi i barberi sono "in attesa di assegnazione": niente spennacchiera
+  // finche' il mossiere non chiama la Contrada. Vale sia per i cavalli gia' in
+  // scena (gliela nascondo adesso) sia per i GLB che si attaccano piu' tardi.
+  state.horses.forEach((h) => {
+    h.spennRivelata = false;
+    h.attendeSpenn = true;
+    const s = h.group && h.group.userData && h.group.userData.spennObj;
+    if (s) nascondiSpennacchiera(s);
+  });
   state.mode = "tratta";
   setAllestimento("tufo");   // alla Tratta il tufo e' steso ma i palchi non ci sono ancora
   showScreen(null);
@@ -8001,6 +8013,7 @@ function announceTrattaContrada(p) {
   p.entrant.revealPulse = 1;
   // Adesso il barbero ha una Contrada: la spennacchiera compare sulla sua fronte.
   p.entrant.spennRivelata = true;
+  p.entrant.attendeSpenn = false;
   mostraSpennacchiera(p.entrant.group.userData && p.entrant.group.userData.spennObj);
   if (state.trattaObjects) state.trattaObjects.popTimer = 0.4;
   speakContrada(p.entrant.name);                 // voce del mossiere: la contrada
@@ -8031,6 +8044,7 @@ function trattaAllRevealed() {
   // anche i barberi la cui chiamata fosse stata saltata.
   (state.horses || []).forEach((h) => {
     h.spennRivelata = true;
+    h.attendeSpenn = false;
     mostraSpennacchiera(h.group.userData && h.group.userData.spennObj, true);
   });
   const skip = document.getElementById("trattaSkipBtn");
