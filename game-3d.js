@@ -10032,7 +10032,21 @@ function updateMossa(dt, time) {
       // "…ha forzato il canape" e le Contrade partono con MOSSA FALSA.
       horse.canapeStop = false;
       if (horse.mossaProgress > MOSSA_FRONT_LIMIT - 1.5 && andatura >= 3) {
-        if (andatura >= ANDATURA_MAX) {
+        // MOSSA COMPRATA ALL'ASTA: qui il 5 NON è forzare il canape, è la partenza
+        // a chiamata. Gliel'abbiamo appena promesso col cartello ("parti a 5 quando
+        // vuoi") e prima di questa riga quella promessa era una trappola: partiva a
+        // 5 e si beccava la mossa falsa per averlo fatto. Adesso la rincorsa gli dà
+        // la mossa e parte INSIEME a lui. Se la rincorsa non è ancora pronta il
+        // giocatore si limita a stare addosso al canape, senza penalità.
+        if (giocatoreHaLaMossa()) {
+          const rin = state.horses.find((h) => h.isRincorsa);
+          if (andatura >= ANDATURA_MAX && rin && rincorsaPronta()) {
+            state.chiamataA5 = true;      // 0 stamina per i primi 2s (partenza a chiamata)
+            rin.wantsToEnter = true;      // la rincorsa entra: la mossa è VALIDA
+          } else {
+            horse.canapeStop = true;      // aspetta che la rincorsa sia pronta
+          }
+        } else if (andatura >= ANDATURA_MAX) {
           if ((state.mossaFalsaCooldown || 0) <= 0 && (state.forcedCanapeCd || 0) <= 0) {
             state.forcedCanapeCd = 6;
             showMessage(`${horse.name} ha forzato il canape`, 2.6, "danger");
@@ -10748,8 +10762,7 @@ function updateRincorsa(rincorsa, dt) {
         // La fila è SCHIERATA solo quando tutte e 9 sono chiamate e dentro (non in
         // ri-chiamata dopo una falsa). La rincorsa tenta SOLO da fila schierata: così
         // una mossa falsa non innesca un loop di false a ripetizione durante il rientro.
-        const fieldAssembled = (state.callOrder || []).length > 0
-          && state.callOrder.every((h) => h.called && !h.entering);
+        const fieldAssembled = campoSchierato();
         const goodEntry = fieldAssembled &&
           (state.mossaFalsaCooldown || 0) <= 0 &&
           state.mossaTimer >= MOSSA_MIN_DURATION &&
@@ -10812,7 +10825,7 @@ function updateRincorsa(rincorsa, dt) {
         let chiamataA5 = false;
         const meAsta = getPlayer();
         const ownsMossa = giocatoreHaLaMossa();
-        const rinReady = fieldAssembled && state.mossaTimer >= MOSSA_MIN_DURATION && (state.rincorsaWait || 0) >= 15;
+        const rinReady = rincorsaPronta();
         if (ownsMossa && !state.cartelloMossaFatto) {
           state.cartelloMossaFatto = true;       // una volta per palio, non a ogni frame
           mostraCartello("Parti a 5 quando vuoi, la rincorsa ti darà la mossa", 2);
@@ -10998,6 +11011,17 @@ function updateRincorsaWatcher(rincorsa) {
 // Il giocatore si è aggiudicato la mossa all'asta ed è fermo ai canapi: la
 // rincorsa gliela darà appena spinge a 5. Serve alla logica della rincorsa e alle
 // due scritte che glielo dicono (la riga della mini-cam e il cartello centrale).
+// Tutte le Contrade chiamate sono entrate e sono ferme ai canapi.
+function campoSchierato() {
+  return (state.callOrder || []).length > 0
+    && state.callOrder.every((h) => h.called && !h.entering);
+}
+// La rincorsa è pronta a dare la mossa: campo schierato, tempo minimo passato e
+// la rincorsa ha aspettato abbastanza.
+function rincorsaPronta() {
+  return campoSchierato() && state.mossaTimer >= MOSSA_MIN_DURATION
+    && (state.rincorsaWait || 0) >= 15;
+}
 function giocatoreHaLaMossa() {
   const me = getPlayer();
   return !!(state.asta && me && !me.isRincorsa && me.called && !me.entering
