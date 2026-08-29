@@ -9054,12 +9054,12 @@ function startMossa(fromTratta = false) {
     };
     (cmp.accordi || []).forEach((a) => {
       const helper = byId[a.helper]; if (!helper || helper.player) return;
-      // PAROLA DATA, SPESSO NON MANTENUTA: due accordi su cinque non vengono
-      // onorati (era uno su cinque). La Contrada ha preso i denari e in Piazza fa
-      // di testa sua — il giocatore non lo sa finché non lo vede in corsa. Comprare
-      // adesso è facile, fidarsi no: è il punto dell'equilibrio nuovo. Deciso UNA
-      // volta per palio (questo codice gira all'inizio della mossa), non a frame.
-      if (Math.random() >= 0.6) return;
+      // PAROLA DATA, NON SEMPRE MANTENUTA: la Contrada onora l'accordo nel 68% dei
+      // casi. Nell'altro terzo ha preso i denari e in Piazza fa di testa sua, e il
+      // giocatore non lo sa finché non lo vede in corsa. Comprare adesso è facile,
+      // fidarsi no. Deciso UNA volta per palio (questo codice gira all'inizio della
+      // mossa), non a ogni frame.
+      if (Math.random() >= 0.68) return;
       if (a.beneficiary === playerId) {          // il GIOCATORE corre: l'alleato aiuta te
         helper.friendlyToPlayer = true;
         if (!a.obiettivi) {                      // accordo classico (senza finalità): aiuto pieno
@@ -9129,9 +9129,10 @@ function startMossa(fromTratta = false) {
     const cor = cmp.corrupted || {};
     Object.keys(cor).forEach((hid) => {
       if (cor[hid] !== playerId) return;         // solo i fantini corrotti DA TE
-      // Anche il fantino comprato può fare di testa sua: uno su tre intasca e corre
-      // come gli pare. Prima la corruzione era una certezza — pagavi ed eri sicuro.
-      if (Math.random() >= 0.67) return;
+      // Il fantino comprato è meno affidabile della Contrada: onora nel 60% dei
+      // casi, negli altri intasca e corre come gli pare. Prima la corruzione era
+      // una certezza — pagavi ed eri sicuro del risultato.
+      if (Math.random() >= 0.60) return;
       // Salta SOLO la tua Contrada. NON usare h.player: in ASSISTI il flag .player
       // ce l'ha la RIVALE (è il cavallo-focus in autopilot), e così il ritardo da
       // corruzione non le veniva mai applicato.
