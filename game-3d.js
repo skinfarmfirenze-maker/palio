@@ -14251,7 +14251,8 @@ function isAdminUrl() {
 // ma chi non e' in questa lista si ferma alla schermata "gioco in aggiornamento".
 // Per abilitare qualcuno basta aggiungere qui la sua email, in minuscolo.
 const GIOCATORI_ABILITATI = new Set([
-  "papeusleonardus10@gmail.com",
+  "papeusleonardus10@gmail.com",   // Leonardo Papei
+  "fili.toscano5@gmail.com",       // Filippo Toscano
 ]);
 function accountAbilitato(acc) {
   if (isMarioRossi(acc)) return true;                       // lo sviluppatore
