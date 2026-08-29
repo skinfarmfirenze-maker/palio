@@ -8198,10 +8198,13 @@ function playerThirdLapHandicap(horse) {
   if ((horse.progress || 0) >= track.length * (FINISH_LAPS - 1)) {
     if (horse.horseTier === "bono") h += 0.03;
     else if (horse.horseTier === "bombolone") h += 0.02;
-    // Handicap per ANDATURA all'ultimo giro (richiesta): velocità 4 → −0,05 · velocità 5 → −0,08.
+    // Handicap per ANDATURA all'ultimo giro: velocità 4 → −0,02 · velocità 5 → −0,03.
+    // Alleggerito (era −0,05 e −0,08): puniva proprio il gesto di provare a vincere,
+    // e la volata finale — il modo naturale di giocarsi il palio — era la scelta
+    // più penalizzata di tutte.
     const sp = Math.round(horse.speedSetting || 0);
-    if (sp >= 5) h += 0.08;
-    else if (sp === 4) h += 0.05;
+    if (sp >= 5) h += 0.03;
+    else if (sp === 4) h += 0.02;
   }
   return 1 - h;
 }
