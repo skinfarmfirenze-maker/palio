@@ -6988,7 +6988,9 @@ function campaignAccordiScreen(spectate) {
                 // con quel cavallo vuole correre per vincere → accetta solo il 25%.
                 const PERDENTI = ["vinci", "passa", "interno", "para", "paraInterno", "curvaAddosso", "paraRallenta", "paraCanapi"];
                 const perdente = sel.some((id) => PERDENTI.indexOf(id) >= 0);
-                let pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.25 : 0.7;
+                // Si dice di sì più facilmente: in Piazza i denari parlano, e il no
+                // secco rendeva quasi inutile spendere. (Era 0.7 / 0.25.)
+                let pAccetta = (h.horseTier === "bombolone" && perdente) ? 0.40 : 0.85;
                 // GIÀ SCHIERATA col favorito. Non è un no automatico: dipende da cosa chiedi.
                 //  · se chiedi SOLO di parare la tua rivale, e la tua rivale NON è il capo con
                 //    cui si è schierata, non le costa nulla — anzi fa un favore al suo partito:
@@ -7001,8 +7003,8 @@ function campaignAccordiScreen(spectate) {
                   const soloAntiRivale = sel.length > 0 && sel.every((id) => ANTI_RIVALE.indexOf(id) >= 0);
                   const rivaleId = cmp.rival && cmp.rival.id;
                   const capoId = cmp.fazione && cmp.fazione.capo;
-                  if (soloAntiRivale && rivaleId && rivaleId !== capoId) pAccetta = Math.max(pAccetta, 0.75);
-                  else pAccetta = Math.min(pAccetta, 0.25);
+                  if (soloAntiRivale && rivaleId && rivaleId !== capoId) pAccetta = Math.max(pAccetta, 0.88);
+                  else pAccetta = Math.min(pAccetta, 0.35);
                 }
                 if (Math.random() < pAccetta) { spendBudget(myId, c); cmp.accordi.push({ helper: h.id, beneficiary: myId, amount: c, prepaid: true, obiettivi: sel }); }
                 else h._accRefused = true;
@@ -9052,11 +9054,12 @@ function startMossa(fromTratta = false) {
     };
     (cmp.accordi || []).forEach((a) => {
       const helper = byId[a.helper]; if (!helper || helper.player) return;
-      // PAROLA DATA, NON SEMPRE MANTENUTA: un accordo su cinque non viene onorato.
-      // La Contrada ha preso i denari ma in Piazza fa di testa sua — succede, e il
-      // giocatore non lo sa finché non lo vede in corsa. Deciso UNA volta per palio
-      // (questo codice gira all'inizio della mossa), non a ogni frame.
-      if (Math.random() >= 0.8) return;
+      // PAROLA DATA, SPESSO NON MANTENUTA: due accordi su cinque non vengono
+      // onorati (era uno su cinque). La Contrada ha preso i denari e in Piazza fa
+      // di testa sua — il giocatore non lo sa finché non lo vede in corsa. Comprare
+      // adesso è facile, fidarsi no: è il punto dell'equilibrio nuovo. Deciso UNA
+      // volta per palio (questo codice gira all'inizio della mossa), non a frame.
+      if (Math.random() >= 0.6) return;
       if (a.beneficiary === playerId) {          // il GIOCATORE corre: l'alleato aiuta te
         helper.friendlyToPlayer = true;
         if (!a.obiettivi) {                      // accordo classico (senza finalità): aiuto pieno
@@ -9126,6 +9129,9 @@ function startMossa(fromTratta = false) {
     const cor = cmp.corrupted || {};
     Object.keys(cor).forEach((hid) => {
       if (cor[hid] !== playerId) return;         // solo i fantini corrotti DA TE
+      // Anche il fantino comprato può fare di testa sua: uno su tre intasca e corre
+      // come gli pare. Prima la corruzione era una certezza — pagavi ed eri sicuro.
+      if (Math.random() >= 0.67) return;
       // Salta SOLO la tua Contrada. NON usare h.player: in ASSISTI il flag .player
       // ce l'ha la RIVALE (è il cavallo-focus in autopilot), e così il ritardo da
       // corruzione non le veniva mai applicato.
