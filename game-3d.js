@@ -8218,7 +8218,11 @@ function playerThirdLapHandicap(horse) {
 // poi la velocità scende fino a FLOOR avvicinandosi a GAP_MAX. GAP_MAX (=30) è nelle
 // STESSE unità del "+Nm" mostrato nel leaderboard.
 // Il tetto rigido dei 30 (1°–2°) è garantito a parte, dal clamp in updateRace.
-const LEADER_GAP_SOFT = 12;
+// Molla delle ultime due: comincia a 9 di distacco dal primo e arriva al massimo
+// a 30. Tarata sui punti voluti: a 18 di distacco +3%, a 24 +5%, a 30 +7%.
+// Prima saliva fino a +20% e da sola richiudeva il gruppo: con 30 di distacco
+// l'ultimo correva un quinto più veloce del primo.
+const LEADER_GAP_SOFT = 9;
 const LEADER_GAP_MAX = 30;
 // HANDICAP DI POSIZIONE del GIOCATORE: 1°=−0,04 · 2°=−0,05 · 3°=−0,04 · 4°=−0,02.
 // Dal 5° in giù: nessuna penalità. Posizione = quanti cavalli hanno più progress
@@ -8270,7 +8274,7 @@ function leaderBrakeMult(horse) {
 // non si sfilaccia. Sotto SOFT nessuna spinta; poi la velocità sale fino a CEIL
 // avvicinandosi a GAP_MAX (stesse unità del "+Nm" a schermo). CEIL 1.4 = +40%,
 // speculare al pavimento 0.6 del freno.
-const LAST_BOOST_CEIL = 1.2;   // molla dell'ULTIMO alleggerita (era 1.4): meno aiutato
+const LAST_BOOST_CEIL = 1.07;  // +7% al massimo (era 1.2, e prima ancora 1.4)
 function lastBoostMult(horse) {
   if (!horse || !state.lastBoostIds || state.lastBoostIds.indexOf(horse.id) < 0) return 1;
   if (horse.finishTime) return 1;
@@ -12128,8 +12132,10 @@ function updateRace(dt, time) {
   // (muro 1°–2° a 30 e muro 1°–3° ≤9). Si vedevano come inchiodate. Al loro posto
   // c'è SOLO il rallentatore graduale di leaderBrakeMult, basato sul gap dal 3°.
 
-  // ── LIMITE SORPASSI: max 3 sorpassi FATTI e 3 subìti per GIRO ─────────────
-  // Realismo: sul rettilineo NON si possono passare 4-5 Contrade tutte d'un fiato.
+  // ── LIMITE SORPASSI: vale SOLO PER IL GIOCATORE ───────────────────────────
+  // Max 3 sorpassi fatti e 3 subìti per giro, e solo lui: fra AI la corsa è
+  // libera. Applicandolo a tutti si formavano trenini di Contrade incollate a
+  // trenta centimetri l'una dall'altra e il gruppo non si allungava mai.
   // A ogni inizio giro si fotografa la posizione in classifica; chi ha già
   // guadagnato/perso 3 posizioni nel giro non passa (né si fa passare) oltre:
   // resta "in scia" al vicino (progress limitato appena dietro), niente inchiodata.
@@ -12158,9 +12164,16 @@ function updateRace(dt, time) {
     for (let i = 0; i < rk.length - 1; i += 1) {
       const A = rk[i], B = rk[i + 1];                 // A davanti, B dietro
       if (!bloccabile(A) || !bloccabile(B)) continue;
+      // Il limite riguarda SOLO il giocatore: o è lui che sta per passare, o è lui
+      // che sta per essere passato. Fra due AI non si blocca niente.
+      if (!isHuman(A) && !isHuman(B)) continue;
       const bGained = startIdx[B.id] - (i + 1);       // posizioni guadagnate da B nel giro
       const aLost = i - startIdx[A.id];               // posizioni perse da A nel giro
-      if (bGained >= 3 || aLost >= 3) {               // B ha già fatto 3 sorpassi, oppure A ne ha già subìti 3
+      // Si conta solo quello che riguarda lui: i suoi sorpassi se è dietro, quelli
+      // che subisce se è davanti.
+      const troppiFatti  = isHuman(B) && bGained >= 3;
+      const troppiSubiti = isHuman(A) && aLost >= 3;
+      if (troppiFatti || troppiSubiti) {
         const cap = A.progress - MARGINE;             // B resta in scia ad A, non lo passa
         if (B.progress > cap) {
           // rientro GRADUALE (non uno stop secco): si recupera una frazione
