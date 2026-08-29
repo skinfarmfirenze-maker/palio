@@ -8806,6 +8806,7 @@ function startMossa(fromTratta = false) {
   setAllestimento("palio");   // il giorno del Palio: palchi montati e Piazza gremita
   state.cameraMode = "follow";
   state.mossaTimer = 0;
+  state.cartelloMossaFatto = false;   // il cartello della mossa comprata torna a ogni palio
   state.mossaDuration = 13.2 + Math.random() * 1.4;
   state.canapiDrop = 0;
   if (state.canapi) {
@@ -10810,9 +10811,12 @@ function updateRincorsa(rincorsa, dt) {
         // la rincorsa gli dà la mossa → parte LUI (senza forzare il canape, se allineato).
         let chiamataA5 = false;
         const meAsta = getPlayer();
-        const ownsMossa = state.asta && meAsta && !meAsta.isRincorsa && meAsta.called && !meAsta.entering
-          && state.asta.bestBidder === meAsta.id;
+        const ownsMossa = giocatoreHaLaMossa();
         const rinReady = fieldAssembled && state.mossaTimer >= MOSSA_MIN_DURATION && (state.rincorsaWait || 0) >= 15;
+        if (ownsMossa && !state.cartelloMossaFatto) {
+          state.cartelloMossaFatto = true;       // una volta per palio, non a ogni frame
+          mostraCartello("Parti a 5 quando vuoi, la rincorsa ti darà la mossa", 2);
+        }
         if (ownsMossa && rinReady) {
           if (Math.round(meAsta.speedSetting || 1) >= ANDATURA_MAX && isMossaAligned()) {
             chiamataA5 = true; state.chiamataA5 = true;                       // parte a chiamata
@@ -10977,6 +10981,9 @@ function updateRincorsaWatcher(rincorsa) {
     statusText = "Rincorsa non può entrare"; statusCls = "alert";
   } else if (state.mossaPhase !== "tension") {
     statusText = "Aspetta…";         statusCls = "";
+  } else if (giocatoreHaLaMossa()) {
+    // Comprata la mossa: qui non serve dire "osserva", serve dirgli COSA FARE.
+    statusText = "Parti a 5 quando vuoi, la rincorsa ti darà la mossa"; statusCls = "good";
   } else {
     statusText = "Osserva la mossa"; statusCls = "";
   }
@@ -10986,6 +10993,36 @@ function updateRincorsaWatcher(rincorsa) {
     const t = Math.floor(state.mossaTimer);
     timerEl.textContent = `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, "0")} / 5:00`;
   }
+}
+
+// Il giocatore si è aggiudicato la mossa all'asta ed è fermo ai canapi: la
+// rincorsa gliela darà appena spinge a 5. Serve alla logica della rincorsa e alle
+// due scritte che glielo dicono (la riga della mini-cam e il cartello centrale).
+function giocatoreHaLaMossa() {
+  const me = getPlayer();
+  return !!(state.asta && me && !me.isRincorsa && me.called && !me.entering
+    && state.asta.bestBidder === me.id);
+}
+
+// CARTELLO al centro dello schermo, un paio di secondi: si usa per l'avviso della
+// mossa comprata, quando il giocatore arriva ai canapi.
+function mostraCartello(testo, secondi = 2) {
+  const vecchio = document.getElementById("cartelloMossa");
+  if (vecchio) vecchio.remove();
+  const el = document.createElement("div");
+  el.id = "cartelloMossa";
+  el.textContent = testo;
+  el.style.cssText = "position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:70;"
+    + "background:rgba(18,13,8,.92);border:2px solid #f0cb35;border-radius:14px;"
+    + "padding:16px 26px;max-width:min(560px,88vw);text-align:center;font-family:inherit;"
+    + "font-size:clamp(15px,2.6vw,22px);font-weight:800;color:#f7edd6;line-height:1.35;"
+    + "box-shadow:0 10px 40px rgba(0,0,0,.6);opacity:0;transition:opacity .18s ease";
+  document.body.appendChild(el);
+  requestAnimationFrame(() => { el.style.opacity = "1"; });
+  setTimeout(() => {
+    el.style.opacity = "0";
+    setTimeout(() => { if (el.parentNode) el.remove(); }, 220);
+  }, secondi * 1000);
 }
 
 // HUD della rincorsa (solo se il giocatore è di rincorsa): barre Varco e Slancio.
