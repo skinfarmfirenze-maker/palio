@@ -8360,6 +8360,7 @@ function beginSceltaFantino() {
   const player = getPlayer();
   state.scelta = {
     taken: {},            // nick → contrada.id
+    rifiuti: {},          // nick → true se ti ha detto di no (deciso una volta per palio)
     assigned: {},         // contrada.id → jockey
     playerPicked: false,
     aiHorses: state.horses.filter((h) => !h.player),
@@ -8394,6 +8395,31 @@ function beginSceltaFantino() {
     const t = setTimeout(() => aiPickJockey(h), when);
     (state.scelta.aiTimers = state.scelta.aiTimers || []).push(t);
   });
+}
+
+// ── I FANTINI POSSONO DIRTI DI NO ──────────────────────────────────────────
+// Con una brenna sotto la sella i più forti non ti montano: hanno una carriera da
+// difendere e il Palio si vince col cavallo. Più il fantino è bravo e più il
+// barbero è scarso, più è probabile il rifiuto. Con un bombolone non rifiuta
+// nessuno: quel cavallo lo vogliono tutti.
+// La decisione si prende UNA VOLTA per palio e resta: se riclicchi, il no è
+// sempre quello — non si tenta la fortuna cliccando dieci volte.
+function fantinoRifiuta(j) {
+  const p = getPlayer();
+  if (!p || !j) return false;
+  state.scelta.rifiuti = state.scelta.rifiuti || {};
+  if (state.scelta.rifiuti[j.nick] !== undefined) return state.scelta.rifiuti[j.nick];
+  const tier = p.horseTier || "bono";
+  // forza del fantino, 0..1 (le stat vanno da 3 a 15 sommate)
+  const forza = clamp((jockeyStrength(j) - 3) / 12, 0, 1);
+  let prob = 0;
+  if (tier === "brenna") prob = 0.15 + forza * 0.55;   // dal 15% al 70% per i migliori
+  else if (tier === "bono") prob = forza * 0.18;       // fino al 18% solo per i top
+  // il fedelissimo (ingaggio 0) non rifiuta mai: è quello che monta sempre
+  if ((j.ingaggio || 0) === 0) prob = 0;
+  const esito = Math.random() < prob;
+  state.scelta.rifiuti[j.nick] = esito;
+  return esito;
 }
 
 function availableJockeys() {
@@ -8553,6 +8579,12 @@ function ensureSceltaStyle() {
 #sfCountdown{font-size:26px;font-weight:800;color:#f0cb35;margin-bottom:12px}
 #sfGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;width:min(1050px,96vw)}
 #sfGrid.locked .sf-card{pointer-events:none}
+.sf-card.rifiutato{opacity:.72;border-color:rgba(232,137,111,.65)}
+.sf-card.rifiutato:hover{transform:none}
+.sf-rifiuto{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%) rotate(-7deg);
+  text-align:center;font-size:15px;font-weight:900;letter-spacing:.08em;color:#e8896f;
+  background:rgba(26,18,6,.82);padding:5px 0;border-top:1px solid rgba(232,137,111,.5);
+  border-bottom:1px solid rgba(232,137,111,.5);pointer-events:none}
 #sfGrid.locked .sf-card.taken{pointer-events:none}
 .sf-card{position:relative;text-align:left;background:rgba(255,246,225,.12);border:1px solid rgba(240,203,53,.5);
   border-radius:14px;padding:12px 14px;cursor:pointer;transition:transform .1s ease,border-color .12s ease,opacity .2s}
@@ -8635,6 +8667,21 @@ function buildSceltaFantinoUI() {
       + '<div class="sf-taken"></div>';
     card.addEventListener("click", () => {
       if (fantinoBloccatoPerGiocatore(j.nick)) { toastMsg("Questo fantino ha montato per la rivale: non è disponibile per 3 palii."); return; }
+      if (card.classList.contains("rifiutato")) { toastMsg("Questo fantino ti ha già detto di no."); return; }
+      // Col cavallo scarso può rifiutare: lo scopri solo quando lo chiami.
+      if (fantinoRifiuta(j)) {
+        card.classList.add("rifiutato");
+        const cr = document.createElement("div");
+        cr.className = "sf-cross";
+        cr.title = "Ha rifiutato: non monta il tuo cavallo";
+        cr.textContent = "✕";
+        card.appendChild(cr);
+        const av = document.createElement("div");
+        av.className = "sf-rifiuto";
+        av.textContent = "HA RIFIUTATO";
+        card.appendChild(av);
+        return;
+      }
       pickPlayerJockey(j);
     });
     grid.appendChild(card);
