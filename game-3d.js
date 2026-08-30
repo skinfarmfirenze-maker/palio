@@ -6486,15 +6486,18 @@ function openAstaRincorsa() {
 // Rilancio. PREPAGATO: i denari si scalano subito e tornano a chi viene scavalcato.
 function astaBid(id, amount) {
   const A = state.asta;
-  if (!A || A.chiusa) return false;
+  if (!A || A.chiusa) { if (A) A.rifiuto = "chiusa"; return false; }
+  A.rifiuto = null;
   // #2: non puoi PAGARE la tua RIVALE (quando è lei di rincorsa) per la mossa.
-  if (A.rincorsaId && RIVALS[id] && RIVALS[id][A.rincorsaId]) return false;
-  // #1: MOSSA GARANTITA a chi l'ha pagata pre-palio → per scavalcarlo serve > 2× la sua posta.
+  if (A.rincorsaId && RIVALS[id] && RIVALS[id][A.rincorsaId]) { A.rifiuto = "rivale"; return false; }
+  // #1: MOSSA GARANTITA a chi l'ha pagata pre-palio → per scavalcarlo serve > 2x la sua posta.
   const protegge = A.prepaidHolder && A.bestBidder === A.prepaidHolder && id !== A.prepaidHolder;
   const soglia = protegge ? 2 * (A.prepaidAmount || 0) : A.best;
-  if (amount <= soglia) return false;
+  // Il motivo del rifiuto va DICHIARATO: prima qualunque no diventava "non hai
+  // abbastanza denari", anche quando i denari c'erano e il problema era un altro.
+  if (amount <= soglia) { A.rifiuto = "bassa"; A.sogliaRifiuto = soglia; return false; }
   const disponibile = contradaBudget(id) + (A.paid[id] || 0);
-  if (disponibile < amount) return false;
+  if (disponibile < amount) { A.rifiuto = "denari"; return false; }
   const prev = A.bestBidder;
   if (prev && A.paid[prev]) { earnBudget(prev, A.paid[prev]); A.paid[prev] = 0; }   // RIMBORSO allo scavalcato
   if (A.paid[id]) { earnBudget(id, A.paid[id]); A.paid[id] = 0; }                   // ritira la propria offerta vecchia
@@ -6666,7 +6669,7 @@ function refreshAstaUI() {
   const rivaleERincorsa = !!(A.rincorsaId && RIVALS[mioId] && RIVALS[mioId][A.rincorsaId]);   // #2: non compri la mossa dalla tua rivale
   const proteggePrepagante = !!(A.prepaidHolder && A.bestBidder === A.prepaidHolder && mioId !== A.prepaidHolder);   // #1
   const floorBid = proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best;   // soglia da scavalcare
-  const rilanci = [floorBid + 10, floorBid + 50, floorBid + 100];              // 3 tasti: +10 / +50 / +100 (mostrati come cifre assolute)
+  const rilanci = [10, 50, 100];   // 3 tasti: +10 / +50 / +100, MOSTRATI come cifra assoluta
   const rivId = cmp.rival ? cmp.rival.id : null;
   const rivInGara = rivId && state.horses.some((h) => h.id === rivId && !h.isRincorsa);
   const bloccoFatto = !!A.blocco[mioId];
@@ -6690,7 +6693,7 @@ function refreshAstaUI() {
     : rivaleERincorsa
       ? '<div style="opacity:.9;font-size:13px;color:#e8896f;font-weight:700">Non puoi comprare la mossa dalla tua rivale</div>'
       : `<div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">`
-        + rilanci.map((amt) => `<button class="astaBidBtn" data-amt="${amt}" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;${bs};background:#f0cb35;color:#1a1206;font-weight:800">Offri ${amt}</button>`).join("")
+        + rilanci.map((inc) => `<button class="astaBidBtn" data-inc="${inc}" type="button" style="font:inherit;cursor:pointer;border:none;border-radius:8px;${bs};background:#f0cb35;color:#1a1206;font-weight:800">Offri ${floorBid + inc}</button>`).join("")
         + `</div>`
         + (proteggePrepagante ? '<div style="opacity:.75;font-size:11px">mossa già pagata: serve il doppio</div>' : "");
   el.innerHTML =
@@ -6703,7 +6706,32 @@ function refreshAstaUI() {
     + (bloccoFatto ? '<div style="opacity:.8;font-size:12px">Hai pagato perché non la dia alla rivale</div>' : "");
 
   el.querySelectorAll(".astaBidBtn").forEach((b) => b.addEventListener("click", () => {
-    if (!astaBid(mioId, Number(b.dataset.amt))) showMessage("Non hai abbastanza denari", 1.2, "danger");
+    const inc = Number(b.dataset.inc);
+    // L'importo si ricalcola ADESSO sulla base corrente, non su quella di quando il
+    // pannello e' stato disegnato: fra il disegno e il click una Contrada puo' aver
+    // rilanciato, e prima in quel caso l'offerta partiva gia' superata — veniva
+    // rifiutata e il gioco diceva "non hai abbastanza denari", che era falso.
+    const A2 = state.asta;
+    if (!A2 || A2.chiusa) return;
+    const prot = !!(A2.prepaidHolder && A2.bestBidder === A2.prepaidHolder && mioId !== A2.prepaidHolder);
+    const base = prot ? 2 * (A2.prepaidAmount || 0) : A2.best;
+    // Se nel frattempo la base e' salita, NON si offre alla cieca: si avverte, il
+    // pannello si aggiorna e il giocatore vede la cifra nuova prima di decidere.
+    if (base !== floorBid) {
+      showMessage(`Hanno rilanciato: ora l'ultima offerta e' ${A2.best}`, 1.6, "danger");
+      return;
+    }
+    if (astaBid(mioId, base + inc)) {
+      showMessage(`Hai offerto ${base + inc} alla rincorsa`, 1.2, "good");
+      return;
+    }
+    const perche = {
+      denari: "Non hai abbastanza denari",
+      bassa: `Offerta troppo bassa: serve piu' di ${A2.sogliaRifiuto || A2.best}`,
+      rivale: "Non puoi comprare la mossa dalla tua rivale",
+      chiusa: "L'asta e' chiusa",
+    }[A2.rifiuto] || "Offerta non accettata";
+    showMessage(perche, 1.6, "danger");
   }));
   const blk = document.getElementById("astaBlockBtn");
   if (blk) blk.addEventListener("click", () => {
