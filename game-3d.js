@@ -3799,7 +3799,12 @@ function pickRaceContrade() {
       && est.participants.some((c) => c.id === selected.id)) {
     return [selected, ...est.participants.filter((c) => c.id !== selected.id)];
   }
-  const pool = CONTRADE.filter((contrada) => contrada.id !== selected.id);
+  // SQUALIFICATE: chi ha preso tre avvertimenti salta questo Palio. La Contrada
+  // del giocatore fa eccezione nella paliata veloce (l'ha appena scelta e
+  // resterebbe senza gioco); in campagna la squalifica ha effetto pieno, perché
+  // lì non correre significa assistere al Palio della rivale.
+  const pool = CONTRADE.filter((contrada) => contrada.id !== selected.id
+    && !contradaSqualificata(contrada.id));
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -8533,7 +8538,7 @@ function fantinoRifiuta(j) {
 }
 
 function availableJockeys() {
-  return JOCKEYS.filter((j) => !state.scelta.taken[j.nick]);
+  return JOCKEYS.filter((j) => !state.scelta.taken[j.nick] && !fantinoSqualificato(j.nick));
 }
 
 // BLOCCO FANTINO AVVERSARIO (campagna): un fantino che ha montato per TE non può
@@ -8761,10 +8766,13 @@ function buildSceltaFantinoUI() {
     card.type = "button"; card.className = "sf-card"; card.dataset.nick = j.nick;
     if (ing && (j.ingaggio || 0) > budget) card.classList.add("nofunds");
     // Bloccato: ha montato per la RIVALE negli ultimi 3 palii → non può montare da te.
-    const locked = fantinoBloccatoPerGiocatore(j.nick);
+    // Squalificato: ha accumulato tre avvertimenti e salta questo Palio.
+    const squal = fantinoSqualificato(j.nick);
+    const locked = fantinoBloccatoPerGiocatore(j.nick) || squal;
     if (locked) card.classList.add("locked");
     card.innerHTML =
-      (locked ? '<div class="sf-cross" title="Ha montato per la rivale: non disponibile per 3 palii">✕</div>' : '')
+      (squal ? '<div class="sf-cross" title="Squalificato: tre avvertimenti, salta questo Palio">✕</div>'
+        : locked ? '<div class="sf-cross" title="Ha montato per la rivale: non disponibile per 3 palii">✕</div>' : '')
       + '<div class="sf-nick">' + nickUp(j.nick) + (ing ? '<span class="sf-price">' + j.ingaggio + '</span>' : '') + '</div>'
       // TUTTE le statistiche, sempre: prima Curva non compariva affatto (e chi
       // sceglieva non sapeva quanto rischiava di cadere) e la Fedeltà solo in
@@ -8776,6 +8784,7 @@ function buildSceltaFantinoUI() {
       + '<div class="sf-stat"><span>Fedeltà</span>' + statPips(j.fedelta || 3) + '</div>'
       + '<div class="sf-taken"></div>';
     card.addEventListener("click", () => {
+      if (fantinoSqualificato(j.nick)) { toastMsg("Questo fantino è squalificato: tre avvertimenti, salta questo Palio."); return; }
       if (fantinoBloccatoPerGiocatore(j.nick)) { toastMsg("Questo fantino ha montato per la rivale: non è disponibile per 3 palii."); return; }
       if (card.classList.contains("rifiutato")) { toastMsg("Questo fantino ti ha già detto di no."); return; }
       // Col cavallo scarso può rifiutare: lo scopri solo quando lo chiami.
@@ -9499,6 +9508,18 @@ function mossaSpeedMod(horse) {
 }
 function releaseRace() {
   { const tl = document.querySelector(".hud-top-left"); if (tl) tl.style.display = ""; const tr = document.querySelector(".hud-top-right"); if (tr) tr.style.display = ""; }   // #C: ripristina i box Posizione e Giro al Via
+  // ── PARTENZA FUORI POSIZIONE ────────────────────────────────────────────
+  // Chi al momento del via è molto arretrato o di traverso rispetto al canape si
+  // becca un avvertimento: è la stessa cosa che in Piazza fa arrabbiare il
+  // Mossiere. Il giocatore non è esentato — le regole valgono per tutti.
+  (state.callOrder || []).forEach((h) => {
+    if (!h || h.isRincorsa) return;
+    const arretrato = (h.mossaProgress ?? h.progress ?? 0) < MOSSA_FRONT_LIMIT - 4.5;
+    const traverso = Math.abs(h.mossaTurn || 0) > 0.9;
+    if (arretrato || traverso) daiAvvertimento(h, arretrato ? "partenza fuori posizione" : "girata al canape");
+  });
+  // Le squalifiche pendenti erano per QUESTO palio: da qui in poi sono scontate.
+  scontaSqualifiche();
   chiudiAstaRincorsa();                                    // aggiudica l'asta e rimborsa i blocchi non onorati
   const oldAsta = document.getElementById("astaPanel"); if (oldAsta) oldAsta.remove();
   recordPalioRun();                                        // +1 al totale palii corsi (globale)
@@ -9797,6 +9818,59 @@ function motivoMossaFalsa() {
 // `motivo` (opzionale) finisce nel messaggio del mortaretto: se manca, lo si
 // deduce ORA da motivoMossaFalsa() — non al momento del mortaretto, quando i
 // cavalli sono già lanciati in galoppo e il "dietro" non si legge più.
+// ══════════════════════════════════════════════════════════════════════════
+// AVVERTIMENTI E SQUALIFICHE
+// ──────────────────────────────────────────────────────────────────────────
+// Chi combina guai alla mossa se lo porta dietro: tre richiami dal Mossiere
+// nello stesso palio, o una partenza fuori posizione, valgono un AVVERTIMENTO.
+// Gli avvertimenti si sommano di palio in palio: al terzo, Contrada e fantino
+// saltano il Palio successivo. Il conto sta con l'account, come i denari.
+const AVVISI_KEY = "palio.avvertimenti.v1";
+const AVVISI_PER_SQUALIFICA = 3;
+const RICHIAMI_PER_AVVISO = 3;
+function caricaAvvisi() {
+  try { return JSON.parse(localStorage.getItem(AVVISI_KEY)) || { contrade: {}, fantini: {}, squalificati: {} }; }
+  catch (e) { return { contrade: {}, fantini: {}, squalificati: {} }; }
+}
+function salvaAvvisi(a) {
+  try { localStorage.setItem(AVVISI_KEY, JSON.stringify(a)); } catch (e) { /* niente */ }
+}
+// Un avvertimento a una Contrada e al suo fantino. Al terzo scatta la squalifica
+// per il palio successivo.
+function daiAvvertimento(horse, motivo) {
+  if (!horse || horse.avvisoDato) return;      // uno solo per palio a testa
+  horse.avvisoDato = true;
+  const a = caricaAvvisi();
+  const cid = horse.id;
+  const nick = horse.jockey && horse.jockey.nick;
+  a.contrade[cid] = (a.contrade[cid] || 0) + 1;
+  if (nick) a.fantini[nick] = (a.fantini[nick] || 0) + 1;
+  const nC = a.contrade[cid];
+  const nF = nick ? a.fantini[nick] : 0;
+  let testo = `AVVERTIMENTO a ${horse.name}: ${motivo} (${nC}/${AVVISI_PER_SQUALIFICA})`;
+  if (nC >= AVVISI_PER_SQUALIFICA) {
+    a.squalificati["c:" + cid] = true;
+    a.contrade[cid] = 0;
+    testo = `${horse.name} SQUALIFICATA per un Palio: tre avvertimenti`;
+  }
+  if (nick && nF >= AVVISI_PER_SQUALIFICA) {
+    a.squalificati["f:" + nick] = true;
+    a.fantini[nick] = 0;
+    testo += ` · anche ${nickUp(nick)} salta il prossimo Palio`;
+  }
+  salvaAvvisi(a);
+  showMessage(testo, 3.2, "danger");
+}
+// Chi salta il prossimo Palio (letto quando si formano le partecipanti).
+function contradaSqualificata(id) { return !!caricaAvvisi().squalificati["c:" + id]; }
+function fantinoSqualificato(nick) { return !!caricaAvvisi().squalificati["f:" + nick]; }
+// Scontata la squalifica: si riparte puliti.
+function scontaSqualifiche() {
+  const a = caricaAvvisi();
+  a.squalificati = {};
+  salvaAvvisi(a);
+}
+
 function triggerMossaFalsa(motivo) {
   if (state.falseStartRunning || state.mode !== "mossa") return;   // una alla volta
   state.falseStartCount = (state.falseStartCount || 0) + 1;
@@ -10101,7 +10175,12 @@ function updateMossa(dt, time) {
         if (fuoriPosto && timeInside > 4 && state.recallCd <= 0 && state.messageTimer <= 0) {
           const fuori = schierati.find((h) => !isHuman(h) && (h.recallTimer || 0) <= 0
             && (h.mossaProgress < MOSSA_FRONT_LIMIT - 4.2 || Math.abs(h.mossaTurn || 0) > 0.6));
-          if (fuori) { showMessage(`Il Mossiere richiama ${fuori.name}`, 1.6); fuori.recallTimer = 3.0; state.recallCd = 12.0; }
+          if (fuori) {
+            showMessage(`Il Mossiere richiama ${fuori.name}`, 1.6); fuori.recallTimer = 3.0; state.recallCd = 12.0;
+            // Il Mossiere tiene il conto: al terzo richiamo scatta l'avvertimento.
+            fuori.richiami = (fuori.richiami || 0) + 1;
+            if (fuori.richiami >= RICHIAMI_PER_AVVISO) daiAvvertimento(fuori, "tre richiami del Mossiere");
+          }
         }
       }
     } else {
