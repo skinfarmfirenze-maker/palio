@@ -14,6 +14,11 @@ import * as THREE from "three";
 
 const TAU = Math.PI * 2;
 
+// Taglia del fantino: 0.90 = 10% più basso (Simone, 2026-08-29). Ancorata a SEDUTA_Y,
+// la quota del bacino su cui è tarato l'appoggio sul dorso del cavallo.
+const TAGLIA = 0.90;
+const SEDUTA_Y = 1.78;
+
 // ── Livrea: le 17 terne colore ufficiali (identiche a quelle di game-3d.js) ────
 export const LIV = {
   bianco:     "#F2EAD6",
@@ -887,13 +892,15 @@ export function buildFantino(contrada, opts = {}) {
   // ── GAMBE ──────────────────────────────────────────────────────────────────
   // A pelo il ginocchio sta ALTO e stretto al costato e il piede resta libero.
   [-1, 1].forEach((sign) => {
-    const xAnca = sign * 0.117, xCav = sign * 0.242;
+    // x ricalcolate per il fantino RIDOTTO del 10%: il cavallo resta grande uguale,
+    // quindi a parità di aderenza le gambe devono aprirsi di più nel modello.
+    const xAnca = sign * 0.175, xCav = sign * 0.268;
     const path = [
-      V3(xAnca, 1.795, -0.068),          // dentro il bacino (fianco 0.155)
-      V3(sign * 0.142, 1.758, 0.024),
-      V3(sign * 0.167, 1.672, 0.128),    // ginocchio, dove il barile è stretto (fianco 0.24)
-      V3(sign * 0.192, 1.572, 0.116),    // coscia sul fianco che si allarga (0.28)
-      V3(xCav, 1.478, 0.066),            // caviglia sulla pancia gonfia (0.43)
+      V3(xAnca, 1.795, -0.068),          // dentro il bacino
+      V3(sign * 0.196, 1.758, 0.024),
+      V3(sign * 0.243, 1.672, 0.128),    // ginocchio appoggiato al costato
+      V3(sign * 0.259, 1.572, 0.116),    // coscia lungo il fianco
+      V3(xCav, 1.478, 0.066),            // caviglia: sfiora la pancia, non la insegue
     ];
     const profile = (t) => {
       const r = rampa(t, [[0, 0.070], [0.35, 0.058], [0.55, 0.050], [0.80, 0.040], [1, 0.032]]) * B;
@@ -917,7 +924,7 @@ export function buildFantino(contrada, opts = {}) {
       rx: 0.037, ry: 0.030, rz: 0.070,
       colorFn: (v) => (v.y < -0.010 ? new THREE.Color("#0d0c0b") : nero),
     }), mat);
-    scarpa.position.set(sign * 0.262, 1.446, 0.098);   // piede in fuori, appoggiato sulla pancia
+    scarpa.position.set(sign * 0.272, 1.446, 0.098);   // piede in fuori, appoggiato sulla pancia
     scarpa.rotation.x = -0.30;
     scarpa.castShadow = true;
     rider.add(scarpa);
@@ -948,6 +955,18 @@ export function buildFantino(contrada, opts = {}) {
   // Lo STEMMA sul dorso non è più un piano flottante: è dipinto DENTRO la
   // texture del giubbetto (vedi texturaGiubbetto), incollato alla stoffa.
 
+  // ── TAGLIA DEL FANTINO ──────────────────────────────────────────────────────
+  // Fantini più piccoli del 10% (richiesta di Simone). La riduzione si applica QUI
+  // dentro, non alla scala d'integrazione del gioco, così la chat Palio non deve
+  // toccare nulla. È ancorata al punto di SEDUTA: il bacino resta esattamente dove
+  // appoggia sul dorso e il corpo si accorcia verso il basso, invece di sprofondare.
+  const inner = new THREE.Group();
+  while (rider.children.length) inner.add(rider.children[0]);
+  inner.scale.setScalar(TAGLIA);
+  inner.position.y = SEDUTA_Y * (1 - TAGLIA);
+  rider.add(inner);
+
   rider.userData.contrada = contrada.id;
+  rider.userData.taglia = TAGLIA;
   return rider;
 }
