@@ -4623,6 +4623,7 @@ function pollGamepad() {
 }
 
 function cycleCameraMode() {
+  state.cameraAutoCaduta = false;   // da qui in poi la vista la decide il giocatore
   const order = ["follow", "overhead", "top3", "firstperson"];
   const idx = order.indexOf(state.cameraMode);
   state.cameraMode = order[(idx + 1) % order.length];
@@ -6191,6 +6192,21 @@ function campaignSpectateRelease() {
 // fantino correrà a FAVORE del corruttore. I soldi SPARISCONO dal gioco (a
 // differenza degli accordi, che accreditano chi accetta). Anche il TUO fantino
 // può essere corrotto da un'altra: te ne accorgi in gara (effetti = Tappa 3).
+// Come si presenta una Contrada nelle schermate di scelta: fantino E cavallo,
+// con la fascia del barbero colorata. Senza il cavallo il giocatore non si
+// ricorda chi sta pagando — ed è il dato che decide se vale la pena.
+const TIER_COL = { bombolone: "#7fd98c", bono: "#e7d18a", brenna: "#e8896f" };
+function rigaContrada(h) {
+  const j = h.jockey;
+  const cav = h.horseName || "—";
+  const tier = h.horseTier || "";
+  const col = TIER_COL[tier] || "#c9bfa8";
+  return `<b>${h.name}</b> · ${j ? nickUp(j.nick) : "—"}`
+    + ` <span style="opacity:.55">su</span> <b style="color:#f0cb35">${cav}</b>`
+    + (tier ? ` <span style="color:${col};font-size:12px">${tier}</span>` : "")
+    + ` <span style="opacity:.65">· fedeltà ${(j && j.fedelta) || 3}</span>`;
+}
+
 function corruptionCost(jockey) { return 80 * ((jockey && jockey.fedelta) || 3); }
 
 function campaignAICorruption() {
@@ -6295,7 +6311,7 @@ function campaignCorruptionScreen() {
       row.style.cssText = "display:flex;align-items:center;gap:10px;background:rgba(18,13,8,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:14px";
       const flag = document.createElement("div"); flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1"; info.style.textAlign = "left";
-      info.innerHTML = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`;
+      info.innerHTML = rigaContrada(h);
       const simpleBtn = (txt, opts) => { const b = document.createElement("button"); b.className = "cmp-btn"; b.style.cssText = "margin:0;font-size:14px;padding:7px 16px;flex:0 0 auto"; b.textContent = txt; b.disabled = true; if (opts && opts.bg) b.style.background = opts.bg; else b.style.opacity = ".5"; return b; };
       let btn;
       if (mine) btn = simpleBtn("Corrotto ✓", { bg: "#2e6b46" });
@@ -6940,7 +6956,7 @@ function campaignAccordiScreen(spectate) {
         const j = h.jockey; if (!j) return;
         const cost = accordoCost(j);
         const schierata = inFazioneAvversaria(cmp, h.id);
-        const html = `<b>${h.name}</b> · ${nickUp(j.nick)} <span style="opacity:.65">· fedeltà ${j.fedelta || 3}</span>`
+        const html = rigaContrada(h)
           + (schierata ? ` <span style="font-size:11px;color:#e8896f">· ha già preso accordi…</span>` : "");
         const allied = cmp.accordi.some((a) => a.helper === h.id && (spectate ? a.para === cmp.rival.id : a.beneficiary === myId));
         let btn;
@@ -13561,9 +13577,29 @@ function formatTime(seconds) {
   return `${minutes}:${rest.toFixed(2).padStart(5, "0")}`;
 }
 
+// Sei caduto o il cavallo è scosso: la corsa continua senza di te e restare
+// inchiodati su un cavallo fermo (o senza fantino) è la cosa meno interessante da
+// guardare. La camera passa da sola sui primi tre e ci resta finché non ti rialzi.
+// Se nel frattempo cambi vista col tasto C, comandi tu: non te la sposto più.
+function cameraSeguiLaCorsaSeCadi(player) {
+  if (!player || !player.player || state.mode !== "race") return;
+  const fuoriGioco = !!(player.caduto || player.scosso);
+  if (fuoriGioco && !state.cameraAutoCaduta && state.cameraMode !== "top3") {
+    state.cameraModePrima = state.cameraMode;
+    state.cameraMode = "top3";
+    state.cameraAutoCaduta = true;
+    showMessage("Guardi la corsa dall'alto · C per cambiare vista", 2.2);
+  } else if (!fuoriGioco && state.cameraAutoCaduta) {
+    // rimontato in sella: si torna alla vista di prima
+    state.cameraMode = state.cameraModePrima || "follow";
+    state.cameraAutoCaduta = false;
+  }
+}
+
 function updateCamera(dt) {
   const player = getPlayer() || state.demoHorses[0];
   if (!player) return;
+  cameraSeguiLaCorsaSeCadi(player);
   const sample = sampleAt(player.progress);
   const playerFollowView = player.player && (state.mode === "mossa" || state.mode === "race" || state.mode === "finished");
   const inGameplay = state.mode === "mossa" || state.mode === "race" || state.mode === "finished";
