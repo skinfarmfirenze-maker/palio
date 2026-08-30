@@ -894,10 +894,11 @@ export function buildFantino(contrada, opts = {}) {
   [-1, 1].forEach((sign) => {
     // x ricalcolate per il fantino RIDOTTO del 10%: il cavallo resta grande uguale,
     // quindi a parità di aderenza le gambe devono aprirsi di più nel modello.
-    const xAnca = sign * 0.175, xCav = sign * 0.268;
+    const xAnca = sign * 0.082, xCav = sign * 0.268;
     const path = [
-      V3(xAnca, 1.795, -0.068),          // dentro il bacino
-      V3(sign * 0.196, 1.758, 0.024),
+      V3(xAnca, 1.795, -0.068),          // DENTRO il bacino (semiasse 0.108): l'anca non deve sbucare
+      V3(sign * 0.170, 1.762, 0.020),    // esce dal bacino e si porta sul fianco
+      V3(sign * 0.222, 1.712, 0.070),
       V3(sign * 0.243, 1.672, 0.128),    // ginocchio appoggiato al costato
       V3(sign * 0.259, 1.572, 0.116),    // coscia lungo il fianco
       V3(xCav, 1.478, 0.066),            // caviglia: sfiora la pancia, non la insegue
