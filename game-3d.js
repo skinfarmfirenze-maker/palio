@@ -7133,8 +7133,31 @@ function campaignContinueButton() {
   }
 }
 
+// ── IL VOTO DEL POPOLO ─────────────────────────────────────────────────────
+// Finito il mandato, la Contrada giudica il suo Capitano: se il bilancio fra
+// Palii vinti e Purghe subite è in attivo (più di uno), il popolo lo riconferma e
+// il mandato riparte da capo; altrimenti lo manda a casa. Il risultato si mostra
+// come una votazione vera, con la percentuale che sale.
+function votoDelPopolo(cmp) {
+  const x = (cmp.wins || 0) - (cmp.purghe || 0);
+  const riconfermato = x > 1;
+  // La percentuale racconta il bilancio: sopra il 60% è la riconferma. Non è
+  // casuale, si ricava da com'è andato il mandato — così il numero ha un senso.
+  let pct;
+  if (riconfermato) pct = Math.min(94, 62 + x * 7);
+  else pct = Math.max(18, 58 - Math.max(0, -x) * 9 - (cmp.purghe || 0) * 4);
+  return { riconfermato, pct: Math.round(pct), x };
+}
+
 function showCampaignFinal() {
   const cmp = state.campaign;
+  const voto = votoDelPopolo(cmp);
+  // Prima di tutto il POPOLO VOTA — e lo si vede in ogni caso, che ti tengano o
+  // che ti mandino via. Se ti riconfermano comincia un nuovo mandato con la
+  // stessa Contrada (denari compresi: quelli sono dell'account e non si azzerano);
+  // se ti bocciano, dal voto si passa al resoconto qui sotto.
+  if (!cmp.votoMostrato) { cmp.votoMostrato = true; showVotoPopolo(cmp, voto, voto.riconfermato); return; }
+  cmp.votoMostrato = false;
   clearCampaignSave();   // mandato concluso: niente più "riprendi"
   if (cmp && !cmp.finalRecorded) { cmp.finalRecorded = true; saveCampaignToAlbo(cmp); }   // iscrivi il mandato all'Albo dei Capitani
   try { stopPalioSounds(); playPalioSound("finale.m4a", { volume: 0.6 }); } catch (e) { /* niente */ }   // premiazione del mandato
@@ -7155,6 +7178,78 @@ function showCampaignFinal() {
     b.addEventListener("click", () => { closeCampaignOverlay(); resetCampaign(); openMenuScreen(); });
     panel.append(k, t, stats, v, b);
   });
+}
+
+// Schermata del voto: la percentuale sale da 0 al risultato in un paio di secondi,
+// poi compare il verdetto. `prosegue` = riconfermato, quindi si riparte.
+function showVotoPopolo(cmp, voto, prosegue) {
+  try { stopPalioSounds(); playPalioSound("finale.m4a", { volume: 0.6 }); } catch (e) { /* niente */ }
+  campaignOverlay((panel) => {
+    const k = document.createElement("p"); k.className = "cmp-kicker";
+    k.textContent = `Capitano ${cmp.captain} · Contrada ${cmp.contrada.name}`;
+    const t = document.createElement("div"); t.className = "cmp-title";
+    t.textContent = "Il popolo vota";
+    const sub = document.createElement("div"); sub.className = "cmp-text";
+    sub.textContent = "L'assemblea della Contrada si riunisce e giudica il mandato.";
+
+    const num = document.createElement("div");
+    num.style.cssText = "font-size:clamp(38px,9vw,64px);font-weight:900;letter-spacing:.02em;margin:10px 0 2px";
+    num.textContent = "0%";
+    const barra = document.createElement("div");
+    barra.style.cssText = "height:14px;border-radius:8px;background:rgba(255,255,255,.12);overflow:hidden;margin:6px 0 4px";
+    const dentro = document.createElement("div");
+    dentro.style.cssText = "height:100%;width:0%;transition:width 1.8s ease-out;background:#e8896f";
+    barra.appendChild(dentro);
+    const soglia = document.createElement("div"); soglia.className = "cmp-text";
+    soglia.style.opacity = ".7"; soglia.textContent = "Serve il 60% per la riconferma";
+
+    const esito = document.createElement("div"); esito.className = "cmp-text";
+    esito.style.cssText = "font-weight:800;margin-top:10px;min-height:44px";
+    const b = document.createElement("button"); b.className = "cmp-btn";
+    b.style.visibility = "hidden";
+
+    panel.append(k, t, sub, num, barra, soglia, esito, b);
+
+    // il conteggio dei voti
+    const col = voto.riconfermato ? "#7fd98c" : "#e8896f";
+    requestAnimationFrame(() => { dentro.style.width = voto.pct + "%"; dentro.style.background = col; });
+    const t0 = performance.now();
+    const tick = () => {
+      const q = Math.min(1, (performance.now() - t0) / 1800);
+      num.textContent = Math.round(voto.pct * q) + "%";
+      num.style.color = q >= 1 ? col : "#f3e7cf";
+      if (q < 1) { requestAnimationFrame(tick); return; }
+      esito.style.color = col;
+      esito.textContent = voto.riconfermato
+        ? "RICONFERMATO. Il popolo ti vuole ancora Capitano: comincia un nuovo mandato."
+        : "SFIDUCIATO. La Contrada ti ringrazia e saluta: il mandato finisce qui.";
+      b.textContent = prosegue ? "Nuovo mandato →" : "Il resoconto del mandato →";
+      b.style.visibility = "visible";
+    };
+    requestAnimationFrame(tick);
+
+    b.addEventListener("click", () => {
+      closeCampaignOverlay();
+      if (prosegue) { nuovoMandato(cmp); return; }
+      showCampaignFinal();   // bocciato: ora il resoconto del mandato
+    });
+  });
+}
+
+// Riconfermato: si riparte con la stessa Contrada e lo stesso Capitano. Azzera
+// solo il conto del mandato — i denari sono dell'account e non si toccano.
+function nuovoMandato(cmp) {
+  cmp.palioIndex = 0;
+  cmp.wins = 0;
+  cmp.purghe = 0;
+  cmp.mandati = (cmp.mandati || 1) + 1;
+  cmp.log = [];
+  cmp.recorded = false;
+  cmp.finalRecorded = false;
+  cmp.schedule = buildCampaignSchedule();
+  cmp.circuit = { luglio: [], agosto: [] };
+  saveCampaignProgress();
+  campaignMandate();
 }
 
 // ══ LA TRATTA — sorteggio dei cavalli alle Contrade (step prima del tondino) ══
