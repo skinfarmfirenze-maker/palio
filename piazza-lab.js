@@ -745,7 +745,7 @@ export function costruisciPalchi(ctx, opz = {}) {
 // del gioco (stessa tavolozza di game-3d.js), con qualche macchia di contrada.
 // Tinte "di contrada" per i settori delle comparse (blocchi monocolore).
 const TINTE_COMPARSE = [0xe0b84a, 0xc44135, 0x2e689b, 0x287b55, 0xf0ece2,
-  0xd97e2f, 0x7a1f2b, 0x5aa7c7, 0x8e5aa0, 0x27303a];
+  0xd97e2f, 0x7a1f2b, 0x5aa7c7, 0xece6d6, 0x27303a];
 
 export function costruisciPubblicoPalchi(posti, opz = {}) {
   const g = new THREE.Group();
@@ -757,7 +757,7 @@ export function costruisciPubblicoPalchi(posti, opz = {}) {
     0xe8e4da, 0xf0ece2, 0xdcd6c8, 0xcfc8ba, 0xe6ddcb,     // bianchi/creme: la maggioranza
     0x9aa2ab, 0xb8a890, 0xa89a86, 0x8a8478, 0x736d63,     // grigi e beige
     0x55606b, 0x40484f, 0x6b4a3a, 0x84725c,               // scuri
-    0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0xb85a8c      // macchie di colore
+    0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0xf0ece2      // macchie di colore
   ];
   const pelle = [0xd8ac86, 0xc59468, 0xe3c19c, 0xa87b52, 0x8a5f3c];
   const busto = new THREE.InstancedMesh(
@@ -1499,7 +1499,7 @@ export function costruisciFollaCentro(ctx, opz = {}) {
 
   const tinte = [0xe8e4da, 0xf0ece2, 0xdcd6c8, 0xcfc8ba, 0xe6ddcb, 0x9aa2ab,
     0xb8a890, 0xa89a86, 0x8a8478, 0x736d63, 0x55606b, 0x6b4a3a, 0x84725c,
-    0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0xb85a8c, 0xd97e2f];
+    0xc44135, 0x2e689b, 0x287b55, 0xe0b84a, 0xf0ece2, 0xd97e2f];
   const pelle = [0xd8ac86, 0xc59468, 0xe3c19c, 0xa87b52, 0x8a5f3c];
   const corpi = new THREE.InstancedMesh(
     new THREE.CapsuleGeometry(0.15, 0.85, 2, 6),
