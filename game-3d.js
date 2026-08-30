@@ -406,7 +406,7 @@ const state = {
   demoHorses: [],
   dust: [],
   flags: [],
-  crowd: [],
+  folla: null,        // la folla animata del centro piazza (una InstancedMesh sola)
   clouds: [],
   speedLines: [],
   canapi: null,
@@ -1924,17 +1924,21 @@ function buildCrowdAndFlags() {
     0xb8a890, 0xcfc8ba, 0x736d63, 0x84725c, 0x5c5650, 0xa89a86,
     0xc44135, 0x2e689b, 0x287b55, 0xe0b84a
   ];
-  const crowdMats = crowdColors.map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.95 }));
+  // LA FOLLA ANIMATA — quella che salta quando la Piazza esulta. Erano 900 mesh
+  // separate: 900 draw call e 900 oggetti da disegnare a ogni fotogramma, ed era
+  // di gran lunga la cosa più pesante della scena. Ora sono UNA InstancedMesh
+  // sola (una draw call) e di ognuna si tiene solo il dato che serve ad animarla.
+  // Il movimento è identico a prima.
+  const folla = {
+    mesh: null,
+    dati: [],            // { x, z, baseY, scala, phase }
+    dummy: new THREE.Object3D(),
+    sporca: true,        // le matrici vanno riscritte a questo frame
+  };
+  state.folla = folla;
   const addPerson = (position, size = 1) => {
-    const body = new THREE.Mesh(shared.crowdGeometry, crowdMats[Math.floor(Math.random() * crowdMats.length)]);
-    body.scale.setScalar(size);
-    body.position.copy(position);
-    body.userData.baseY = body.position.y;
-    body.userData.phase = Math.random() * TAU;
-    state.crowd.push(body);
-    // Sempre in scena, in ogni fase: all'estrazione e alla Tratta la Piazza e'
-    // piena di contradaioli anche se il tufo non e' ancora steso.
-    scene.add(body);
+    folla.dati.push({ x: position.x, z: position.z, baseY: position.y, scala: size,
+                      phase: Math.random() * TAU });
   };
 
   // (RIMOSSI i 420 figuranti in piedi lungo l'anello: stavano a un offset FISSO dal
@@ -1973,6 +1977,19 @@ function buildCrowdAndFlags() {
     if (tmpVec.dot(campoOutward(bestS.point)) >= 0) continue; // scarta il lato esterno
     addPerson(new THREE.Vector3(qx, 0.36 + Math.random() * 0.14, qz), 0.62 + Math.random() * 0.24);
     placed += 1;
+  }
+
+  // Costruita la lista, la folla animata diventa un solo oggetto in scena.
+  if (folla.dati.length) {
+    const im = new THREE.InstancedMesh(shared.crowdGeometry,
+      new THREE.MeshStandardMaterial({ roughness: 0.95 }), folla.dati.length);
+    const col = new THREE.Color();
+    folla.dati.forEach((p, i) => im.setColorAt(i, col.setHex(crowdColors[Math.floor(Math.random() * crowdColors.length)])));
+    im.castShadow = false;
+    im.receiveShadow = false;
+    im.name = "FollaAnimata";
+    folla.mesh = im;
+    scene.add(im);
   }
 
   // ── LA CONCHIGLIA PIENA ────────────────────────────────────────────────────
@@ -12924,17 +12941,35 @@ function updateAtmosphere(dt, time) {
     else excite = k * 0.4;              // "mild": applauso contenuto
     if (cr.t >= cr.dur) state.crowdReaction = null;
   }
-  state.crowd.forEach((person, index) => {
-    let y = person.userData.baseY;
-    if (excite > 0.01) {
-      // Salti di gioia: onda veloce e ampia, sfasata per persona.
-      y += Math.abs(Math.sin(time * 9 + person.userData.phase)) * 0.4 * excite;
-    } else if (freeze <= 0.01 && index % 4 === 0) {
-      y += Math.sin(time * 5.2 + person.userData.phase) * 0.045; // ondeggiamento normale
+  // FOLLA ANIMATA: si riscrivono le matrici solo quando qualcosa si MUOVE davvero.
+  // Col gelo (freeze) la folla sta ferma: in quel caso si salta tutto, e appena
+  // torna immobile si fa un ultimo passaggio per rimetterla giù.
+  {
+    const F = state.folla;
+    if (F && F.mesh) {
+      const inMovimento = excite > 0.01 || freeze <= 0.01;
+      if (inMovimento || F.sporca) {
+        const dm = F.dummy;
+        for (let i = 0; i < F.dati.length; i += 1) {
+          const p = F.dati[i];
+          let y = p.baseY;
+          if (excite > 0.01) {
+            // Salti di gioia: onda veloce e ampia, sfasata per persona.
+            y += Math.abs(Math.sin(time * 9 + p.phase)) * 0.4 * excite;
+          } else if (freeze <= 0.01 && i % 4 === 0) {
+            y += Math.sin(time * 5.2 + p.phase) * 0.045;   // ondeggiamento normale
+          }
+          dm.position.set(p.x, y, p.z);
+          dm.scale.setScalar(p.scala);
+          dm.updateMatrix();
+          F.mesh.setMatrixAt(i, dm.matrix);
+        }
+        F.mesh.instanceMatrix.needsUpdate = true;
+        if (F.mesh.instanceColor) F.mesh.instanceColor.needsUpdate = true;
+        F.sporca = inMovimento;   // fermi: un ultimo giro e poi si smette
+      }
     }
-    // freeze > 0 → la folla resta immobile (gelo)
-    person.position.y = y;
-  });
+  }
 
   // Le nuvole orbitano lente attorno all'asse Y.
   if (state.clouds.length) {
