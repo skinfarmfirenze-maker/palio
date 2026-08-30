@@ -11642,7 +11642,13 @@ function updatePlayer(dt, time) {
   const outwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
   const innerOffset = -outwardLaneSign * player.lane; // >0 = verso l'interno
   const kappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
-  const radiusFactor = 1 / clamp(1 - innerOffset * kappaMag, 0.62, 1.5);
+  // Il tetto 0.62 (cioè 1,61x) era troppo basso: per il giocatore questo fattore
+  // non è un bonus ma la CONVERSIONE del suo movimento nel mondo in avanzamento
+  // sulla pista. Tenendo la corda a San Martino servirebbe 3,0x e al Casato 5,6x:
+  // con 1,61 il gioco gli riconosceva un terzo di quello che faceva davvero, e il
+  // cavallo sembrava risucchiato dall'angolo. 0.36 = fino a 2,78x: il risucchio
+  // quasi sparisce senza che la corda diventi una scorciatoia.
+  const radiusFactor = 1 / clamp(1 - innerOffset * kappaMag, 0.36, 1.5);
 
   // Il cavallo si muove nella direzione dell'heading; il moto viene proiettato
   // sulla pista in avanzamento (progress) e spostamento laterale (lane).
@@ -12045,7 +12051,9 @@ function updateAiHorse(horse, dt, time) {
   const aiOutwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
   const aiInnerOffset = -aiOutwardLaneSign * horse.lane;
   const aiKappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
-  const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.62, 1.5);
+  // Stesso tetto del giocatore (0.36): se restasse più basso, in curva stretta
+  // l'umano guadagnerebbe sulle AI solo per come è fatto il calcolo.
+  const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.36, 1.5);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
   horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
