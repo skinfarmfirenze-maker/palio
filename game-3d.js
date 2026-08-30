@@ -4639,7 +4639,15 @@ function pollGamepad() {
 }
 
 function cycleCameraMode() {
-  state.cameraAutoCaduta = false;   // da qui in poi la vista la decide il giocatore
+  // A terra il tasto C non cambia la modalità di gioco: passa alla prossima delle
+  // tre inquadrature sulla testa della corsa.
+  if (state.cameraAutoCaduta) {
+    state.cadutaVista = ((state.cadutaVista || 0) + 1) % VISTE_CADUTA.length;
+    state.cadutaTimer = 0;
+    const nomi = { alto: "Dall'alto sulle prime tre", laterale: "Laterale, di profilo", aerea: "Aerea su San Martino" };
+    showMessage(nomi[VISTE_CADUTA[state.cadutaVista]] || "", 0.9);
+    return;
+  }
   const order = ["follow", "overhead", "top3", "firstperson"];
   const idx = order.indexOf(state.cameraMode);
   state.cameraMode = order[(idx + 1) % order.length];
@@ -13797,28 +13805,85 @@ function formatTime(seconds) {
 }
 
 // Sei caduto o il cavallo è scosso: la corsa continua senza di te e restare
-// inchiodati su un cavallo fermo (o senza fantino) è la cosa meno interessante da
-// guardare. La camera passa da sola sui primi tre e ci resta finché non ti rialzi.
-// Se nel frattempo cambi vista col tasto C, comandi tu: non te la sposto più.
-function cameraSeguiLaCorsaSeCadi(player) {
+// inchiodati su un cavallo fermo è la cosa meno interessante da guardare. La
+// camera passa sulla testa della corsa con la stessa REGIA del replay — tre
+// inquadrature che si alternano — e ci resta finché non ti rialzi. Col tasto C
+// passi alla successiva quando vuoi.
+const VISTE_CADUTA = ["alto", "laterale", "aerea"];
+const CADUTA_STACCO = 6.5;   // secondi prima dello stacco sull'inquadratura dopo
+function cameraSeguiLaCorsaSeCadi(player, dt) {
   if (!player || !player.player || state.mode !== "race") return;
   const fuoriGioco = !!(player.caduto || player.scosso);
-  if (fuoriGioco && !state.cameraAutoCaduta && state.cameraMode !== "top3") {
+  if (fuoriGioco && !state.cameraAutoCaduta) {
     state.cameraModePrima = state.cameraMode;
-    state.cameraMode = "top3";
     state.cameraAutoCaduta = true;
-    showMessage("Guardi la corsa dall'alto · C per cambiare vista", 2.2);
+    state.cadutaVista = 0;
+    state.cadutaTimer = 0;
+    showMessage("La testa della corsa · C per cambiare inquadratura", 2.4);
   } else if (!fuoriGioco && state.cameraAutoCaduta) {
-    // rimontato in sella: si torna alla vista di prima
-    state.cameraMode = state.cameraModePrima || "follow";
+    state.cameraMode = state.cameraModePrima || "follow";   // rimontato in sella
     state.cameraAutoCaduta = false;
   }
+  if (state.cameraAutoCaduta) {
+    state.cadutaTimer = (state.cadutaTimer || 0) + (dt || 0);
+    if (state.cadutaTimer >= CADUTA_STACCO) {   // stacco sulla prossima inquadratura
+      state.cadutaTimer = 0;
+      state.cadutaVista = ((state.cadutaVista || 0) + 1) % VISTE_CADUTA.length;
+    }
+  }
+}
+
+// Le tre inquadrature sulla testa della corsa, le stesse del replay del vincitore.
+// Torna true se ha preso lei il comando della camera.
+function cameraRegiaCaduta(dt) {
+  if (!state.cameraAutoCaduta) return false;
+  const primo = state.horses
+    .filter((h) => !h.isRincorsa && h.group)
+    .sort((a, b) => (b.progress || 0) - (a.progress || 0))[0];
+  if (!primo) return false;
+  const vista = VISTE_CADUTA[state.cadutaVista || 0];
+
+  if (vista === "alto") return computeTop3Camera(dt);   // dall'alto sulle prime tre
+
+  if (vista === "aerea" && NARROW_READY) {
+    // Aerea ferma sopra San Martino: il punto di vista non si muove, si muove solo
+    // lo sguardo che insegue chi comanda.
+    const apex = sampleAt((SM_IN + SM_OUT) / 2);
+    const camA = apex.point.clone()
+      .addScaledVector(campoOutward(apex.point), 14).add(new THREE.Vector3(0, 38, 0));
+    state.cameraPosition.lerp(camA, clamp(dt * 2.2, 0, 1));
+    state.cameraLook.lerp(primo.group.position.clone().add(new THREE.Vector3(0, 1, 0)), clamp(dt * 3, 0, 1));
+    camera.position.copy(state.cameraPosition);
+    camera.lookAt(state.cameraLook);
+    state.cameraFov += (52 - state.cameraFov) * clamp(dt * 3, 0, 1);
+    camera.fov = state.cameraFov;
+    camera.updateProjectionMatrix();
+    return true;
+  }
+
+  // Laterale da bordo pista, rialzata e col teleobiettivo: i sorpassi di profilo.
+  const s = sampleAt(primo.progress);
+  const dentro = campoOutward(s.point).clone().normalize().multiplyScalar(-1);
+  const camPos = primo.group.position.clone()
+    .addScaledVector(dentro, 15).addScaledVector(s.tangent, -2.0)
+    .add(new THREE.Vector3(0, 7.6 + Math.sin(clock.elapsedTime * 1.8) * 0.06, 0));
+  const look = primo.group.position.clone()
+    .addScaledVector(s.tangent, 2.4).add(new THREE.Vector3(0, 1.2, 0));
+  state.cameraPosition.lerp(camPos, clamp(dt * 3.2, 0, 1));
+  state.cameraLook.lerp(look, clamp(dt * 3.6, 0, 1));
+  camera.position.copy(state.cameraPosition);
+  camera.lookAt(state.cameraLook);
+  state.cameraFov += (44 - state.cameraFov) * clamp(dt * 3, 0, 1);
+  camera.fov = state.cameraFov;
+  camera.updateProjectionMatrix();
+  return true;
 }
 
 function updateCamera(dt) {
   const player = getPlayer() || state.demoHorses[0];
   if (!player) return;
-  cameraSeguiLaCorsaSeCadi(player);
+  cameraSeguiLaCorsaSeCadi(player, dt);
+  if (cameraRegiaCaduta(dt)) return;
   const sample = sampleAt(player.progress);
   const playerFollowView = player.player && (state.mode === "mossa" || state.mode === "race" || state.mode === "finished");
   const inGameplay = state.mode === "mossa" || state.mode === "race" || state.mode === "finished";
