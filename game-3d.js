@@ -19,6 +19,21 @@ const FANTINO_CONTRADE_BY_ID = {};
 CONTRADE_FANTINI.forEach((c) => { FANTINO_CONTRADE_BY_ID[c.id] = c; });
 
 const FINISH_LAPS = 3;
+// DOPO L'ARRIVO: i cavalli non si inchiodano sulla linea né sfrecciano via. Vanno
+// avanti ancora un po' scalando l'andatura e si fermano 15 unità oltre — come in
+// Piazza, dove il gruppo si spegne dopo il traguardo.
+const ARRIVO_EXTRA = 15;
+// Fattore di velocità dopo il traguardo: 1 sulla linea, 0 a quindici unità.
+// La curva è morbida (non lineare) così la frenata non ha spigoli.
+function frenataArrivo(horse) {
+  if (!horse || !horse.finishTime) return 1;
+  const oltre = horse.progress - track.length * FINISH_LAPS;
+  const q = clamp(1 - oltre / ARRIVO_EXTRA, 0, 1);
+  // Radice, non quadrato: tiene l'andatura per un buon tratto oltre la linea e
+  // scala solo alla fine, arrivando a fermarsi ESATTAMENTE a quindici unità in
+  // 2,6 secondi. Col quadrato frenavano subito e si spegnevano a undici.
+  return Math.sqrt(q);
+}
 const TRACK_HALF_WIDTH = 11.5;
 const AI_LANE_LIMIT = TRACK_HALF_WIDTH - 0.82;
 const BASE_SPEED_LEVEL = 4.72;
@@ -11729,7 +11744,17 @@ function updatePlayer(dt, time) {
     // Ha già tagliato: durante il runout PROSEGUE oltre la linea (niente stop
     // sul traguardo), così il replay lo mostra in volata e non congelato.
     if ((state.raceRunout || 0) > 0) {
-      player.progress += (player.travelSpeed || 0) * RACE_SPEED_MULT * dt;
+      const f = frenataArrivo(player);
+      player.progress += (player.travelSpeed || 0) * RACE_SPEED_MULT * f * dt;
+      // SI RIMETTE DRITTO. Finita la corsa il giocatore non guida più, ma il muso
+      // restava puntato dove l'aveva lasciato l'ultimo comando: sulla curva dopo
+      // il traguardo il cavallo proseguiva di traverso. Qui l'orientamento torna
+      // dolcemente su quello della pista.
+      const sArr = sampleAt(player.progress);
+      if (player.heading !== undefined) {
+        player.heading += angleDiff(sArr.yaw, player.heading) * clamp(dt * 2.2, 0, 1);
+      }
+      player.speedLevel = (player.speedLevel || 0) * (1 - clamp(dt * 1.4, 0, 1));
       placeHorse(player, time);
     }
     return;
@@ -12236,7 +12261,7 @@ function updateAiHorse(horse, dt, time) {
   const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.36, 1.5);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
@@ -12509,7 +12534,7 @@ function updateRace(dt, time) {
   // tiene viva la registrazione per il replay e lascia il campo proseguire oltre la
   // linea (nessuno si blocca sul traguardo).
   if (!state.victoryShown && state.horses.some((horse) => horse.finishTime)) {
-    state.raceRunout = 1.7;
+    state.raceRunout = 3.0;   // il tempo che serve al campo per scalare e fermarsi (2,6s + margine)
     presentVictory();
   }
 
