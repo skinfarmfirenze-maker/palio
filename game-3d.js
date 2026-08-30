@@ -35,7 +35,9 @@ function frenataArrivo(horse) {
   return Math.sqrt(q);
 }
 const TRACK_HALF_WIDTH = 11.5;
-const AI_LANE_LIMIT = TRACK_HALF_WIDTH - 0.82;
+// 10,9 dal centro pista: i cavalli corrono più addosso al colonnino di prima
+// (era 10,68). Chiesto da Simone dopo la proposta della chat Grafica.
+const AI_LANE_LIMIT = TRACK_HALF_WIDTH - 0.6;
 const BASE_SPEED_LEVEL = 4.72;
 // Moltiplicatore globale di velocità della corsa: 1,5x (richiesta) × 1,2x (per
 // rendere davvero difficili le due curve a 90°). Si applica all'AVANZAMENTO, non
@@ -64,7 +66,8 @@ const PLAYER_CURVE_PENALTY_SPEED = 6.35;
 // pista (limite anti-testacoda; entro questo angolo non c'è alcuno sterzo
 // automatico, l'heading cambia solo per input del giocatore).
 const PLAYER_STEER_TURN_RATE = 1.0;
-const PLAYER_MAX_HEADING_DEV = 1.05;
+// (non piu' usata: il muso del giocatore non viene piu' riportato sulla tangente)
+// const PLAYER_MAX_HEADING_DEV = 1.05;
 // ── Sensibilità di sterzata in funzione di velocità e curvatura ───────────────
 // Sul rettilineo (e archi dolci) si sterza pieno (0.80). Nelle due curve a 90°
 // la sterzata cala con l'andatura: più si va forte, più si va larghi.
@@ -300,6 +303,10 @@ const LIV = {
   giallo:     "#EFC531",
   gialloOro:  "#E3AE1F",   // oro caldo dell'Aquila, più profondo del giallo
   rosso:      "#C22530",
+  // Il Valdimontone ha un rosso SUO, virato al rosa e schiarito: lo distingue
+  // dalla Chiocciola e dalla Giraffa, che sono rosso pieno. Stesso colore in
+  // fantino-lab, così il fantino e la sua bandiera non hanno due rossi diversi.
+  rosaMontone: "#EE93A4",
   cremisi:    "#A8102E",   // Torre: cremisi, più cupo e violaceo del rosso
   verde:      "#16833F",
   arancio:    "#E07A24",
@@ -332,7 +339,7 @@ const CONTRADE = [
   { id: "selva", name: "Selva", motto: "Verde e arancio con liste bianche", colors: [LIV.verde, LIV.arancio, LIV.bianco], coat: "#6a3d27" },
   { id: "tartuca", name: "Tartuca", motto: "Giallo e turchino", colors: [LIV.giallo, LIV.turchino, LIV.turchino], coat: "#8a5230" },
   { id: "torre", name: "Torre", motto: "Rosso cremisi con liste bianche e blu", colors: [LIV.cremisi, LIV.cremisi, LIV.bianco], silkStripe: LIV.blu, coat: "#533121" },
-  { id: "valdimontone", name: "Valdimontone", motto: "Rosso e giallo con liste bianche", colors: [LIV.rosso, LIV.giallo, LIV.bianco], coat: "#9d6439" }
+  { id: "valdimontone", name: "Valdimontone", motto: "Rosso e giallo con liste bianche", colors: [LIV.rosaMontone, LIV.giallo, LIV.bianco], coat: "#9d6439" }
 ];
 
 const HORSE_COAT_VARIANTS = [
@@ -2059,22 +2066,11 @@ function buildCrowdAndFlags() {
   dense.name = "FollaFitta";
   scene.add(dense);   // idem: la conchiglia e' gremita in ogni fase
 
-  for (let i = 0; i < 54; i += 1) {
-    const contrada = CONTRADE[i % CONTRADE.length];
-    const s = sampleAt((i / 54) * track.length);
-    const outward = campoOutward(s.point);
-    const p = s.point.clone().addScaledVector(outward, TRACK_HALF_WIDTH + PALCHI_FONDO + 0.6);
-    const poleTop = p.clone().setY(3.2);
-    const poleBottom = p.clone().setY(0.1);
-    addPalchi(makeCylinderBetween(poleBottom, poleTop, 0.035, materials.black));
-    const flag = new THREE.Mesh(shared.flagGeometry, makeMat(contrada.colors[0], 0.7));
-    flag.position.copy(poleTop).addScaledVector(outward, -0.18).add(new THREE.Vector3(0, -0.35, 0));
-    flag.rotation.y = Math.atan2(outward.x, outward.z) + Math.PI / 2;
-    flag.userData.phase = Math.random() * TAU;
-    flag.userData.baseRotation = flag.rotation.y;
-    state.flags.push(flag);
-    addPalchi(flag);
-  }
+  // (RIMOSSI i 54 pali con le bandiere di Contrada lungo l'anello: stavano a un
+  // offset FISSO dal bordo, quindi dietro le gradinate erano invisibili quasi
+  // ovunque ma spuntavano nei VARCHI della scenografia — dopo la mossa, alla bocca
+  // della Costarella, e al Casato. Geometria e draw call sprecate per una cosa che
+  // o non si vede o si vede dove non deve.)
 }
 
 function buildSpeedLines() {
@@ -11888,16 +11884,14 @@ function updatePlayer(dt, time) {
   const turnMult = steerMultForCurve(curve, player.effectiveSpeedLevel);
   const turnRate = PLAYER_STEER_TURN_RATE * turnMult;
   player.heading += steerDir * turnRate * dt;
-  // Limite anti-testacoda: l'heading non può discostarsi oltre ±DEV dalla
-  // tangente. Entro il limite nessuno sterzo è automatico.
-  let headingDev = angleDiff(player.heading, tangentYaw);
-  if (headingDev > PLAYER_MAX_HEADING_DEV) {
-    player.heading = tangentYaw + PLAYER_MAX_HEADING_DEV;
-    headingDev = PLAYER_MAX_HEADING_DEV;
-  } else if (headingDev < -PLAYER_MAX_HEADING_DEV) {
-    player.heading = tangentYaw - PLAYER_MAX_HEADING_DEV;
-    headingDev = -PLAYER_MAX_HEADING_DEV;
-  }
+  // NIENTE CURVA AUTOMATICA. Qui c'era un limite (±60°) misurato SULLA TANGENTE
+  // della pista: sembrava solo un anti-testacoda, ma in curva la tangente ruota e
+  // chi era al limite veniva TRASCINATO dalla pista — cioè girava da solo senza
+  // toccare i comandi. Ora il muso va dove lo punti e basta: in curva si sterza
+  // perché si sa che c'è la curva, e chi non sterza va largo e trova lo steccato.
+  // headingDev resta calcolato perché serve a rischio e sbandata: più sei di
+  // traverso, più scivoli — ma non corregge più niente.
+  const headingDev = angleDiff(player.heading, tangentYaw);
 
   player.risk = clamp(curve * (0.3 + speedPressure * 1.0) + Math.abs(headingDev) * 0.62 + (player.boosting ? 0.12 : 0), 0, 1);
   player.sliding = Math.abs(headingDev) > 0.42 && player.speedLevel > 5.2;
@@ -11905,21 +11899,14 @@ function updatePlayer(dt, time) {
   const slidePenalty = player.sliding ? 0.965 : 1;
   const curvePenalty = clamp(1 - curve * Math.max(0, player.speedLevel - PLAYER_CURVE_PENALTY_SPEED) * 0.05, 0.66, 1) * slidePenalty;
 
-  // Fattore di raggio: sulla traiettoria interna (raggio di curva minore) lo
-  // stesso spostamento nel mondo copre più pista, quindi si avanza di più;
-  // sull'esterno di meno. Sul rettilineo (curvatura ~0) vale 1: nessuna
-  // differenza. Così l'interno è realmente favorito e non viene "risucchiato"
-  // dallo spigolo della curva.
-  const outwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
-  const innerOffset = -outwardLaneSign * player.lane; // >0 = verso l'interno
-  const kappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
-  // Il tetto 0.62 (cioè 1,61x) era troppo basso: per il giocatore questo fattore
-  // non è un bonus ma la CONVERSIONE del suo movimento nel mondo in avanzamento
-  // sulla pista. Tenendo la corda a San Martino servirebbe 3,0x e al Casato 5,6x:
-  // con 1,61 il gioco gli riconosceva un terzo di quello che faceva davvero, e il
-  // cavallo sembrava risucchiato dall'angolo. 0.36 = fino a 2,78x: il risucchio
-  // quasi sparisce senza che la corda diventi una scorciatoia.
-  const radiusFactor = 1 / clamp(1 - innerOffset * kappaMag, 0.36, 1.5);
+  // NIENTE FATTORE DI RAGGIO. C'era un moltiplicatore che, in curva, correggeva
+  // l'avanzamento in base a quanto si stava interni: sulla carta è la fisica
+  // giusta (la corda è più corta), in pratica era la causa del "risucchio" —
+  // qualunque valore gli si desse, o riconosceva meno strada di quella percorsa,
+  // o in curva stretta faceva schizzare chi teneva l'interno. Tolto del tutto:
+  // ora un metro percorso è un metro percorso, ovunque si stia sulla pista.
+  // A far girare i cavalli ci pensano l'AI (che segue le traiettorie registrate)
+  // e il giocatore, che sa di dover sterzare.
 
   // Il cavallo si muove nella direzione dell'heading; il moto viene proiettato
   // sulla pista in avanzamento (progress) e spostamento laterale (lane).
@@ -11931,7 +11918,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
+  player.progress += travel * alongTrack * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -12329,18 +12316,9 @@ function updateAiHorse(horse, dt, time) {
   }
 
   const curvePenalty = clamp(1 - sample.curve * Math.max(0, horse.speedLevel - 6) * 0.036, 0.7, 1);
-  // Fattore di raggio: la traiettoria interna copre meno strada -> avanza di
-  // più. È il meccanismo per cui una linea migliore (difficoltà alta) è più
-  // veloce in curva, senza cambiare la velocità di base.
-  const aiOutwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
-  const aiInnerOffset = -aiOutwardLaneSign * horse.lane;
-  const aiKappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
-  // Stesso tetto del giocatore (0.36): se restasse più basso, in curva stretta
-  // l'umano guadagnerebbe sulle AI solo per come è fatto il calcolo.
-  const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.36, 1.5);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
@@ -13216,11 +13194,6 @@ function clearConfetti() {
 }
 
 function updateAtmosphere(dt, time) {
-  state.flags.forEach((flag, index) => {
-    flag.rotation.y = flag.userData.baseRotation + Math.sin(time * 2.2 + flag.userData.phase) * 0.08;
-    flag.rotation.z = Math.sin(time * 3.1 + index) * 0.04;
-    flag.scale.x = 1 + Math.sin(time * 4.4 + flag.userData.phase) * 0.055;
-  });
 
   // Reazione del popolo (esultanza/gelo) sopra al leggero ondeggiamento di base.
   const cr = state.crowdReaction;
