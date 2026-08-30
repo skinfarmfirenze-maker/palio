@@ -9334,6 +9334,15 @@ function releaseRace() {
   // sorteggio, non dalla corsa. Ora gli ostacoli valgono SEMPRE e allo stesso modo,
   // e la percentuale è quella che ne risulta davvero in pista.
   state.mode = "race";
+  // ── TRAIETTORIE ───────────────────────────────────────────────────────────
+  // Si registra la linea SOLO quando a guidare è davvero Mario Rossi (non in
+  // autopilot): è il suo modo di correre che vogliamo far imparare alle AI.
+  {
+    const p = getPlayer();
+    const registro = !!(p && !p.autopilot && isMarioRossi(getAccount()));
+    state.tracciaCorsa = registro ? new Array(tracciaSlotTotali()).fill(null) : null;
+    assegnaTracceAlleAI();
+  }
   if (state.chiamataA5) { const p = getPlayer(); if (p) p.chiamataNoStaminaT = 2; state.chiamataA5 = false; }   // partenza a chiamata: 0 stamina per 2s
   state.raceClock = 0;
   state.replay = { frames: [], acc: 0 };   // nuovo nastro per il replay
@@ -11673,6 +11682,7 @@ function updatePlayer(dt, time) {
     // rischi la caduta (impatto dalla velocità laterale al momento del contatto).
     riskFall(player, fallImpactFromLaneVel(player.laneVelocity), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
+    registraPuntoTraccia(player);   // la linea che tiene finisce nella traccia di questo palio
     // Tenere la linea interna contro lo steccato NON deve ingolfare: solo un
     // accenno di rallentamento e un leggero raddrizzamento del muso, niente
     // scossone di camera.
@@ -12010,6 +12020,18 @@ function updateAiHorse(horse, dt, time) {
   if (horse.startLane !== undefined && horse.launchRamp < 1) {
     const startHold = clamp(1 - horse.launchRamp * 1.3, 0, 1);
     horse.targetLane = lerp(horse.targetLane, horse.startLane, startHold);
+  }
+
+  // ── LA LINEA IMPARATA DA UN UMANO ─────────────────────────────────────────
+  // Se a questa AI è stata assegnata una corsa di Mario Rossi, la sua corsia
+  // viene TIRATA verso quella che teneva lui in questo punto di pista. Non la
+  // sostituisce: si mescola a quello che l'AI ha già deciso (marcature, sorpassi,
+  // linea di curva), così resta viva ma corre come corre una persona.
+  {
+    const umana = laneDaTraccia(horse);
+    if (umana != null && state.mode === "race") {
+      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.85));
+    }
   }
 
   // Il limite ESTERNO segue gli imbuti (San Martino/cappella/Casato): dove i
@@ -13224,8 +13246,80 @@ function presentVictory() {
 
 // Chiusura definitiva quando il runout si esaurisce: ferma la simulazione. La
 // vittoria è già stata mostrata all'arrivo del vincitore (presentVictory).
+// ══════════════════════════════════════════════════════════════════════════
+// LE TRAIETTORIE DI MARIO ROSSI — le AI imparano da come corre un umano
+// ──────────────────────────────────────────────────────────────────────────
+// A ogni palio corso da Mario Rossi si registra la LINEA che ha tenuto: per
+// ogni tratto di pista, la corsia. Si conservano le ultime 30 corse; a inizio
+// palio ogni AI ne riceve una e la segue "a modo suo" — mescolata con la sua
+// logica e con uno scarto personale, così non diventano dieci copie identiche.
+// È il modo per farle sembrare guidate invece che calcolate.
+const TRACCE_KEY = "palio.tracce.v1";
+const TRACCE_MAX = 30;              // quante corse si tengono
+const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
+const TRACCIA_PESO = 0.55;          // quanto pesa la linea umana sulla scelta dell'AI
+
+function tracciaSlot(progress) {
+  const L = track.length || 1;
+  return Math.floor(positiveMod(progress, L) / TRACCIA_PASSO);
+}
+function tracciaSlotTotali() {
+  return Math.max(1, Math.ceil((track.length || 1) / TRACCIA_PASSO));
+}
+function caricaTracce() {
+  try {
+    const a = JSON.parse(localStorage.getItem(TRACCE_KEY));
+    return Array.isArray(a) ? a : [];
+  } catch (e) { return []; }
+}
+function salvaTraccia(traccia) {
+  if (!traccia || !traccia.length) return;
+  const tutte = caricaTracce();
+  tutte.push(traccia);
+  while (tutte.length > TRACCE_MAX) tutte.shift();   // si tengono le ultime 30
+  try { localStorage.setItem(TRACCE_KEY, JSON.stringify(tutte)); } catch (e) { /* niente */ }
+}
+// Registra la corsia del giocatore nel punto di pista in cui si trova. Chiamata
+// a ogni frame durante la corsa: scrive un solo numero per tratto, l'ultimo.
+function registraPuntoTraccia(player) {
+  if (!state.tracciaCorsa || !player) return;
+  const s = tracciaSlot(player.progress);
+  if (s >= 0 && s < state.tracciaCorsa.length) {
+    state.tracciaCorsa[s] = Math.round(player.lane * 10) / 10;   // un decimale basta
+  }
+}
+// A ogni AI si assegna una corsa fra quelle registrate, con uno scarto suo: due
+// AI sulla stessa traccia non si sovrappongono.
+function assegnaTracceAlleAI() {
+  const tutte = caricaTracce();
+  state.tracceDisponibili = tutte;
+  if (!tutte.length) return;
+  state.horses.forEach((h) => {
+    if (h.player && !h.autopilot) return;            // non a chi guida davvero
+    h.traccia = tutte[Math.floor(Math.random() * tutte.length)];
+    h.tracciaScarto = (Math.random() * 2 - 1) * 1.6; // ognuna tiene la sua linea
+    h.tracciaPeso = TRACCIA_PESO * (0.7 + Math.random() * 0.6);
+  });
+}
+// La corsia suggerita dalla traccia in questo punto, o null se non c'è.
+function laneDaTraccia(horse) {
+  const t = horse && horse.traccia;
+  if (!t) return null;
+  const v = t[tracciaSlot(horse.progress)];
+  if (v == null) return null;
+  return v + (horse.tracciaScarto || 0);
+}
+
 function finishRace() {
   state.raceRunout = 0;
+  // La corsa è finita: la linea tenuta da Mario Rossi entra nell'archivio delle
+  // ultime 30, da cui le AI pescheranno nei palii successivi.
+  if (state.tracciaCorsa) {
+    const piena = state.tracciaCorsa.filter((v) => v != null).length;
+    // Solo se ha davvero corso: una traccia con quattro punti non insegna niente.
+    if (piena >= tracciaSlotTotali() * 0.5) salvaTraccia(state.tracciaCorsa);
+    state.tracciaCorsa = null;
+  }
   state.mode = "finished";
   presentVictory(); // fallback difensivo: no-op se già mostrata
 }
