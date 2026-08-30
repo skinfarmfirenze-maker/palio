@@ -6195,15 +6195,15 @@ function campaignSpectateRelease() {
 // Come si presenta una Contrada nelle schermate di scelta: fantino E cavallo,
 // con la fascia del barbero colorata. Senza il cavallo il giocatore non si
 // ricorda chi sta pagando — ed è il dato che decide se vale la pena.
-const TIER_COL = { bombolone: "#7fd98c", bono: "#e7d18a", brenna: "#e8896f" };
 function rigaContrada(h) {
   const j = h.jockey;
   const cav = h.horseName || "—";
   const tier = h.horseTier || "";
-  const col = TIER_COL[tier] || "#c9bfa8";
+  // Tutto BIANCO: niente giallo sul nome del cavallo né tinte sulla fascia. La
+  // gerarchia la fanno il grassetto e l'opacità, non il colore.
   return `<b>${h.name}</b> · ${j ? nickUp(j.nick) : "—"}`
-    + ` <span style="opacity:.55">su</span> <b style="color:#f0cb35">${cav}</b>`
-    + (tier ? ` <span style="color:${col};font-size:12px">${tier}</span>` : "")
+    + ` <span style="opacity:.55">su</span> <b>${cav}</b>`
+    + (tier ? ` <span style="opacity:.75;font-size:12px">${tier}</span>` : "")
     + ` <span style="opacity:.65">· fedeltà ${(j && j.fedelta) || 3}</span>`;
 }
 
