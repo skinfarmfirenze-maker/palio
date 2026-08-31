@@ -1571,37 +1571,25 @@ export function costruisciFollaCentro(ctx, opz = {}) {
 // alla base. Sostituiscono il loop dei box in buildCurvePadding: il gioco
 // chiama costruisciMaterassi(ctx, { da: SM_IN − 1, a: SM_OUT + 17 }).
 export function texturaMaterassi({ risoluzione = 512 } = {}) {
+  // BIANCHI E CONTINUI (Simone): niente cuciture a vista, niente trapuntatura —
+  // una parete chiara uniforme, solo un velo di ombreggiatura e il tufo in basso.
   const W = risoluzione, H = Math.round(risoluzione * 0.55);
   const { c, x } = tela(W, H);
-  x.fillStyle = "#f0ede4";
+  x.fillStyle = "#f2efe8";
   x.fillRect(0, 0, W, H);
-  const seg = W / 6;                            // un materasso per segmento
-  for (let px = 0; px < W; px += seg) {
-    // Leggera variazione di bianco fra un materasso e l'altro.
-    x.fillStyle = `rgba(${Math.random() < 0.5 ? "218,212,198" : "255,253,247"},${0.10 + Math.random() * 0.12})`;
-    x.fillRect(px + 1.5, 0, seg - 3, H);
-    x.fillStyle = "rgba(120,110,95,0.5)";       // cucitura verticale
-    x.fillRect(px, 0, 2, H);
-    // Trapuntatura orizzontale appena accennata.
-    for (let y = H * 0.16; y < H * 0.96; y += H * 0.16) {
-      x.fillStyle = "rgba(150,142,126,0.28)";
-      x.fillRect(px + 3, y, seg - 6, 1.4);
-      x.fillStyle = "rgba(255,255,250,0.35)";
-      x.fillRect(px + 3, y + 1.4, seg - 6, 1);
-    }
-    // Bottoni della trapuntatura.
-    x.fillStyle = "rgba(126,116,98,0.4)";
-    for (let y = H * 0.24; y < H * 0.9; y += H * 0.32) {
-      [0.33, 0.66].forEach((t) => { x.beginPath(); x.arc(px + seg * t, y, 2, 0, TAU); x.fill(); });
-    }
+  for (let i = 0; i < 18; i += 1) {           // velature morbide, nessun segmento
+    const g0 = x.createRadialGradient(Math.random() * W, Math.random() * H, 0, Math.random() * W, Math.random() * H, W * (0.1 + Math.random() * 0.2));
+    g0.addColorStop(0, Math.random() < 0.5 ? "rgba(210,204,190,0.08)" : "rgba(255,255,250,0.10)");
+    g0.addColorStop(1, "rgba(0,0,0,0)");
+    x.fillStyle = g0;
+    x.fillRect(0, 0, W, H);
   }
-  // Tufo che risale dalla base: in gara ci sbattono zoccoli e polvere.
-  const g = x.createLinearGradient(0, H, 0, H * 0.62);
-  g.addColorStop(0, "rgba(198,166,108,0.55)");
+  const g = x.createLinearGradient(0, H, 0, H * 0.72);
+  g.addColorStop(0, "rgba(198,166,108,0.4)");
   g.addColorStop(1, "rgba(198,166,108,0)");
   x.fillStyle = g;
-  x.fillRect(0, H * 0.62, W, H * 0.38);
-  rumore(x, W, H, 0.05);
+  x.fillRect(0, H * 0.72, W, H * 0.28);
+  rumore(x, W, H, 0.04);
   return finisci(c, 1, 1);
 }
 
