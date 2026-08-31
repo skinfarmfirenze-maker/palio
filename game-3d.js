@@ -10036,6 +10036,9 @@ function updateFalseStartRunout(dt, time) {
   if (!state.falseStartMortarettoDone && state.falseStartTimer >= 2) {
     state.falseStartMortarettoDone = true;
     playMortaretto(1.4);                                  // COLPO FORTE: si deve sentire sopra tutto
+    // Il boato del via e' smentito dal mortaretto: si taglia subito, altrimenti
+    // start.m4a andrebbe avanti 9 secondi mentre le Contrade tornano al tondino.
+    try { fadePalioSound("start.m4a", 0.5); } catch (e) { /* niente */ }
     playCrowd("cold");                                    // brusio deluso della Piazza
     showMessage(`Mossa falsa: ${state.falsaMotivo || "la fila non era buona"}`, 3.0, "danger");
     state.cameraShake = Math.max(state.cameraShake, 0.45);
@@ -10052,6 +10055,13 @@ function updateFalseStartRunout(dt, time) {
       post.visible = true;
       post.traverse((obj) => { if (obj.material && obj.material.transparent) obj.material.opacity = 1; });
     }
+    // AUDIO: la corsa non c'e' stata. Il sottofondo del pubblico e lo zoccolio del
+    // gruppo erano partiti col via — vanno spenti, o resterebbero accesi sopra il
+    // tondino mentre il Mossiere richiama le Contrade. La busta del tondino
+    // rientra da sola in resetMossaAfterFalsa.
+    try { fadeCrowdBed(0.6); } catch (e) { /* niente */ }
+    try { fadeGaloppo(0.6); } catch (e) { /* niente */ }
+    try { fadePalioSound("start.m4a", 0.3); } catch (e) { /* niente */ }
     // Replay e traiettorie tornano quelli veri: la partenza annullata non lascia traccia.
     state.replay = state.falsaBackupReplay || null;
     state.tracciaCorsa = state.falsaBackupTraccia || null;
