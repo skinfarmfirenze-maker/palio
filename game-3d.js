@@ -13958,20 +13958,30 @@ function updateCamera(dt) {
     });
   }
 
+  // ALLA MOSSA si guarda il PROPRIO cavallo. Al tondino e ai canapi le viste da
+  // regia (laterale, aerea, sui primi tre, tutta la Piazza) non hanno senso —
+  // inquadrano la testa di una corsa che non è ancora partita — quindi qui si
+  // ricade sull'inseguimento. La scelta fatta col tasto C NON viene persa: torna
+  // valida appena parte la corsa. La prima persona resta, perché è comunque una
+  // vista sul proprio cavallo.
+  // Alla mossa nessuna vista "da regia" si attiva: si scende fino
+  // all'inseguimento classico, che è il comportamento di sempre al tondino.
+  const inCorsa = state.mode !== "mossa";
+
   // Laterale e aerea scelte a mano col tasto C: inquadrano TE mentre corri, e chi
   // è in testa se il tuo cavallo è fuori gioco (a terra o scosso).
-  if (inGameplay && (state.cameraMode === "laterale" || state.cameraMode === "aerea")) {
+  if (inCorsa && inGameplay && (state.cameraMode === "laterale" || state.cameraMode === "aerea")) {
     const sogg = (player.caduto || player.scosso) ? primoInCorsa() : player;
     if (applicaVista(state.cameraMode, sogg, dt)) return;
   }
 
   // Camera sui primi 3 dall'alto (funziona anche in "assisti" e se il giocatore
   // è scosso: inquadra sempre le prime tre della classifica).
-  if (inGameplay && state.cameraMode === "top3") {
+  if (inCorsa && inGameplay && state.cameraMode === "top3") {
     if (computeTop3Camera(dt)) return;
   }
 
-  if (player.player && inGameplay && state.cameraMode === "overhead") {
+  if (inCorsa && player.player && inGameplay && state.cameraMode === "overhead") {
     // Vista dall'alto sul centro reale del tracciato (in Z ~ -14), abbastanza in
     // quota da inquadrare tutto il semicerchio. Lenta rotazione attorno all'asse Y.
     const centerZ = -14;
