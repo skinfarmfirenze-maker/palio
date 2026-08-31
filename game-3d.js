@@ -7459,6 +7459,28 @@ function applicaEpoca(epoca) {
   // un'epoca: restano in tutt'e due, altrimenti sparirebbero al primo cambio.
   if (propostiCavalli) applyAcceptedHorses(propostiCavalli, storica);
   if (propostiFantini) applyAcceptedJockeys(propostiFantini, storica);
+  // ── UN SOLO FANTINO PER PERSONA, comunque sia andata ──────────────────────
+  // Invece di rincorrere le singole strade da cui puo' arrivare un doppione
+  // (lo stesso soprannome scritto in un altro modo, due soprannomi della stessa
+  // persona, le liste dell'admin), qui si garantisce il risultato: si scorre la
+  // lista finale e si tiene il PRIMO di ogni persona, che e' sempre quello del
+  // roster vero. Cosi' spariscono sia "Aceto" accanto ad "aceto", sia "Il Pesse"
+  // accanto a "cianchino" — che sono tutti e due Salvatore Ladu.
+  {
+    const visti = new Set();
+    for (let i = 0; i < JOCKEYS.length; i += 1) {
+      const j = JOCKEYS[i] || {};
+      const nick = String(j.nick || "").trim().toLowerCase();
+      const nome = String(j.nome || "").trim().toLowerCase();
+      const kNick = "n:" + nick;
+      const kNome = nome && nome !== "—" ? "p:" + nome : null;
+      if ((nick && visti.has(kNick)) || (kNome && visti.has(kNome))) {
+        JOCKEYS.splice(i, 1); i -= 1; continue;
+      }
+      if (nick) visti.add(kNick);
+      if (kNome) visti.add(kNome);
+    }
+  }
 }
 function applicaImpostazioni() {
   const s = leggiImpostazioni();
