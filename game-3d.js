@@ -5936,7 +5936,17 @@ function campaignNameScreen() {
 // che spende e incassa (ingaggi, corruzioni, accordi, aste, +100/anno in campagna)
 // e resta com'è, palio dopo palio. Vale sia per la paliata veloce sia per la
 // Campagna — il tesoro è UNO solo — ed è legato all'ACCOUNT, non al dispositivo.
-const BUDGET_START = 5000;
+// Capitale iniziale di OGNI Contrada, la primissima volta che si gioca con un
+// account. Mario Rossi (lo sviluppatore) resta a 5000 per poter provare tutto
+// senza restare a secco; per tutti gli altri 2000, così i denari contano davvero
+// e una corruzione da 400 si sente. Chi ha già un tesoro salvato non viene
+// toccato: questo valore vale solo per le Contrade mai giocate su quell'account.
+const BUDGET_START_DEV = 5000;
+const BUDGET_START = 2000;
+function budgetIniziale() {
+  try { return isMarioRossi(getAccount()) ? BUDGET_START_DEV : BUDGET_START; }
+  catch (e) { return BUDGET_START; }
+}
 // UN UNIVERSO PER ACCOUNT. La chiave porta l'email di chi ha fatto il login: due
 // persone che giocano sullo stesso computer hanno due tesori distinti, e chi
 // rientra col suo account ritrova i suoi. (Chi non ha ancora un account gioca su
@@ -5957,7 +5967,7 @@ function loadPersistentBudgets() {
   const budgets = {};
   CONTRADE.forEach((c) => {
     const v = Number(saved[c.id]);
-    budgets[c.id] = Number.isFinite(v) ? Math.max(0, Math.round(v)) : BUDGET_START;
+    budgets[c.id] = Number.isFinite(v) ? Math.max(0, Math.round(v)) : budgetIniziale();
   });
   return budgets;
 }
