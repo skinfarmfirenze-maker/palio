@@ -13,7 +13,7 @@
 //     una fitta serie di stecche verticali). È bassa, chiara, e si vede sempre
 //     sullo sfondo del lastricato.
 //   · LATO ESTERNO (verso i palazzi) → la "palancata" dipinta: pannelli di legno
-//     verde fondoPalancata decorati a finti marmi, rosoni quadrilobati e scudi, con
+//     rosso-marrone decorati a finti marmi, rosoni quadrilobati e scudi, con
 //     bordure a dentelli e un corrimano di legno scuro sopra. È più alta.
 //   · Dietro la palancata salgono i PALCHI: gradinate di legno bruno addossate
 //     alle facciate, con le scalette diagonali di servizio.
@@ -296,7 +296,7 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
 
   for (let i = 0; i < pannelli; i += 1) {
     const x0 = i * P;
-    // Fondo verde fondoPalancata, sporcato: il legno dipinto non è mai piatto.
+    // Fondo rosso-marrone, sporcato: il legno dipinto non è mai piatto.
     x.fillStyle = COL.fondoPalancata;
     x.fillRect(x0, 0, P, H);
     for (let k = 0; k < 26; k += 1) {
@@ -427,7 +427,7 @@ export function texturaLegno({ risoluzione = 512, tinta = "#6b4430" } = {}) {
 }
 
 // ── Legno VERDE SALVIA-GRIGIO della staccionata interna ──────────────────────
-// (i pilastrini sono di marmo; il legno fra loro è dipinto fondoPalancata-grigio,
+// (i pilastrini sono di marmo; il legno fra loro è dipinto verde salvia-grigio,
 // come nelle foto — il verde della piazza sta QUI, non sulla palancata).
 export function texturaLegnoChiaro({ risoluzione = 256 } = {}) {
   const W = risoluzione, H = risoluzione;
