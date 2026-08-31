@@ -13784,8 +13784,12 @@ function laneDaTraccia(horse) {
   // Percio' lo scostamento si restringe man mano che la tua linea si avvicina a
   // un bordo: al centro resta pieno (li' c'e' spazio da entrambi i lati), sulla
   // corda si riduce a un terzo e le Contrade ti seguono davvero.
+  // Sulla corda lo scostamento si annulla quasi del tutto (resta un decimo): se
+  // tu passi a sfiorare il colonnino, ci devono passare anche loro. Quello che
+  // succede allora e' che si INCOLONNANO invece di affiancarsi — ed e' giusto
+  // cosi', in Piazza sulla corda si va in fila, non in tre di fronte.
   const estremita = clamp(Math.abs(v) / (AI_LANE_LIMIT || 1), 0, 1);
-  return v + (horse.tracciaScarto || 0) * (1 - 0.6 * estremita);
+  return v + (horse.tracciaScarto || 0) * (1 - 0.9 * estremita);
 }
 
 function finishRace() {
