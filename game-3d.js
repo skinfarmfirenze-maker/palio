@@ -828,9 +828,18 @@ function sampleAt(distance) {
 // qualunque punto della pista tu sia. Il vantaggio della corda resta quello vero
 // del Palio — il giro interno e' piu' corto — e non un regalo del gioco.
 // ══════════════════════════════════════════════════════════════════════════════
+// Quanto si sconta il vantaggio della corda: 0.15 = il 15% in meno di guadagno
+// dove la curva e' stretta. Serve perche' la geometria pura, presa alla lettera,
+// dava una spinta troppo forte a chi si incolla ai colonnini del Casato. Lo
+// sconto morde SOLO dove c'e' un guadagno (curva stretta + corsia interna) e
+// sparisce da solo sul dritto, dove non c'e' niente da scontare.
+const CORDA_SCONTO = 0.15;
 function progressPerStrada(sample, lane) {
   const f = 1 + (sample.laneCoef || 0) * (lane || 0);
-  return 1 / clamp(f, 0.16, 2.0);   // 0.16 = il minimo geometrico vero (Casato, corda)
+  const corr = 1 / clamp(f, 0.16, 2.0);   // 0.16 = il minimo geometrico vero (Casato, corda)
+  // Sotto l'1 (corsia esterna, strada piu' lunga) non si tocca niente: chi gira
+  // largo paga gia' la sua strada in piu' e non va penalizzato due volte.
+  return corr > 1 ? 1 + (corr - 1) * (1 - CORDA_SCONTO) : corr;
 }
 
 function campoOutward(point) {
