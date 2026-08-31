@@ -150,3 +150,77 @@ export function aggiornaComparsa(spenn, dt) {
   spenn.scale.setScalar(Math.max(0.001, s));
   if (t >= 1) { spenn.userData.comparsa = null; spenn.scale.setScalar(1); }
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 4) EPOCHE STORICHE DEI BARBERI
+// Anni in cui ciascun cavallo ha effettivamente corso il Palio, dall'Archivio
+// (ilpalio.siena.it, ricerca per nome). Utile per comporre tratte coerenti:
+// un palio "storico" con barberi e fantini della stessa età, invece di mescolare
+// Gaudenzia (1952) con Diodoro (2025).
+// NOTA sui nomi: alcuni barberi sono registrati col suffisso AA (anglo-arabo) —
+// "Diodoro AA", "Benitos AA" — e Topolone corse anche come Ettore, Dragone ed
+// Eucalipto: per lui vale la carriera intera, non il solo periodo col nome finale.
+// ══════════════════════════════════════════════════════════════════════════════
+export const EPOCHE_BARBERI = {
+  "Gaudenzia": { dal: 1952, al: 1960, palii: 15, epoca: "dopoguerra" },
+  "Uberta de Mores": { dal: 1958, al: 1962, palii: 11, epoca: "dopoguerra" },
+  "Urbino": { dal: 1958, al: 1958, palii: 2, epoca: "dopoguerra" },
+  "Topolone": { dal: 1962, al: 1972, palii: 17, epoca: "dopoguerra" },
+  "Selvaggia": { dal: 1963, al: 1968, palii: 9, epoca: "dopoguerra" },
+  "Mirabella": { dal: 1970, al: 1974, palii: 8, epoca: "anni_oro" },
+  "Panezio": { dal: 1972, al: 1984, palii: 20, epoca: "anni_oro" },
+  "Quebel": { dal: 1974, al: 1979, palii: 11, epoca: "anni_oro" },
+  "Rimini": { dal: 1974, al: 1982, palii: 12, epoca: "anni_oro" },
+  "Urbino de Ozieri": { dal: 1977, al: 1979, palii: 4, epoca: "anni_oro" },
+  "Figaro": { dal: 1985, al: 1993, palii: 16, epoca: "anni_oro" },
+  "Vipera": { dal: 1986, al: 1989, palii: 6, epoca: "anni_oro" },
+  "Galleggiante": { dal: 1987, al: 1993, palii: 11, epoca: "anni_oro" },
+  "Pytheos": { dal: 1989, al: 1993, palii: 7, epoca: "anni_oro" },
+  "Uberto": { dal: 1989, al: 1994, palii: 7, epoca: "anni_oro" },
+  "Oriolu de Zamaglia": { dal: 1993, al: 1996, palii: 5, epoca: "fine_secolo" },
+  "Quarnero": { dal: 1994, al: 1997, palii: 6, epoca: "fine_secolo" },
+  "Re Artù": { dal: 1995, al: 2000, palii: 9, epoca: "fine_secolo" },
+  "Zodiach": { dal: 2001, al: 2006, palii: 10, epoca: "fine_secolo" },
+  "Berio": { dal: 2002, al: 2005, palii: 6, epoca: "fine_secolo" },
+  "Fedora Saura": { dal: 2006, al: 2011, palii: 8, epoca: "contemporanei" },
+  "Indianos": { dal: 2010, al: 2014, palii: 7, epoca: "contemporanei" },
+  "Mocambo": { dal: 2010, al: 2016, palii: 8, epoca: "contemporanei" },
+  "Oppio": { dal: 2013, al: 2019, palii: 6, epoca: "contemporanei" },
+  "Preziosa Penelope": { dal: 2015, al: 2016, palii: 3, epoca: "contemporanei" },
+  "Trattu de Zamaglia": { dal: 2018, al: 2018, palii: 1, epoca: "contemporanei" },
+  "Tale e Quale": { dal: 2018, al: 2025, palii: 3, epoca: "contemporanei" },
+  "Remorex": { dal: 2018, al: 2022, palii: 4, epoca: "contemporanei" },
+  "Violenta da Clodia": { dal: 2018, al: 2023, palii: 5, epoca: "contemporanei" },
+  "Volpino": { dal: 2022, al: 2026, palii: 2, epoca: "contemporanei" },
+  "Arestetulesu": { dal: 2022, al: 2026, palii: 3, epoca: "contemporanei" },
+  "Ungaros": { dal: 2022, al: 2025, palii: 4, epoca: "contemporanei" },
+  "Zio Frac": { dal: 2022, al: 2025, palii: 5, epoca: "contemporanei" },
+  "Reo Confesso": { dal: 2022, al: 2023, palii: 4, epoca: "contemporanei" },
+  "Viso d'Angelo": { dal: 2022, al: 2026, palii: 10, epoca: "contemporanei" },
+  "Zenis": { dal: 2023, al: 2025, palii: 4, epoca: "contemporanei" },
+  "Anda e Bola": { dal: 2023, al: 2026, palii: 5, epoca: "contemporanei" },
+  "Comancio": { dal: 2024, al: 2025, palii: 2, epoca: "contemporanei" },
+  "Benitos": { dal: 2024, al: 2026, palii: 4, epoca: "contemporanei" },
+  "Brivido Sardo": { dal: 2024, al: 2024, palii: 2, epoca: "contemporanei" },
+  "Diodoro": { dal: 2025, al: 2026, palii: 4, epoca: "contemporanei" },
+};
+
+export const EPOCHE = {
+  dopoguerra:    { label: "Dopoguerra",   dal: 1945, al: 1969 },
+  anni_oro:      { label: "Anni d'oro",   dal: 1970, al: 1989 },
+  fine_secolo:   { label: "Fine secolo",  dal: 1990, al: 2005 },
+  contemporanei: { label: "Contemporanei", dal: 2006, al: 2100 },
+};
+
+// Epoca di un barbero ("dopoguerra" | "anni_oro" | "fine_secolo" | "contemporanei"),
+// null se non documentato.
+export function epocaDi(nomeCavallo) {
+  const r = EPOCHE_BARBERI[nomeCavallo];
+  return r ? r.epoca : null;
+}
+
+// Barberi di una data epoca.
+export function barberiDiEpoca(epoca) {
+  return Object.keys(EPOCHE_BARBERI).filter((n) => EPOCHE_BARBERI[n].epoca === epoca);
+}
