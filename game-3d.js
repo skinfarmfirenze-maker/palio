@@ -8,7 +8,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
-import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -1818,43 +1818,15 @@ function buildCampoLandmarks() {
 
 let scenaCtxRef = null;   // contesto geometrico condiviso coi moduli di scenografia
 function buildCurvePadding() {
-  // Materassi di protezione SOLO a San Martino (al Casato, nella realtà, NON ci
-  // sono): file di cuscini bianco-crema con fascia rossa addossati al muro
-  // esterno. Decorativi. Seguono la strettoia e la quota della pista.
-  const padMat = new THREE.MeshStandardMaterial({ color: 0xe6ddca, roughness: 0.9, metalness: 0 });
-  const bandMat = new THREE.MeshStandardMaterial({ color: 0xa83c30, roughness: 0.82, metalness: 0 });
-  const step = 5;
-  for (let i = 0; i < track.samples.length; i += step) {
-    const s = track.samples[i];
-    // TRATTO UNICO E CONTINUO: dall'ingresso di San Martino fino a sotto la Torre
-    // del Mangia (la Cappella sta a ~SM_OUT+14). Prima si filtrava campione per
-    // campione sulla curvatura: dove scendeva sotto soglia restavano BUCHI in mezzo
-    // alla fila. Ora è un intervallo unico, quindi la fila non si interrompe mai.
-    if (NARROW_READY) {
-      if (s.cum < SM_IN - 1 || s.cum > SM_OUT + 17) continue;
-    } else if (s.curve < 0.34) continue;                 // ripiego se le curve non sono ancora note
-    if (NARROW_READY && s.cum > CAS_IN - 20) continue;   // Casato: niente materassi
-    const next = track.samples[(i + step) % track.samples.length];
-    // +0.05 (era +0.42): la palancata della scenografia sta a +0.35, i materassi
-    // devono restare DAVANTI a lei, come in Piazza.
-    const offQui = TRACK_HALF_WIDTH - trackNarrowAt(s.cum) + 0.05;
-    const offNext = TRACK_HALF_WIDTH - trackNarrowAt(next.cum) + 0.05;
-    const a = s.point.clone().addScaledVector(campoOutward(s.point), offQui);
-    const b = next.point.clone().addScaledVector(campoOutward(next.point), offNext);
-    const mid = a.clone().lerp(b, 0.5);
-    const len = a.distanceTo(b) * 1.12;   // si sovrappongono: nessuna fessura fra un cuscino e l'altro
-    const yaw = Math.atan2(b.x - a.x, b.z - a.z);
-    const hQui = trackHeightAt(s.cum);
-    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.02, len), padMat);
-    pad.position.set(mid.x, 0.6 + hQui, mid.z);
-    pad.rotation.y = yaw;
-    pad.castShadow = true;
-    pad.receiveShadow = true;
-    addAllestimento(pad);
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, len), bandMat);
-    band.position.set(mid.x, 0.78 + hQui, mid.z);
-    band.rotation.y = yaw;
-    addAllestimento(band);
+  // MATERASSI DI SAN MARTINO — dal modulo di scenografia (chat Grafica): parete
+  // imbottita bianca CONTINUA, alta 1.9, col tufo che risale alla base. Prima era
+  // una fila di scatole alte 1.02 con la fascia rossa, e fra un cuscino e l'altro
+  // si vedevano le giunzioni. Al Casato materassi non ce ne sono, nella realta'
+  // come qui: li' c'e' la palizzata, costruita qui sotto.
+  if (NARROW_READY && scenaCtxRef) {
+    try {
+      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_IN - 1, a: SM_OUT + 17 }));
+    } catch (e) { console.error("materassi San Martino:", e); }
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
   // colmo e puntoni sul retro) al posto del vecchio loop di assi.
