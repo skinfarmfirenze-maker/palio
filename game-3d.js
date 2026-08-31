@@ -3849,6 +3849,14 @@ function createEntrants() {
     const ai = state.horses.filter((h) => !h.player);
     for (let i = ai.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); const t = ai[i]; ai[i] = ai[j]; ai[j] = t; }
     ai.forEach((h, i) => { h.casatoWide = i < 7; });
+    // ── CHI TAGLIA LE CURVE COME SI DEVE ──────────────────────────────────
+    // Non tutte sanno farlo: la traiettoria buona — largo in entrata, poi stretti
+    // a sfiorare il colonnino, e dal Casato si esce ancora stretti — la fanno le
+    // Contrade col fantino piu' bravo in curva. Le altre girano piu' larghe, che
+    // e' anche il modo in cui si va fuori per superare o per parare.
+    const perCurva = state.horses.filter((h) => !h.player).slice()
+      .sort((a, b) => ((b.jockey && b.jockey.curva) || 3) - ((a.jockey && a.jockey.curva) || 3));
+    perCurva.forEach((h, i) => { h.tagliaCurva = i < AI_TAGLIANO_CURVA; });
   }
 }
 
@@ -12281,11 +12289,27 @@ function updateAiHorse(horse, dt, time) {
       // Martino e al Casato non si vedevano mai passare interne. Adesso l'apice e'
       // una corsia interna vera: chi va piano stringe di piu', chi va forte un po'
       // meno, ma tutti puntano DENTRO come fa un fantino.
-      const apice = APICE_INTERNO - (clamp(aiAndatura, 1, 5) - 1) * APICE_CALO;
       const cp = horse.cornerPhase ?? 0;           // +1 entrata, −1 uscita
-      // In USCITA ci si allarga, che e' giusto — ma non fino ai materassi.
-      const inner = cp >= 0 ? apice : lerp(apice, USCITA_LARGA, (-cp) * 0.98);
-      lineGoal = innerSign * TRACK_HALF_WIDTH * inner;
+      if (horse.tagliaCurva) {
+        // ── LA CURVA PRESA BENE ───────────────────────────────────────────
+        // Come la prende Mario Rossi: ci si allarga PRIMA, quasi allo steccato di
+        // fuori, poi si stringe forte fino a sfiorare il colonnino. Dal Casato si
+        // esce ancora stretti, cosi' si e' gia' in corda per il rettilineo; da San
+        // Martino ci si allarga un po' di piu', che li' la pista lo consente.
+        const alCasato = NARROW_READY && horse.progress > CAS_IN - 18 && horse.progress < CAS_OUT + 12;
+        const uscita = alCasato ? CURVA_USCITA_CASATO : CURVA_USCITA_SM;
+        // cp: +1 entrata (largo) · 0 apice (strettissimo) · −1 uscita
+        const inner = cp >= 0
+          ? lerp(CURVA_APICE, CURVA_INGRESSO, clamp(cp, 0, 1))
+          : lerp(CURVA_APICE, uscita, clamp(-cp, 0, 1));
+        lineGoal = innerSign * TRACK_HALF_WIDTH * inner;
+      } else {
+        // Chi non ha il fantino da curva gira piu' rotondo: entra meno largo,
+        // non arriva a sfiorare il colonnino e in uscita si allarga.
+        const apice = APICE_INTERNO - (clamp(aiAndatura, 1, 5) - 1) * APICE_CALO;
+        const inner = cp >= 0 ? apice : lerp(apice, USCITA_LARGA, (-cp) * 0.98);
+        lineGoal = innerSign * TRACK_HALF_WIDTH * inner;
+      }
     } else {
       lineGoal = innerSign * AI_LANE_LIMIT * 0.5;  // rettilineo senza registrazione: mezza pista
     }
@@ -12295,7 +12319,7 @@ function updateAiHorse(horse, dt, time) {
     const aheadCurve = sampleAt(horse.progress + 14).curve || 0;
     if (aheadCurve > 0.42 && (horse.cornerPhase ?? 0) >= -0.1) {
       const entryBlend = clamp((aheadCurve - 0.42) / 0.15, 0, 1) * clamp(1 - sample.curve / 0.5, 0, 1);
-      lineGoal += -innerSign * INGRESSO_LARGO * entryBlend;
+      lineGoal += -innerSign * (horse.tagliaCurva ? INGRESSO_LARGO_TAGLIO : INGRESSO_LARGO) * entryBlend;
     }
     // DOPO SAN MARTINO → CASATO: le contrade "casatoWide" (≥6/10) restano ESTERNE
     // (verso −innerSign, cioè sinistra) lungo il rettilineo del Palazzo, così poi
@@ -12310,9 +12334,14 @@ function updateAiHorse(horse, dt, time) {
     // USCITA LARGA ESTESA: finché exitWide dura (dopo l'apice, anche sul dritto
     // che segue), tira il bersaglio verso lo steccato esterno.
     const ew = horse.exitWide || 0;
-    if (ew > 0.01) {
+    // ...ma chi taglia la curva NON corre largo all'uscita del CASATO: e' proprio
+    // il punto in cui deve restare stretto, per ritrovarsi gia' in corda sul
+    // rettilineo che segue. A San Martino un po' si allarga, ma meno degli altri.
+    const inCasato = NARROW_READY && horse.progress > CAS_IN - 18 && horse.progress < CAS_OUT + 14;
+    const ewUsato = horse.tagliaCurva ? (inCasato ? 0 : ew * 0.45) : ew;
+    if (ewUsato > 0.01) {
       const outer = innerSign * TRACK_HALF_WIDTH * -0.85;
-      lineGoal = lerp(lineGoal, outer, ew * 0.9);
+      lineGoal = lerp(lineGoal, outer, ewUsato * 0.9);
     }
     // In curva (o mentre corre largo in uscita) imposta il bersaglio diretto, così
     // la linea larga viene raggiunta subito; sul dritto normale insegue morbido.
@@ -13764,6 +13793,16 @@ const APICE_INTERNO = 0.80;   // apice ad andatura 1 → corsia 9.2 (colonnino 1
 const APICE_CALO    = 0.045;  // quanto si allarga l'apice per ogni tacca di andatura
 const USCITA_LARGA  = -0.55;  // uscita di curva → corsia -6.3 (era -10.9, sui materassi)
 const INGRESSO_LARGO = 1.6;   // unita' verso l'esterno in avvicinamento (era 3.1)
+// ── LA CURVA PRESA BENE (frazioni della semi-larghezza; 1.0 = colonnino) ────
+// La traiettoria che tiene Mario Rossi: largo prima, strettissimo all'apice, e
+// dal Casato si esce ancora stretti. Le fanno solo le Contrade col fantino bravo
+// in curva; le altre restano sulla linea rotonda qui sopra.
+const AI_TAGLIANO_CURVA = 4;       // quante Contrade la sanno prendere cosi'
+const CURVA_INGRESSO = -0.62;      // in entrata: corsia -7.1, quasi allo steccato di fuori
+const CURVA_APICE = 0.95;          // all'apice: corsia 10.9, a sfiorare il colonnino
+const CURVA_USCITA_CASATO = 0.66;  // dal Casato si esce STRETTI: corsia 7.6
+const CURVA_USCITA_SM = 0.18;      // da San Martino ci si allarga di piu': corsia 2.1
+const INGRESSO_LARGO_TAGLIO = 3.4; // e ci si allarga di piu' in avvicinamento
 
 function tracciaSlot(progress) {
   const L = track.length || 1;
