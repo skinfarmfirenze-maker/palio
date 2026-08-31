@@ -11999,7 +11999,8 @@ function updatePlayer(dt, time) {
 
   // Il muro ESTERNO (lane negativa = palchi/materassi) segue il profilo di
   // larghezza: negli imbuti ti viene incontro. L'interno (colonnini) è fisso.
-  const edge = TRACK_HALF_WIDTH - 0.65;
+  // 10,9 come le AI: era rimasto a 10,85 quando abbiamo alzato il loro.
+  const edge = TRACK_HALF_WIDTH - 0.6;
   const edgeOut = edge - trackNarrowAt(positiveMod(player.progress, track.length || 1));
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
@@ -12013,10 +12014,11 @@ function updatePlayer(dt, time) {
     // staccarti veniva annullato nel frame successivo, perché il muso tornava
     // parallelo al muro. Adesso resti dove ti porta il tuo sterzo: se vuoi
     // staccarti dal colonnino, giri e ti stacchi.
-    // Resta il solo attrito dello sfregamento, che è giusto: strisciare contro il
-    // muro toglie un filo di velocità.
-    player.speedLevel *= 0.995;
-    player.travelSpeed *= 0.995;
+    // NIENTE ATTRITO. Quel "filo di velocità" era 0.995 applicato a OGNI
+    // FOTOGRAMMA: a 60 al secondo diventa −26% dopo un secondo di sfregamento e
+    // −45% dopo due. Tenere la corda contro il colonnino spegneva il cavallo, ed
+    // era l'ultimo rallentamento nascosto legato all'andare interni. Rimosso: la
+    // corsia non tocca la velocità, né in un senso né nell'altro.
     if (Math.random() < dt * 4) emitDust(player);
   }
 
@@ -13640,7 +13642,11 @@ function assegnaTracceAlleAI() {
   state.horses.forEach((h) => {
     if (h.player && !h.autopilot) return;            // non a chi guida davvero
     h.traccia = tutte[Math.floor(Math.random() * tutte.length)];
-    h.tracciaScarto = (Math.random() * 2 - 1) * 1.6; // ognuna tiene la sua linea
+    // Ognuna tiene la SUA linea, parallela a quella umana. Lo scarto è passato da
+    // ±1.6 a ±2.6 perché con dieci cavalli incollati alla stessa traiettoria si
+    // ammassavano tutti sulla corda: il giocatore che andava interno li trovava
+    // davanti e restava imbottigliato, e sembrava di nuovo un risucchio.
+    h.tracciaScarto = (Math.random() * 2 - 1) * 2.6;
     h.tracciaPeso = TRACCIA_PESO * (0.9 + Math.random() * 0.15);   // tutte molto aderenti
   });
 }
