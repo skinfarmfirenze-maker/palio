@@ -10260,7 +10260,7 @@ function updateMossa(dt, time) {
         sold.soldBurst = 10;
         sold.soldPrevAutopilot = !!sold.autopilot;
         sold.autopilot = true;                          // → lo guida l'AI, non tu
-        showMessage("Forse il tuo fantino è corrotto…", 2.6, "danger");   // si sfila ai canapi e prende il controllo
+        // (niente scritta sul fantino corrotto: ai canapi si guarda, non si legge)
         if (sold.soldTargetId && Math.random() < 0.6) {
           sold.vendettaPending = true;                  // va a parare la rivale del corruttore
           sold.vendettaTargetId = sold.soldTargetId;
@@ -10486,7 +10486,7 @@ function updateMossa(dt, time) {
         } else if (andatura >= ANDATURA_MAX) {
           if ((state.mossaFalsaCooldown || 0) <= 0 && (state.forcedCanapeCd || 0) <= 0) {
             state.forcedCanapeCd = 6;
-            showMessage(`${horse.name} ha forzato il canape`, 2.6, "danger");
+            // (niente scritta "ha forzato il canape": lo si vede dal canape che si tende)
             triggerMossaFalsa(`${nomeConArticolo(horse)} ha forzato il canape`);
             return;
           }
@@ -10639,7 +10639,7 @@ function updateMossa(dt, time) {
         turnGoal += Math.sin(time * 1.3 + horse.phase) * 0.18 * k;
         progGoal = Math.max(progGoal, frontLine - 0.3);   // le sta addosso al fronte
         if (Math.random() < dt * 0.08 * k && state.messageTimer <= 0) {
-          showMessage(k >= 0.9 ? `${horse.name} prova a chiudere ${rival.name}` : `${horse.name} marca stretta ${rival.name}`, 1.1);
+          // (niente "prova a chiudere" / "marca stretta": e' cronaca, si deve vedere)
         }
       }
 
@@ -10819,7 +10819,7 @@ function updateMossa(dt, time) {
             // arrivata sotto la sua corsia (o dopo un po' che traversa) → risale
             if (Math.abs(horse.lane - bl) < 1.8 || horse.vendettaLife < 6) {
               horse.vendettaState = "affronta"; horse.vendettaTimer = 2.6;
-              if (state.messageTimer <= 0) showMessage(`${horse.name} sfila dietro le altre per andare a cercare ${bersaglio.name}!`, 1.6, "danger");
+              // (niente scritta su chi sfila a cercare la rivale: lo si vede sfilare)
             }
           } else if (horse.vendettaState === "affronta") {
             progGoal = bp; laneGoal = bl; turnGoal = 0;                   // risale e le va ADDOSSO
@@ -10915,7 +10915,7 @@ function updateMossa(dt, time) {
       if (!horse.nervBackState && nervOra >= NERV_BACK_THRESHOLD) {
         horse.nervBackState = "agitato";
         horse.nervBackTimer = NERV_BACK_WAIT;
-        if (state.messageTimer <= 0) showMessage(`${horse.name} si agita e perde la posta`, 1.8, "danger");
+        // (niente scritta su chi si agita e perde la posta)
       }
       if (horse.nervBackState) {
         horse.nervBackTimer = (horse.nervBackTimer || 0) - dt;
@@ -11159,7 +11159,7 @@ function updateRincorsa(rincorsa, dt) {
           if (rivalBene) {
             threshold = clamp(threshold + 0.28 * k, 0.16, 0.95);
             if (Math.random() < 0.06 && state.messageTimer <= 0) {
-              showMessage("La rincorsa attende: la rivale è troppo messa bene", 1.2);
+              // (niente scritta sull'attesa della rincorsa)
             }
           } else if (rivalMale) {
             threshold = clamp(threshold - 0.3 * k, 0.08, 0.95);
@@ -11179,7 +11179,7 @@ function updateRincorsa(rincorsa, dt) {
             const youReady = Math.abs(you.mossaTurn || 0) < 0.22 && you.mossaProgress > MOSSA_FRONT_LIMIT - 2.6 && (you.nervousnessCurrent || 0) < 0.7;
             if (youReady && (!fav || isTurned(fav)) && (!riv || isTurned(riv))) {
               threshold = clamp(threshold - 0.4, 0.08, 0.95);
-              if (Math.random() < 0.06 && state.messageTimer <= 0) showMessage(`${rincorsa.name} dà il via a tuo favore`, 1.2, "good");
+              // (niente scritta sul via a favore)
             } else {
               threshold = clamp(threshold + 0.2, 0.16, 0.95);   // aspetta il momento giusto
             }
@@ -11189,7 +11189,7 @@ function updateRincorsa(rincorsa, dt) {
           const riv = findRun(rincorsa.allyTargetId);
           if (isTurned(riv)) {
             threshold = clamp(threshold - 0.4, 0.08, 0.95);
-            if (Math.random() < 0.06 && state.messageTimer <= 0) showMessage(`${rincorsa.name} parte: la rivale è girata`, 1.2, "good");
+            // (niente scritta sulla rivale girata)
           } else {
             threshold = clamp(threshold + 0.2, 0.16, 0.95);
           }
@@ -11223,7 +11223,7 @@ function updateRincorsa(rincorsa, dt) {
           // davvero, andava sistemato.
           const nerv = rincorsa.nervousnessCurrent ?? 0.4;
           mistake = Math.random() < (0.0009 + nerv * 0.002);   // max 1-2 partenze anticipate per palio
-          if (mistake && state.messageTimer <= 0) showMessage("La rincorsa parte in anticipo!", 1.2, "danger");
+          // (niente scritta sulla partenza anticipata della rincorsa)
         }
         // ── FIANCATA: se la RIVALE è messa MALE, la rincorsa CI PROVA a fiancare
         // anche senza allineamento perfetto (scommette di fregarla). Al varco decide
@@ -11236,7 +11236,7 @@ function updateRincorsa(rincorsa, dt) {
           // ~30% per DECISIONE (la rincorsa decide ogni ~0.6s): quando la rivale è
           // messa male ci prova a fiancare entro un paio di secondi.
           fiancata = Math.random() < 0.3;
-          if (fiancata && state.messageTimer <= 0) showMessage(`${rincorsa.name} prova a fiancare la rivale!`, 1.5, "good");
+          // (niente scritta sulla fiancata: la si vede)
         }
         // Una volta decisa (buona / per sbaglio / fiancata) si impegna: carica e va.
         // REGOLA: la rincorsa non dà MAI la mossa alla rivale se questa è messa BENE
@@ -11320,7 +11320,7 @@ function updateRincorsa(rincorsa, dt) {
       rincorsa.lane = lerp(rincorsa.lane, VERROCCHINO_LANE - 0.4, clamp(dt * 4.5 * vicino, 0, 1));
       rincorsa.mossaLane = rincorsa.lane;
       if (state.messageTimer <= 0 && (state.verroMsgCd ?? 0) <= 0) {
-        showMessage("La rincorsa entra a SINISTRA del verrocchino", 1.4, "danger");
+        // (niente scritta sull'ingresso a sinistra del verrocchino)
         state.verroMsgCd = 3.0;
       }
     }
@@ -11335,7 +11335,7 @@ function updateRincorsa(rincorsa, dt) {
   if (rincorsaCorridorBlocked() && rincorsa.progress > MOSSA_BACK_LIMIT - 1.1) {
     state.corridorMsgCd = state.corridorMsgCd ?? 0;
     if (state.corridorMsgCd <= 0 && state.messageTimer <= 0) {
-      showMessage("Il varco è occupato: entrare ora sarebbe mossa falsa", 1.4, "danger");
+      // (niente scritta sul varco occupato)
       state.corridorMsgCd = 3.0;
     }
   }
