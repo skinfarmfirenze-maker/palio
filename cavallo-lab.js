@@ -79,7 +79,8 @@ export const COLORE_MANTO = {
   "storno":           "#4F4A47",   // nero brizzolato di bianco
 };
 
-// Manto documentato per ciascun barbero presente nel gioco.
+// Manto documentato per ciascun barbero presente nel gioco (40 su 41: manca solo
+// Urbino del 1949, la cui scheda non riporta il manto).
 export const MANTI_REALI = {
   "Panezio": "baio",              "Topolone": "baio",             "Volpino": "baio",
   "Trattu de Zamaglia": "sauro",  "Uberta de Mores": "baio",      "Gaudenzia": "grigio",
@@ -91,6 +92,11 @@ export const MANTI_REALI = {
   "Diodoro": "sauro",             "Ungaros": "sauro",             "Zenis": "baio",
   "Figaro": "baio",               "Oriolu de Zamaglia": "baio",   "Re Artù": "sauro",
   "Zodiach": "roano",             "Remorex": "sauro",
+  // Barberi aggiunti al gioco dopo la prima raccolta (verificati il 31/08):
+  "Zio Frac": "baio",             "Preziosa Penelope": "baio", "Galleggiante": "baio",
+  "Anda e Bola": "baio",          "Reo Confesso": "baio",      "Viso d'Angelo": "baio",
+  "Violenta da Clodia": "baio",   "Indianos": "storno",        "Berio": "baio",
+  "Brivido Sardo": "baio",        "Mocambo": "sauro",
   // "Urbino" (1949): la sua scheda d'archivio non riporta il manto → lasciato al
   // colore di default del gioco, per non inventare un dato che non esiste.
 };
