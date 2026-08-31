@@ -6189,6 +6189,18 @@ function campaignSpectateSetup() {
   const names = shuffleInPlace(TRATTA_HORSE_NAMES.slice());
   state.horses.forEach((h, i) => {
     if (!h.horseName) h.horseName = names[i % names.length] || ("Barbero " + (i + 1));
+    // LA FASCIA VA PRESA COL NOME. Qui si assegnava solo il nome del barbero, e
+    // nelle accoppiate dell'assisti mancavano brenne, boni e bomboloni: senza
+    // quel dato non si capisce chi ha il cavallo buono, che è l'unica cosa che
+    // conta per decidere su chi scommettere e chi far parare.
+    if (!h.horseTier) {
+      const dati = HORSE_ROSTER[h.horseName];
+      h.horseTier = (dati && dati.tier) || "bono";
+      if (dati) {
+        if (h.staminaMax == null) h.staminaMax = dati.stamina;
+        if (h.scossoStamina == null && dati.scossoStamina != null) h.scossoStamina = dati.scossoStamina;
+      }
+    }
     if (h.player) h.autopilot = true;   // il focus (rivale) è guidato dall'AI
   });
   campaignAutoHireAll();      // fantini ingaggiati → fedeltà disponibili per accordi/corruzione
