@@ -4655,15 +4655,6 @@ function pollGamepad() {
 }
 
 function cycleCameraMode() {
-  // A terra il tasto C non cambia la modalità di gioco: passa alla prossima delle
-  // tre inquadrature sulla testa della corsa.
-  if (state.cameraAutoCaduta) {
-    state.cadutaVista = ((state.cadutaVista || 0) + 1) % VISTE_CADUTA.length;
-    state.cadutaTimer = 0;
-    const nomi = { alto: "Dall'alto sulle prime tre", laterale: "Laterale, di profilo", aerea: "Aerea su San Martino" };
-    showMessage(nomi[VISTE_CADUTA[state.cadutaVista]] || "", 0.9);
-    return;
-  }
   // TUTTE le inquadrature, sempre: la tua sul cavallo per prima, poi le due da
   // regia (le stesse del replay), poi le altre. Prima laterale e aerea si vedevano
   // solo cadendo.
@@ -9083,7 +9074,10 @@ function startMossa(fromTratta = false) {
   }, INGRESSO_PRIMA_DEL_SUNTO * 1000);
   state.mode = "mossa";
   setAllestimento("palio");   // il giorno del Palio: palchi montati e Piazza gremita
-  state.cameraMode = "follow";
+  // La visuale scelta col tasto C RESTA anche nei palii successivi: prima ogni
+  // mossa la riportava d'ufficio sul cavallo del giocatore, e chi preferiva la
+  // laterale doveva riselezionarla ogni volta.
+  if (!state.cameraMode) state.cameraMode = "follow";
   state.mossaTimer = 0;
   state.cartelloMossaFatto = false;   // il cartello della mossa comprata torna a ogni palio
   state.mossaDuration = 13.2 + Math.random() * 1.4;
@@ -13646,21 +13640,8 @@ function finishRace() {
     if (piena >= tracciaSlotTotali() * 0.5) salvaTraccia(state.tracciaCorsa);
     state.tracciaCorsa = null;
   }
-  // FINITO IL PALIO la regia della caduta si spegne: se il giocatore era a terra,
-  // la camera restava sulla testa della corsa anche a gara conclusa e la premiazione
-  // si guardava dall'alto. Torna la vista che aveva prima di cadere.
-  ripristinaCameraCaduta();
   state.mode = "finished";
   presentVictory(); // fallback difensivo: no-op se già mostrata
-}
-
-// Spegne la regia delle tre inquadrature e rimette la vista di prima.
-function ripristinaCameraCaduta() {
-  if (!state.cameraAutoCaduta) return;
-  state.cameraMode = state.cameraModePrima || "follow";
-  state.cameraAutoCaduta = false;
-  state.cadutaVista = 0;
-  state.cadutaTimer = 0;
 }
 
 // ── REPLAY DELL'ULTIMO GIRO ──────────────────────────────────────────────────
@@ -13900,34 +13881,13 @@ function formatTime(seconds) {
   return `${minutes}:${rest.toFixed(2).padStart(5, "0")}`;
 }
 
-// Sei caduto o il cavallo è scosso: la corsa continua senza di te e restare
-// inchiodati su un cavallo fermo è la cosa meno interessante da guardare. La
-// camera passa sulla testa della corsa con la stessa REGIA del replay — tre
-// inquadrature che si alternano — e ci resta finché non ti rialzi. Col tasto C
-// passi alla successiva quando vuoi.
-const VISTE_CADUTA = ["alto", "laterale", "aerea"];
-const CADUTA_STACCO = 6.5;   // secondi prima dello stacco sull'inquadratura dopo
-function cameraSeguiLaCorsaSeCadi(player, dt) {
-  if (!player || !player.player || state.mode !== "race") return;
-  const fuoriGioco = !!(player.caduto || player.scosso);
-  if (fuoriGioco && !state.cameraAutoCaduta) {
-    state.cameraModePrima = state.cameraMode;
-    state.cameraAutoCaduta = true;
-    state.cadutaVista = 0;
-    state.cadutaTimer = 0;
-    showMessage("La testa della corsa · C per cambiare inquadratura", 2.4);
-  } else if (!fuoriGioco && state.cameraAutoCaduta) {
-    state.cameraMode = state.cameraModePrima || "follow";   // rimontato in sella
-    state.cameraAutoCaduta = false;
-  }
-  if (state.cameraAutoCaduta) {
-    state.cadutaTimer = (state.cadutaTimer || 0) + (dt || 0);
-    if (state.cadutaTimer >= CADUTA_STACCO) {   // stacco sulla prossima inquadratura
-      state.cadutaTimer = 0;
-      state.cadutaVista = ((state.cadutaVista || 0) + 1) % VISTE_CADUTA.length;
-    }
-  }
-}
+// LA VISUALE NON CAMBIA MAI DA SOLA. Prima, cadendo, la camera passava
+// automaticamente sulla testa della corsa e le tre inquadrature si alternavano a
+// tempo: comodo in teoria, in pratica ti spostava l'occhio mentre stavi ancora
+// giocando. Adesso la vista la decide SOLO il tasto C. Se cadi e vuoi guardare i
+// primi, premi C: "laterale" e "aerea" passano da sole al cavallo in testa
+// quando il tuo è fuori gioco.
+const VISTE_CADUTA = ["alto", "laterale", "aerea"];   // (restano per il ciclo del tasto C)
 
 // Chi sta davanti a tutti: le inquadrature da regia lo seguono quando il
 // giocatore è a terra.
@@ -13978,18 +13938,10 @@ function applicaVista(vista, primo, dt) {
   return true;
 }
 
-// Regia automatica mentre sei a terra: le tre inquadrature sulla testa della
-// corsa, che si alternano da sole.
-function cameraRegiaCaduta(dt) {
-  if (!state.cameraAutoCaduta) return false;
-  return applicaVista(VISTE_CADUTA[state.cadutaVista || 0], primoInCorsa(), dt);
-}
 
 function updateCamera(dt) {
   const player = getPlayer() || state.demoHorses[0];
   if (!player) return;
-  cameraSeguiLaCorsaSeCadi(player, dt);
-  if (cameraRegiaCaduta(dt)) return;
   const sample = sampleAt(player.progress);
   const playerFollowView = player.player && (state.mode === "mossa" || state.mode === "race" || state.mode === "finished");
   const inGameplay = state.mode === "mossa" || state.mode === "race" || state.mode === "finished";
