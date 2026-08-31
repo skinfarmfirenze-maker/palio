@@ -8389,9 +8389,9 @@ const JOCKEYS_MODERNI = [
   { epoca: "moderno", nome: "Federico Guglielmi", nick: "Tamurè", mossa: 2, difesa: 3, terzo: 2, fedelta: 4, curva: 3, ingaggio: 28 },
   { epoca: "moderno", nome: "Battista Corda", nick: "Grido", mossa: 3, difesa: 5, terzo: 5, fedelta: 2, curva: 1, ingaggio: 80, fittizio: true },
   { epoca: "moderno", nome: "Efisio Melis", nick: "Veleno", mossa: 2, difesa: 5, terzo: 1, fedelta: 4, curva: 2, ingaggio: 40, fittizio: true },
-  { epoca: "moderno", nome: "Enrico Bruschelli", nick: "Bellocchio", mossa: 2, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 42, fittizio: true },
+  { epoca: "moderno", nome: "Enrico Bruschelli", nick: "Bellocchio", mossa: 2, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 42 },
   { epoca: "moderno", nome: "Salvatore Loi", nick: "Peto", mossa: 1, difesa: 4, terzo: 4, fedelta: 1, curva: 1, ingaggio: 8, fittizio: true },
-  { epoca: "moderno", nome: "Diego Minucci", nick: "Fastidio", mossa: 1, difesa: 2, terzo: 4, fedelta: 4, curva: 5, ingaggio: 32, fittizio: true },
+  { epoca: "moderno", nome: "Diego Minucci", nick: "Fastidio", mossa: 1, difesa: 2, terzo: 4, fedelta: 4, curva: 5, ingaggio: 32 },
   // Il "fedelissimo": incorruttibile (fedeltà 5) ma scarso in tutto e GRATIS.
   { epoca: "moderno", nome: "Michele Serra", nick: "Fedele", mossa: 1, difesa: 1, terzo: 1, fedelta: 5, curva: 1, ingaggio: 0, fittizio: true },
 ];
@@ -8412,9 +8412,9 @@ const JOCKEYS_STORICI = [
   { epoca: "storico", nome: "Sebastiano Deledda", nick: "Legno", mossa: 3, difesa: 3, terzo: 4, fedelta: 4, curva: 3, ingaggio: 70 },
   { epoca: "storico", nome: "Massimo Coghe", nick: "Falchino", mossa: 3, difesa: 3, terzo: 3, fedelta: 3, curva: 3, ingaggio: 60 },
   { epoca: "storico", nome: "Vittorio Pisani", nick: "Vittorino", mossa: 3, difesa: 2, terzo: 3, fedelta: 3, curva: 3, ingaggio: 48 },
-  { epoca: "storico", nome: "Ottavio Bertini", nick: "Ganascia", mossa: 4, difesa: 2, terzo: 2, fedelta: 1, curva: 2, ingaggio: 55, fittizio: true },
+  { epoca: "storico", nome: "Ottavio Bertini", nick: "Ganascia", mossa: 4, difesa: 2, terzo: 2, fedelta: 1, curva: 2, ingaggio: 55 },
   { epoca: "storico", nome: "Nello Vanni", nick: "Tramonto", mossa: 2, difesa: 4, terzo: 4, fedelta: 3, curva: 3, ingaggio: 44, fittizio: true },
-  { epoca: "storico", nome: "Pietro Serra", nick: "Zurlino", mossa: 2, difesa: 3, terzo: 3, fedelta: 2, curva: 4, ingaggio: 35, fittizio: true },
+  { epoca: "storico", nome: "Carlo Lotti", nick: "Zurlino", mossa: 2, difesa: 3, terzo: 3, fedelta: 2, curva: 4, ingaggio: 35 },
   { epoca: "storico", nome: "Bruno Cinelli", nick: "Nespola", mossa: 3, difesa: 2, terzo: 2, fedelta: 2, curva: 2, ingaggio: 26, fittizio: true },
   { epoca: "storico", nome: "Antonio Marras", nick: "Sbigo", mossa: 1, difesa: 4, terzo: 3, fedelta: 1, curva: 1, ingaggio: 14, fittizio: true },
   // Il "fedelissimo" dell'epoca: incorruttibile ma scarso, e gratis.
