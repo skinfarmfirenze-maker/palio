@@ -9633,6 +9633,60 @@ state.horses.forEach((horse) => {
   });
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// IL VIA DAI CANAPI — uno solo, per la mossa buona E per la mossa falsa.
+// Qui c'e' tutto quello che fa PARTIRE i cavalli: qualita' dello scatto, handicap
+// della rivale, effetti dell'asta, andature, heading, ritardi di reazione. La
+// mossa falsa NON e' una simulazione a parte: parte da qui identica alla vera, e
+// l'unica differenza e' che dopo quattro secondi il mortaretto la annulla.
+// ══════════════════════════════════════════════════════════════════════════════
+function viaDaiCanapi() {
+  // Qualità di partenza per tutti (prima di impostare gli heading).
+  state.horses.forEach((horse) => computeStartQuality(horse));
+  // REGOLA: quando una contrada è di RINCORSA, la sua RIVALE non parte fra le prime
+  // 4 → le forziamo lo start "slow" (0,4× di slancio), così scatta male e resta
+  // indietro al via. Vale anche se la rivale è il giocatore (handicap silenzioso).
+  {
+    const rin = state.horses.find((h) => h.isRincorsa);
+    const rMap = rin ? (RIVALS[rin.id] || null) : null;
+    if (rMap) state.horses.forEach((h) => { if (h !== rin && rMap[h.id]) h.startQuality = "slow"; });
+  }
+  // ASTA: chi si è AGGIUDICATO la mossa pagando → boost di accelerazione al via
+  // (+9% per 4s). Chi ha pagato il BLOCCO anti-rivale ONORATO → la rivale bloccata
+  // parte "slow" (mai nelle prime 2) e con malus di velocità (−6% per 3s).
+  {
+    const A = state.asta;
+    if (A) {
+      const byId = (id) => state.horses.find((h) => h.id === id);
+      const rinH = state.horses.find((h) => h.isRincorsa);
+      if (A.bestBidder && ((A.paid && A.paid[A.bestBidder]) || A.bestBidder === A.prepaidHolder)) {
+        const w = byId(A.bestBidder);
+        if (w) {
+          w.mossaModMult = 1.09; w.mossaModTimer = 4;   // +9% per 4s a chi si aggiudica la mossa pagando
+          // Se il GIOCATORE è di rincorsa e ha incassato → chi ha pagato parte fra le prime 2 (start pulito + boost).
+          if (rinH && isHuman(rinH)) w.startQuality = "clean";
+        }
+      }
+      Object.keys(A.blocco || {}).forEach((id) => {
+        const b = A.blocco[id];
+        if (b && A.bestBidder !== b.target) {   // blocco ONORATO: la rivale non ha spuntato l'asta
+          const r = byId(b.target);
+          if (r) { r.startQuality = "slow"; r.mossaModMult = 0.94; r.mossaModTimer = 3; }
+        }
+      });
+    }
+  }
+
+  preparaPartenza();
+
+  // Nessun freno/spinta in base alle vittorie (rimosso su richiesta): balanceMult = 1.
+  state.horses.forEach((h) => { h.balanceMult = 1; });
+  // PRIMO GIRO DI PIAZZA: tutti max andatura 4; DUE AI a caso "contenute" a 3.
+  // Dal secondo giro il tetto sparisce (3-4-5 liberi). Riassegnato a ogni partenza.
+  state.horses.forEach((h) => { h.firstLapCap = 4; });
+  shuffleInPlace(state.horses.filter((h) => !h.player)).slice(0, 2).forEach((h) => { h.firstLapCap = 3; });
+}
+
 function releaseRace() {
   { const tl = document.querySelector(".hud-top-left"); if (tl) tl.style.display = ""; const tr = document.querySelector(".hud-top-right"); if (tr) tr.style.display = ""; }   // #C: ripristina i box Posizione e Giro al Via
   // ── PARTENZA FUORI POSIZIONE ────────────────────────────────────────────
@@ -9690,48 +9744,8 @@ function releaseRace() {
     h.soldSpin = false;
   });
 
-  // Qualità di partenza per tutti (prima di impostare gli heading).
-  state.horses.forEach((horse) => computeStartQuality(horse));
-  // REGOLA: quando una contrada è di RINCORSA, la sua RIVALE non parte fra le prime
-  // 4 → le forziamo lo start "slow" (0,4× di slancio), così scatta male e resta
-  // indietro al via. Vale anche se la rivale è il giocatore (handicap silenzioso).
-  {
-    const rin = state.horses.find((h) => h.isRincorsa);
-    const rMap = rin ? (RIVALS[rin.id] || null) : null;
-    if (rMap) state.horses.forEach((h) => { if (h !== rin && rMap[h.id]) h.startQuality = "slow"; });
-  }
-  // ASTA: chi si è AGGIUDICATO la mossa pagando → boost di accelerazione al via
-  // (+9% per 4s). Chi ha pagato il BLOCCO anti-rivale ONORATO → la rivale bloccata
-  // parte "slow" (mai nelle prime 2) e con malus di velocità (−6% per 3s).
-  {
-    const A = state.asta;
-    if (A) {
-      const byId = (id) => state.horses.find((h) => h.id === id);
-      const rinH = state.horses.find((h) => h.isRincorsa);
-      if (A.bestBidder && ((A.paid && A.paid[A.bestBidder]) || A.bestBidder === A.prepaidHolder)) {
-        const w = byId(A.bestBidder);
-        if (w) {
-          w.mossaModMult = 1.09; w.mossaModTimer = 4;   // +9% per 4s a chi si aggiudica la mossa pagando
-          // Se il GIOCATORE è di rincorsa e ha incassato → chi ha pagato parte fra le prime 2 (start pulito + boost).
-          if (rinH && isHuman(rinH)) w.startQuality = "clean";
-        }
-      }
-      Object.keys(A.blocco || {}).forEach((id) => {
-        const b = A.blocco[id];
-        if (b && A.bestBidder !== b.target) {   // blocco ONORATO: la rivale non ha spuntato l'asta
-          const r = byId(b.target);
-          if (r) { r.startQuality = "slow"; r.mossaModMult = 0.94; r.mossaModTimer = 3; }
-        }
-      });
-    }
-  }
+  viaDaiCanapi();
 
-  preparaPartenza();
-
-  // NB: il freno/spinta di velocità in base alle vittorie è stato RIMOSSO (su
-  // richiesta). L'unico svantaggio della più vittoriosa è la brenna garantita
-  // ogni 4 palii, applicata alla Tratta (vedi beginTratta). Qui balanceMult = 1.
-  state.horses.forEach((h) => { h.balanceMult = 1; });
 
   // ── INCIDENTE DI SAN MARTINO (1 palio su 6) ────────────────────────────────
   // Sorteggiato QUI, alla partenza: se esce, al primo passaggio a San Martino le
@@ -9745,10 +9759,6 @@ function releaseRace() {
   state.tartucaFellDone = false;    // idem per la Tartuca (AI, San Martino)
   state.giraffaFellDone = false;    // idem per la Giraffa (AI, Casato)
 
-  // PRIMO GIRO DI PIAZZA: tutti max andatura 4; DUE AI a caso "contenute" a 3.
-  // Dal secondo giro il tetto sparisce (3-4-5 liberi). Riassegnato ad ogni partenza.
-  state.horses.forEach((h) => { h.firstLapCap = 4; });
-  shuffleInPlace(state.horses.filter((h) => !h.player)).slice(0, 2).forEach((h) => { h.firstLapCap = 3; });
 
   state.cameraShake = 0.05;
   showMessage("Via!", 0.85);
@@ -9956,35 +9966,42 @@ function triggerMossaFalsa(motivo) {
   state.falseStartTimer = 0;
   state.falseStartMortarettoDone = false;
   state.falsaMotivo = motivo || motivoMossaFalsa();
+
+  // ── E' UNA PARTENZA VERA. PUNTO. ───────────────────────────────────────────
+  // Il Mossiere ha abbassato il canape e le Contrade sono partite: per i quattro
+  // secondi che seguono non c'e' NIENTE di diverso da un Palio cominciato. Si
+  // entra in modalita' CORSA come al via buono — ed e' questo che prima mancava:
+  // restando in "mossa" meta' dei sistemi erano spenti (il tuo cavallo non veniva
+  // nemmeno orientato secondo il tuo heading, la telecamera non ti seguiva, le AI
+  // correvano in un mondo che non era quello della corsa) e infatti i movimenti
+  // sembravano sbagliati. Adesso e' la corsa vera, che dopo 4 secondi si annulla.
   state.canapiDrop = 0.001;                               // il canapo frontale si abbassa
-  showMessage("Partiti!", 1.4, "good");
-  // Anche qui i cavalli PARTONO davvero: stesso start della mossa buona (poi il
-  // mortaretto lo smentisce). La busta del tondino sfuma, tornerà al richiamo.
-  try { fadeBusta(0.6); } catch (e) { /* niente */ }
-  try { playStartMossa(); } catch (e) { /* niente */ }
-  // PARTENZA IDENTICA A QUELLA VERA: stessa preparazione del via buono — andatura,
-  // velocita' di crociera, heading dal muso che avevi ai canapi, ritardo di
-  // reazione individuale, rampa di accelerazione. Poi in updateFalseStartRunout
-  // girano le stesse funzioni della corsa. L'unica cosa finta e' che dopo quattro
-  // secondi il mortaretto la annulla.
-  preparaPartenza();
+  state.canapiDropTimer = 5.0;                            // il posteriore svanisce, come al via
   state.horses.forEach((h) => { h.canapeStop = false; });
+  viaDaiCanapi();                                         // <-- lo STESSO via della mossa buona
+  state.raceClock = 0;                                    // la corsa comincia adesso
+  state.raceRunout = 0;
+  state.announce = { prevRank: null, lastLap: false, finishNear: false, headToHead: false };
+  // Il nastro del replay e le traiettorie insegnate alle AI restano quelli veri:
+  // una partenza annullata non deve finire nel replay ne' insegnare niente.
+  state.falsaBackupReplay = state.replay;
+  state.falsaBackupTraccia = state.tracciaCorsa;
+  state.replay = { frames: [], acc: 0 };
+  state.tracciaCorsa = null;
+  state.mode = "race";                                    // <-- la chiave: si CORRE
+  showMessage("Partiti!", 1.4, "good");
+  try { fadeBusta(0.6); } catch (e) { /* niente */ }      // la busta del tondino sfuma
+  try { playStartMossa(); } catch (e) { /* niente */ }
+  try { startCrowdBed(0.3); } catch (e) { /* niente */ }  // il pubblico esplode come al via
+  try { startGaloppo(0.34); } catch (e) { /* niente */ }  // e lo zoccolio del gruppo
 }
 
 // Avanzamento del FALSO AVVIO (4s): galoppo → 2s mortaretto → 4s ritorno al tondino.
 function updateFalseStartRunout(dt, time) {
   state.falseStartTimer += dt;
-  state.canapiDrop += dt;                                 // il canapo frontale resta giù
-  // ── SI CORRE DAVVERO ──────────────────────────────────────────────────────
-  // Nessuna simulazione a parte: girano le STESSE funzioni della corsa, quindi il
-  // giocatore guida il suo cavallo e le AI si comportano come sempre — sterzate,
-  // corsie, spinte, tutto. L'unica differenza è che dopo quattro secondi si
-  // interrompe e si torna al tondino. Prima qui c'era un movimento finto (avanza
-  // dritto a velocità decisa a tavolino) e si vedeva benissimo che non era una
-  // partenza vera.
-  updatePlayer(dt, time);
-  state.horses.forEach((horse) => updateAiHorse(horse, dt, time));
-  resolveRaceCollisions(dt);
+  // Gira updateRace: LA corsa, la stessa identica funzione del Palio vero. Non
+  // una simulazione parallela — quella era l'errore di prima.
+  updateRace(dt, time);
   if (!state.falseStartMortarettoDone && state.falseStartTimer >= 2) {
     state.falseStartMortarettoDone = true;
     playMortaretto(1.4);                                  // COLPO FORTE: si deve sentire sopra tutto
@@ -9994,7 +10011,20 @@ function updateFalseStartRunout(dt, time) {
   }
   if (state.falseStartTimer >= 4) {
     state.falseStartRunning = false;
+    state.mode = "mossa";                                 // si smette di correre: si torna alla mossa
     state.canapiDrop = 0;                                 // il canapo torna su
+    // Il canapo posteriore stava gia' dissolvendo (updateRace lo sfuma in 5s):
+    // rimettilo pieno e visibile, ai canapi ci si torna.
+    state.canapiDropTimer = 0;
+    const post = state.canapiPosteriore;
+    if (post) {
+      post.visible = true;
+      post.traverse((obj) => { if (obj.material && obj.material.transparent) obj.material.opacity = 1; });
+    }
+    // Replay e traiettorie tornano quelli veri: la partenza annullata non lascia traccia.
+    state.replay = state.falsaBackupReplay || null;
+    state.tracciaCorsa = state.falsaBackupTraccia || null;
+    state.falsaBackupReplay = null; state.falsaBackupTraccia = null;
     resetMossaAfterFalsa();
   }
 }
@@ -10010,6 +10040,11 @@ function resetMossaAfterFalsa() {
     // Si torna ai canapi: si spegne quello che il falso avvio aveva acceso.
     h.launching = false; h.launchRamp = 0; h.travelSpeed = 0; h.speedLevel = 0;
     h.heading = undefined; h.raceTurn = 0;
+    // Sono stati quattro secondi di corsa vera: puo' esserci chi e' caduto o e'
+    // rimasto scosso. Ai canapi si torna tutti interi.
+    h.caduto = false; h.cadutoTimer = 0; h.cadutoRoll = 0; h.cadutoMult = 1; h.cadutoSlide = 0;
+    h.scosso = false; h.finishTime = null; h.boosting = false;
+    h.mossaModMult = 1; h.mossaModTimer = 0;
     h.returningToTondino = true;
     // TAGLIO: dopo la mossa FALSA si riparte DIRETTAMENTE dal tondino (snap immediato),
     // non col rientro lento a piedi. dt enorme → il passo copre tutta la distanza in 1 frame.
@@ -10085,7 +10120,7 @@ function updateMossa(dt, time) {
   state.forcedCanapeCd = Math.max(0, (state.forcedCanapeCd || 0) - dt);   // cooldown "forza il canape"
   // FALSO AVVIO in corso: galoppo breve → mortaretto → ritorno al tondino. Blocca
   // ogni altra logica di mossa finché la sequenza dei 4s non è finita.
-  if (state.falseStartRunning) { updateFalseStartRunout(dt, time); return; }
+  // (la mossa falsa non passa piu' di qui: gira in modalita' corsa, vedi il dispatch)
   // Angolo BASE del tondino: avanza UNA VOLTA per frame (non per cavallo), così
   // l'intero anello ruota insieme a passo costante e calmo.
   state.tondinoBase = (state.tondinoBase || 0) + TONDINO_SPIN * 0.5 * dt;
@@ -14343,7 +14378,10 @@ function update(dt, time) {
   } else if (state.mode === "mossa") {
     updateMossa(dt, time);
   } else if (state.mode === "race") {
-    updateRace(dt, time);
+    // La mossa falsa E' modalita' corsa: passa dal runout, che chiama updateRace
+    // e dopo 4 secondi la interrompe col mortaretto.
+    if (state.falseStartRunning) updateFalseStartRunout(dt, time);
+    else updateRace(dt, time);
   } else if (state.mode === "finished") {
     state.horses.forEach((horse) => updateAiHorse(horse, dt * 0.45, time));
   }
