@@ -4691,11 +4691,14 @@ function cycleCameraMode() {
   // TUTTE le inquadrature, sempre: la tua sul cavallo per prima, poi le due da
   // regia (le stesse del replay), poi le altre. Prima laterale e aerea si vedevano
   // solo cadendo.
-  const order = ["follow", "laterale", "aerea", "top3", "overhead", "firstperson"];
+  const order = state.mode === "replayWin"
+    ? ["regia", "follow", "laterale", "aerea", "top3", "overhead", "firstperson"]
+    : ["follow", "laterale", "aerea", "top3", "overhead", "firstperson"];
   const idx = order.indexOf(state.cameraMode);
   state.cameraMode = order[(idx + 1) % order.length];
   const nomi = {
-    follow: "Il tuo cavallo",
+    regia: "Regia automatica",
+    follow: state.mode === "replayWin" ? "Dietro il vincitore" : "Il tuo cavallo",
     laterale: "Laterale, di profilo",
     aerea: "Aerea su San Martino",
     top3: "Sui primi 3 dall'alto",
@@ -13817,9 +13820,9 @@ function finishRace() {
   presentVictory(); // fallback difensivo: no-op se già mostrata
 }
 
-// ── REPLAY DELL'ULTIMO GIRO ──────────────────────────────────────────────────
+// ── REPLAY DEL PALIO ─────────────────────────────────────────────────────────
 // Durante la gara si registrano le posizioni di tutti (20 Hz). All'arrivo si
-// rivede l'ULTIMO GIRO con la camera sul VINCITORE: dove prende il vantaggio,
+// rivede TUTTO IL PALIO con la camera sul VINCITORE: dove prende il vantaggio,
 // come entra nelle curve, la volata verso il drappellone.
 function recordReplayFrame(dt) {
   const R = state.replay || (state.replay = { frames: [], acc: 0 });
@@ -13831,27 +13834,22 @@ function recordReplayFrame(dt) {
   R.frames.push(state.horses.map((h) => [h.progress, h.lane, h.scosso ? 1 : 0]));
 }
 
-// Replay AL RALLENTATORE in due segmenti: (1) i PRIMI 8 SECONDI della mossa
-// (da quando fianca la rincorsa e parte il Palio) e (2) l'ULTIMO GIRO. Segue il
-// vincitore e lo lascia PROSEGUIRE oltre la linea (niente stop sul traguardo).
+// Replay del PALIO INTERO: dalla mossa al drappellone, senza tagli, a velocita'
+// vera. Segue il vincitore e lo lascia proseguire oltre la linea. Con C si gira
+// fra tutte le inquadrature del gioco; la prima e' la regia, che sceglie da sola.
 function startWinnerReplay() {
   const R = state.replay;
   const winner = state.rankings && state.rankings[0];
   if (!R || R.frames.length < 40 || !winner) { showScreen("results"); return; }
   const wIdx = state.horses.indexOf(winner);
-  // Primi 10.5s di gara registrata (erano 8): al rallentatore 0.5× il segmento
-  // dura 21s a schermo — 3.5 di inseguimento alla mossa e ~17.5 di inquadratura
-  // aerea su San Martino (5 secondi in più di prima).
-  const seg1To = Math.min(R.frames.length - 1, Math.round(10.5 / 0.05));
-  const lastLapStart = track.length * (FINISH_LAPS - 1);
-  let seg2From = R.frames.findIndex((fr) => fr[wIdx][0] >= lastLapStart);
-  if (seg2From < 0) seg2From = Math.max(seg1To + 1, R.frames.length - 200);
+  // IL PALIO INTERO, dalla mossa al drappellone: un solo pezzo, niente tagli.
+  // A velocita' normale (1x): al rallentatore un Palio intero durerebbe il doppio
+  // della corsa vera. Con C si gira fra tutte le inquadrature mentre scorre.
   state.replayPlay = {
     segments: [
-      { from: 0, to: seg1To, label: "la Mossa — fianca la rincorsa" },
-      { from: seg2From, to: R.frames.length - 1, label: "l'ultimo giro" },
+      { from: 0, to: R.frames.length - 1, label: "il Palio, dalla mossa all'arrivo" },
     ],
-    seg: 0, frac: 0, wIdx, speed: 0.5, segTime: 0,   // 0.5 = rallentatore; segTime = secondi nel segmento
+    seg: 0, frac: 0, wIdx, speed: 1.0, segTime: 0,
   };
   state.replayPlay.i = state.replayPlay.segments[0].from;
   // Replay VERO: si riparte con TUTTI i fantini in sella; cadono poi al frame
@@ -13863,6 +13861,10 @@ function startWinnerReplay() {
   });
   showScreen(null);
   state.mode = "replayWin";
+  // Si parte dalla regia (i tagli scelti dal gioco); con C si gira fra tutte le
+  // altre inquadrature. La vista che avevi in corsa si ritrova alla fine.
+  state.cameraModePrimaDelReplay = state.cameraMode;
+  state.cameraMode = "regia";
   buildReplayHud(winner, state.replayPlay.segments[0].label);
 }
 
@@ -13877,7 +13879,7 @@ function updateReplayWin(dt) {
     if (P.seg < P.segments.length - 1) {
       P.seg += 1; seg = P.segments[P.seg]; P.i = seg.from; P.frac = 0; P.segTime = 0;
       const lab = document.getElementById("replayLabel");
-      if (lab) lab.textContent = "Replay al rallentatore — " + seg.label;
+      if (lab) lab.textContent = "Replay — " + seg.label + "   ·   C cambia inquadratura";
     } else { endWinnerReplay(); return; }
   }
   const a = R.frames[P.i];
@@ -13908,11 +13910,13 @@ function updateReplayWin(dt) {
       }
     }
   });
-  // Se il giocatore ha scelto la camera "sui primi 3 dall'alto" (tasto C), vale
-  // anche nel replay: sovrascrive la regia scriptata e insegue le prime tre.
-  if (state.cameraMode === "top3" && computeTop3Camera(dt)) return;
-  // Camera sul vincitore: da dietro, guardando la pista che arriva.
   const w = state.horses[P.wIdx];
+  // TUTTE LE INQUADRATURE, anche qui. Quella che hai scelto col tasto C vale nel
+  // replay esattamente come in corsa, solo che il soggetto e' il vincitore. Se
+  // non ne hai scelta nessuna comanda la regia qui sotto.
+  if (state.cameraMode && state.cameraMode !== "regia") {
+    if (applicaVista(state.cameraMode, w, dt)) return;
+  }
   // ── PRIMA PARTE (la Mossa), regia in due tempi ────────────────────────────
   // Primi 3.5 SECONDI: inseguimento classico da dietro — si VEDE la mossa, il
   // canapo che cala, lo scatto. POI stacco sull'inquadratura aerea fissa sopra
@@ -13920,7 +13924,12 @@ function updateReplayWin(dt) {
   // che arriva verso la curva. Il punto di vista è fermo; a muoversi è solo lo
   // sguardo, che segue il vincitore.
   P.segTime = (P.segTime || 0) + dt;
-  if (P.seg === 0 && NARROW_READY && P.segTime >= 3.5) {
+  // Regia automatica su tutto il Palio: 3,5s di inseguimento alla mossa, poi si
+  // alterna aerea di San Martino e laterale ogni dodici secondi, cosi' un replay
+  // lungo non resta incollato a una sola inquadratura.
+  const tReg = P.segTime - 3.5;
+  const aereaOra = tReg >= 0 && Math.floor(tReg / 12) % 2 === 0;
+  if (NARROW_READY && P.segTime >= 3.5 && aereaOra) {
     const apex = sampleAt((SM_IN + SM_OUT) / 2);
     const fuori = campoOutward(apex.point);
     const camA = apex.point.clone().addScaledVector(fuori, 14).add(new THREE.Vector3(0, 38, 0));
@@ -13957,6 +13966,11 @@ function updateReplayWin(dt) {
 }
 
 function endWinnerReplay() {
+  // Torna la vista che avevi in corsa: il replay non te la cambia.
+  if (state.cameraModePrimaDelReplay) {
+    state.cameraMode = state.cameraModePrimaDelReplay;
+    state.cameraModePrimaDelReplay = null;
+  }
   const hud = document.getElementById("replayHud");
   if (hud) hud.remove();
   state.replayPlay = null;
@@ -13974,7 +13988,7 @@ function buildReplayHud(winner, segLabel) {
   const label = document.createElement("div");
   label.id = "replayLabel";
   label.style.cssText = "position:absolute;top:26px;left:0;right:0;text-align:center;font-size:clamp(16px,2.6vw,26px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;text-shadow:0 2px 12px rgba(0,0,0,.75)";
-  label.textContent = "Replay al rallentatore — " + (segLabel || "");
+  label.textContent = "Replay — " + (segLabel || "") + "   ·   C cambia inquadratura";
   const skip = document.createElement("button");
   skip.type = "button";
   skip.textContent = "Salta il replay";
@@ -14016,13 +14030,13 @@ function renderFinalRanking() {
       : isRival ? `PURGA! La rivale ${winner.name} conquista il drappellone.`
       : winner ? `${winner.name} conquista il drappellone.` : "";
   }
-  // Tasto per rivedere il REPLAY al rallentatore (mossa + ultimo giro).
+  // Tasto per rivedere il Palio INTERO, dalla mossa all'arrivo.
   if (ui.replayButton && ui.replayButton.parentElement && !document.getElementById("watchReplayButton")) {
     const btn = document.createElement("button");
     btn.id = "watchReplayButton";
     btn.className = "btn btn-ghost";
     btn.type = "button";
-    btn.textContent = "▶ Rivedi al rallentatore";
+    btn.textContent = "▶ Rivedi il Palio";
     ui.replayButton.parentElement.insertBefore(btn, ui.replayButton.parentElement.firstChild);
     btn.addEventListener("click", startWinnerReplay);
   }
@@ -14075,7 +14089,59 @@ function primoInCorsa() {
 function applicaVista(vista, primo, dt) {
   if (!primo || !primo.group) return false;
 
-  if (vista === "alto") return computeTop3Camera(dt);   // dall'alto sulle prime tre
+  if (vista === "alto" || vista === "top3") return computeTop3Camera(dt);   // dall'alto sulle prime tre
+
+  if (vista === "overhead") {
+    // Tutta la Piazza dall'alto, con una rotazione lentissima.
+    const centerZ = -14;
+    state.overheadAngle = (state.overheadAngle || 0) + 0.008 * dt;
+    camera.position.set(0, 100, centerZ);
+    camera.up.set(Math.sin(state.overheadAngle), 0, Math.cos(state.overheadAngle));
+    camera.lookAt(0, 0, centerZ);
+    camera.up.set(0, 1, 0);
+    state.cameraFov += (62 - state.cameraFov) * clamp(dt * 4, 0, 1);
+    camera.fov = state.cameraFov;
+    camera.updateProjectionMatrix();
+    return true;
+  }
+
+  if (vista === "firstperson") {
+    // In sella: gli occhi del fantino. Nel replay l'heading non e' registrato,
+    // quindi si guarda lungo la pista — che e' dove il cavallo sta andando.
+    const sf = sampleAt(primo.progress);
+    const camPos = new THREE.Vector3(0, 2.55, 0.4);
+    primo.group.localToWorld(camPos);
+    const fwd = sf.tangent.clone().normalize();
+    const look = camPos.clone().addScaledVector(fwd, 12).add(new THREE.Vector3(0, -0.35, 0));
+    state.cameraPosition.lerp(camPos, clamp(dt * 8, 0, 1));
+    state.cameraLook.lerp(look, clamp(dt * 8, 0, 1));
+    camera.position.copy(state.cameraPosition);
+    camera.lookAt(state.cameraLook);
+    state.cameraFov += (74 - state.cameraFov) * clamp(dt * 4, 0, 1);
+    camera.fov = state.cameraFov;
+    camera.updateProjectionMatrix();
+    return true;
+  }
+
+  if (vista === "follow") {
+    // Da dietro, come quando corri tu: si vede la pista che arriva.
+    const sf = sampleAt(primo.progress);
+    const avanti = sampleAt(primo.progress + 9);
+    const fwd = sf.tangent.clone().normalize();
+    const pos = primo.group.position.clone()
+      .addScaledVector(fwd, -9.2).add(new THREE.Vector3(0, 5.85, 0));
+    const look = avanti.point.clone()
+      .addScaledVector(avanti.normal, (primo.lane || 0) * 0.55)
+      .add(new THREE.Vector3(0, 1.05, 0));
+    state.cameraPosition.lerp(pos, clamp(dt * 3.4, 0, 1));
+    state.cameraLook.lerp(look, clamp(dt * 3.8, 0, 1));
+    camera.position.copy(state.cameraPosition);
+    camera.lookAt(state.cameraLook);
+    state.cameraFov += (60 - state.cameraFov) * clamp(dt * 3, 0, 1);
+    camera.fov = state.cameraFov;
+    camera.updateProjectionMatrix();
+    return true;
+  }
 
   if (vista === "aerea" && NARROW_READY) {
     // Aerea ferma sopra San Martino: il punto di vista non si muove, si muove solo
