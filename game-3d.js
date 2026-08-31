@@ -12274,12 +12274,17 @@ function updateAiHorse(horse, dt, time) {
       const lineVar = horse.lineBias * 0.9 + Math.sin(time * 0.55 + horse.phase) * 0.3;
       lineGoal = rec + lineVar;
     } else if (inCurve) {
-      // Default senza registrazione: apice largo in base alla velocità, e in
-      // USCITA (curva che cala) si allarga fin quasi allo steccato esterno.
-      const apexSteer = steerMultForCurve(sample.curve, aiAndatura); // 0.27 veloce/largo .. 0.80 piano/stretto
-      const maxInner = clamp(lerp(-0.05, 0.82, (apexSteer - 0.27) / 0.53), -0.10, 0.82);
+      // ── ALL'APICE SI PASSA DENTRO ─────────────────────────────────────────
+      // Prima la corsia dell'apice usciva dalla tabella di sterzata: piu' andavano
+      // forte, piu' puntavano LARGO, e ad andatura piena il bersaglio era corsia
+      // -0.58 — fuori dal centro pista, con il colonnino a 10.9. Per questo a San
+      // Martino e al Casato non si vedevano mai passare interne. Adesso l'apice e'
+      // una corsia interna vera: chi va piano stringe di piu', chi va forte un po'
+      // meno, ma tutti puntano DENTRO come fa un fantino.
+      const apice = APICE_INTERNO - (clamp(aiAndatura, 1, 5) - 1) * APICE_CALO;
       const cp = horse.cornerPhase ?? 0;           // +1 entrata, −1 uscita
-      const inner = cp >= 0 ? maxInner : lerp(maxInner, -0.95, (-cp) * 0.98); // uscita MOLTO larga
+      // In USCITA ci si allarga, che e' giusto — ma non fino ai materassi.
+      const inner = cp >= 0 ? apice : lerp(apice, USCITA_LARGA, (-cp) * 0.98);
       lineGoal = innerSign * TRACK_HALF_WIDTH * inner;
     } else {
       lineGoal = innerSign * AI_LANE_LIMIT * 0.5;  // rettilineo senza registrazione: mezza pista
@@ -12290,7 +12295,7 @@ function updateAiHorse(horse, dt, time) {
     const aheadCurve = sampleAt(horse.progress + 14).curve || 0;
     if (aheadCurve > 0.42 && (horse.cornerPhase ?? 0) >= -0.1) {
       const entryBlend = clamp((aheadCurve - 0.42) / 0.15, 0, 1) * clamp(1 - sample.curve / 0.5, 0, 1);
-      lineGoal += -innerSign * 3.1 * entryBlend;
+      lineGoal += -innerSign * INGRESSO_LARGO * entryBlend;
     }
     // DOPO SAN MARTINO → CASATO: le contrade "casatoWide" (≥6/10) restano ESTERNE
     // (verso −innerSign, cioè sinistra) lungo il rettilineo del Palazzo, così poi
@@ -12510,29 +12515,19 @@ function updateAiHorse(horse, dt, time) {
   if (versoDentro) laneFollow = Math.max(laneFollow, 7);
   horse.lane += (horse.targetLane - horse.lane) * clamp(dt * laneFollow, 0, 1);
   horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
-  // ── CAP DURO sull'interno in curva, in base alla velocità ──────────────────
-  // Garanzia: l'AI non può MAI essere più interna di quanto la sua andatura
-  // consenta (stessa tabella di sterzata del giocatore). A tutta andatura, in
-  // curva, è costretta larga come te. Risolve il "ritardo" del doppio lerp.
-  if (sample.curve > 0.2) {
-    const apexSteer = steerMultForCurve(sample.curve, aiAndatura);
-    const maxInner = clamp(lerp(-0.05, 0.82, (apexSteer - 0.27) / 0.53), -0.10, 0.82);
-    const iSign = -Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
-    let maxLane = iSign * TRACK_HALF_WIDTH * maxInner;
-    // LA TRAIETTORIA UMANA BATTE IL LIMITE TEORICO. Questo tetto teneva le AI
-    // larghe in curva in base all'andatura, e annullava qualunque linea interna
-    // arrivasse dalle corse registrate: per quanto stretto passasse Mario Rossi,
-    // loro venivano riportate fuori. Se in questo punto un umano c'è passato
-    // davvero, quella linea è possibile e l'AI può tenerla.
-    const umanaCap = laneDaTraccia(horse);
-    if (umanaCap != null) {
-      maxLane = iSign > 0 ? Math.max(maxLane, umanaCap) : Math.min(maxLane, umanaCap);
-    }
-    if (iSign > 0 ? horse.lane > maxLane : horse.lane < maxLane) {
-      horse.lane += (maxLane - horse.lane) * clamp(dt * 7, 0, 1); // esce in fretta, senza scatto
-      horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
-    }
-  }
+  // ── NIENTE TETTO DI CURVA PER LE AI ───────────────────────────────────────
+  // Qui c'era un tetto duro: piu' andavano forte, piu' erano OBBLIGATE larghe in
+  // curva, secondo la stessa tabella di sterzata che al giocatore e' stata tolta.
+  // Ad andatura piena il tetto era corsia -0.58 — cioe' appena fuori dal centro
+  // pista, con il colonnino a 10.9: undici unita' lontane dalla corda. Per questo
+  // non si vedevano MAI passare interne a San Martino e al Casato, per quanto
+  // stretta fosse la linea che copiavano: la deroga sulla traiettoria umana le
+  // lasciava arrivare al massimo dov'era passato lui, mai dentro, e nei punti in
+  // cui la traccia manca tornava il tetto pieno e venivano buttate fuori.
+  // Tolto: come per il giocatore, la forma della pista non decide la corsia. I
+  // limiti veri restano lo steccato esterno e il colonnino, piu' gli altri
+  // cavalli. Chi entra troppo forte va largo perche' non riesce a girare, non
+  // perche' una tabella glielo impone.
   horse.laneVelocity = clamp((horse.lane - previousLane) / Math.max(dt, 0.001), -PLAYER_LANE_VELOCITY_LIMIT, PLAYER_LANE_VELOCITY_LIMIT);
   // Urto sullo steccato/materassi anche per le AI: schiacciata al limite di corsia
   // e arrivata forte di lato (di solito per una spinta/tamponamento) → rischio
@@ -13762,6 +13757,13 @@ const TRACCIA_PESO = 0.88;
 // infilarsi in un varco, chiudere la porta a chi arriva — restando comunque
 // legata alla linea che l'umano teneva in quel punto.
 const TRACCIA_SCOSTO = 3.8;
+// ── COME LE AI PRENDONO LE CURVE (frazioni della semi-larghezza, 11.5) ──────
+// Numeri in chiaro, da girare se la linea non convince: sono le tre cose che
+// decidono quanto passano interne a San Martino e al Casato.
+const APICE_INTERNO = 0.80;   // apice ad andatura 1 → corsia 9.2 (colonnino 10.9)
+const APICE_CALO    = 0.045;  // quanto si allarga l'apice per ogni tacca di andatura
+const USCITA_LARGA  = -0.55;  // uscita di curva → corsia -6.3 (era -10.9, sui materassi)
+const INGRESSO_LARGO = 1.6;   // unita' verso l'esterno in avvicinamento (era 3.1)
 
 function tracciaSlot(progress) {
   const L = track.length || 1;
