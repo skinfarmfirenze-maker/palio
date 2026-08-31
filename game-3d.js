@@ -777,6 +777,18 @@ function precomputeTrack() {
     const signedCurve = angleDiff(next.yaw, prev.yaw);
     track.samples[i].curve = clamp(Math.abs(signedCurve) * 1.4, 0, 1);
     track.samples[i].signedCurve = signedCurve;
+    // ── QUANTO E' LUNGA DAVVERO LA CORSIA QUI ────────────────────────────────
+    // Il `progress` corre sulla linea di mezzo della pista, ma un cavallo sta a
+    // lato: in curva la corsia interna e' un arco piu' corto, quella esterna piu'
+    // lungo. Misuro il rapporto direttamente sulla geometria, spostandomi di UNA
+    // unita' verso l'interno: il rapporto e' lineare nella corsia, quindi da
+    // questo solo numero si ricava per qualunque corsia (fattore = 1 + coef*lane).
+    {
+      const a = track.samples[i], b = track.samples[(i + 1) % track.samples.length];
+      const qa = a.point.clone().add(a.normal), qb = b.point.clone().add(b.normal);
+      const base = a.point.distanceTo(b.point);
+      track.samples[i].laneCoef = base > 1e-6 ? (qa.distanceTo(qb) / base - 1) : 0;
+    }
   }
 }
 
@@ -798,8 +810,27 @@ function sampleAt(distance) {
     normal,
     yaw: Math.atan2(tangent.x, tangent.z),
     curve: lerp(a.curve, b.curve, t),
-    signedCurve: lerp(a.signedCurve, b.signedCurve, t)
+    signedCurve: lerp(a.signedCurve, b.signedCurve, t),
+    laneCoef: lerp(a.laneCoef || 0, b.laneCoef || 0, t)
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// UN METRO E' UN METRO, ANCHE IN CURVA
+// Il gioco tiene la posizione come "quanta pista hai fatto" (progress) piu' "quanto
+// sei spostato di lato" (lane), e disegna il cavallo sulla linea di mezzo spostato
+// di lato. Ma in curva la corsia interna e' un arco piu' corto: avanzando di un
+// tratto di progress, chi sta attaccato ai colonnini si sposta MOLTO meno di chi
+// sta al largo. Al Casato, con la corda, il cavallo si muoveva davvero al 16% —
+// si piantava. Questo era il risucchio: non un freno nascosto, la geometria.
+// Qui converto la strada che il cavallo percorre DAVVERO nel progress che le
+// corrisponde nella sua corsia. Cosi' la velocita' e' quella che hai scelto, in
+// qualunque punto della pista tu sia. Il vantaggio della corda resta quello vero
+// del Palio — il giro interno e' piu' corto — e non un regalo del gioco.
+// ══════════════════════════════════════════════════════════════════════════════
+function progressPerStrada(sample, lane) {
+  const f = 1 + (sample.laneCoef || 0) * (lane || 0);
+  return 1 / clamp(f, 0.16, 2.0);   // 0.16 = il minimo geometrico vero (Casato, corda)
 }
 
 function campoOutward(point) {
@@ -12033,7 +12064,9 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
+  // La strada percorsa diventa progress secondo la corsia in cui ti trovi: cosi'
+  // il cavallo si muove alla velocita' che hai scelto anche attaccato ai colonnini.
+  player.progress += travel * alongTrack * progressPerStrada(sample, player.lane) * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -12451,10 +12484,14 @@ function updateAiHorse(horse, dt, time) {
     riskFall(horse, fallImpactFromLaneVel(horse.laneVelocity), "steccato");
   }
 
-  const curvePenalty = clamp(1 - sample.curve * Math.max(0, horse.speedLevel - 6) * 0.036, 0.7, 1);
+  // Nessun freno di curva nemmeno per le AI: il giocatore non ce l'ha piu', e
+  // lasciarlo a loro le avrebbe rese piu' lente di lui in ogni curva. Un metro e'
+  // un metro per tutti; chi entra male in curva va largo, e la strada piu' lunga
+  // e' gia' la sua penalita'.
+  const curvePenalty = 1;
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
