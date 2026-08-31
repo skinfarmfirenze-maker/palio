@@ -11997,10 +11997,14 @@ function updatePlayer(dt, time) {
     riskFall(player, fallImpactFromLaneVel(player.laneVelocity), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
     registraPuntoTraccia(player);   // la linea che tiene finisce nella traccia di questo palio
-    // Tenere la linea interna contro lo steccato NON deve ingolfare: solo un
-    // accenno di rallentamento e un leggero raddrizzamento del muso, niente
-    // scossone di camera.
-    player.heading += angleDiff(tangentYaw, player.heading) * clamp(dt * 2.5, 0, 1);
+    // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
+    // pista ogni volta che sfioravi lo steccato: è il "colonnino che ti tira verso
+    // di sé". Appena lo toccavi in curva restavi incollato — ogni tentativo di
+    // staccarti veniva annullato nel frame successivo, perché il muso tornava
+    // parallelo al muro. Adesso resti dove ti porta il tuo sterzo: se vuoi
+    // staccarti dal colonnino, giri e ti stacchi.
+    // Resta il solo attrito dello sfregamento, che è giusto: strisciare contro il
+    // muro toglie un filo di velocità.
     player.speedLevel *= 0.995;
     player.travelSpeed *= 0.995;
     if (Math.random() < dt * 4) emitDust(player);
