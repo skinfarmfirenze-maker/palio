@@ -3692,7 +3692,9 @@ function placeHorse(horse, time) {
     (state.mode === "replayWin" && state.replayAtEnd) ||
     (state.mode === "race" && horse.finishTime != null) ||
     // già a 4 unità dall'arrivo il vincitore in testa ALZA IL NERBO in segno di vittoria.
-    (state.mode === "race" && (horse.progress || 0) >= track.length * FINISH_LAPS - 4)
+    // Il braccio si alza un secondo prima di prima (15 unità invece di 4): il
+    // gesto della vittoria si vede arrivare, non scatta sul filo.
+    (state.mode === "race" && (horse.progress || 0) >= track.length * FINISH_LAPS - 15)
   );
   // NERBATA in corso: colpo secco di frusta di lato (verso la vittima). Ha la
   // priorità sull'animazione normale del braccio/nerbo finché nerbataSwing > 0.
@@ -9598,7 +9600,7 @@ function releaseRace() {
   state.replay = { frames: [], acc: 0 };   // nuovo nastro per il replay
   state.raceRunout = 0;                     // niente runout ereditato dalla gara prima
   state.victoryShown = false;               // la vittoria si mostrerà a questo arrivo
-  state.mortarettoFired = false;            // i 3 scoppi ripartono a 3 unità dall'arrivo
+  state.mortarettoFired = false;            // i 3 scoppi ripartono a 14 unità dall'arrivo
   const staleReplayHud = document.getElementById("replayHud");
   if (staleReplayHud) staleReplayHud.remove();  // difensivo: mai HUD replay in una gara nuova
   state.canapiDrop = 0.001;
@@ -12660,7 +12662,10 @@ function updateRace(dt, time) {
   // in testa è a 3 unità dall'arrivo, NON al taglio (arrivavano in ritardo). Parte una
   // volta sola (guardia mortarettoFired); presentVictory poi non lo rispara.
   if (!state.mortarettoFired) {
-    const sogliaScoppio = track.length * FINISH_LAPS - 3;
+    // Un secondo pieno prima: a velocità di gara sono ~11 unità, quindi 14 invece
+    // di 3. Lo scoppio deve arrivare mentre il vincitore sta ancora spingendo, non
+    // quando ha già tagliato.
+    const sogliaScoppio = track.length * FINISH_LAPS - 14;
     if (state.horses.some((h) => !h.isRincorsa && (h.progress || 0) >= sogliaScoppio)) {
       state.mortarettoFired = true;
       try { playPalioSound("fine.m4a", { volume: 0.7, cap: 0.7 }); } catch (e) { /* niente */ }
