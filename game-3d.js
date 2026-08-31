@@ -13801,7 +13801,7 @@ const AI_TAGLIANO_CURVA = 4;       // quante Contrade la sanno prendere cosi'
 const CURVA_INGRESSO = -0.62;      // in entrata: corsia -7.1, quasi allo steccato di fuori
 const CURVA_APICE = 0.95;          // all'apice: corsia 10.9, a sfiorare il colonnino
 const CURVA_USCITA_CASATO = 0.66;  // dal Casato si esce STRETTI: corsia 7.6
-const CURVA_USCITA_SM = 0.18;      // da San Martino ci si allarga di piu': corsia 2.1
+const CURVA_USCITA_SM = 0.45;      // da San Martino si esce stretti, ma meno che dal Casato: corsia 5.2
 const INGRESSO_LARGO_TAGLIO = 3.4; // e ci si allarga di piu' in avvicinamento
 
 function tracciaSlot(progress) {
