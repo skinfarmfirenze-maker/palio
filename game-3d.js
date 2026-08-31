@@ -19,19 +19,27 @@ const FANTINO_CONTRADE_BY_ID = {};
 CONTRADE_FANTINI.forEach((c) => { FANTINO_CONTRADE_BY_ID[c.id] = c; });
 
 const FINISH_LAPS = 3;
-// DOPO L'ARRIVO: i cavalli non si inchiodano sulla linea né sfrecciano via. Vanno
-// avanti ancora un po' scalando l'andatura e si fermano 15 unità oltre — come in
-// Piazza, dove il gruppo si spegne dopo il traguardo.
-const ARRIVO_EXTRA = 15;
-// Fattore di velocità dopo il traguardo: 1 sulla linea, 0 a quindici unità.
-// La curva è morbida (non lineare) così la frenata non ha spigoli.
+// DOPO L'ARRIVO: nessuno si inchioda sulla linea. Si tira dritto per un bel
+// tratto e poi si scala, fermandosi fra le 15 e le 60 unità oltre il traguardo —
+// ognuno con la sua distanza, come in Piazza dove chi si ferma prima e chi
+// prosegue quasi fino ai canapi. E si resta AL GALOPPO fino all'ultimo: il
+// cavallo rallenta, non si blocca sul posto.
+const ARRIVO_MIN = 15;
+const ARRIVO_MAX = 60;
+// Quanto prosegue QUESTO cavallo: deciso una volta sola al traguardo, non a ogni
+// frame (se no la distanza cambierebbe di continuo e la frenata singhiozzerebbe).
+function corsaOltreArrivo(horse) {
+  if (horse.arrivoExtra == null) {
+    horse.arrivoExtra = ARRIVO_MIN + Math.random() * (ARRIVO_MAX - ARRIVO_MIN);
+  }
+  return horse.arrivoExtra;
+}
+// Fattore di velocità dopo il traguardo: pieno sulla linea, zero alla sua
+// distanza. La radice tiene l'andatura a lungo e scala solo verso la fine.
 function frenataArrivo(horse) {
   if (!horse || !horse.finishTime) return 1;
   const oltre = horse.progress - track.length * FINISH_LAPS;
-  const q = clamp(1 - oltre / ARRIVO_EXTRA, 0, 1);
-  // Radice, non quadrato: tiene l'andatura per un buon tratto oltre la linea e
-  // scala solo alla fine, arrivando a fermarsi ESATTAMENTE a quindici unità in
-  // 2,6 secondi. Col quadrato frenavano subito e si spegnevano a undici.
+  const q = clamp(1 - oltre / corsaOltreArrivo(horse), 0, 1);
   return Math.sqrt(q);
 }
 const TRACK_HALF_WIDTH = 11.5;
@@ -3565,7 +3573,15 @@ function createHorse(contrada, index, isPlayer) {
 }
 
 function getHorseAnimationState(horse) {
-  if (horse.finishTime) return "afterRaceIdle";
+  // Tagliato il traguardo il cavallo NON si spegne di colpo: finché si muove
+  // ancora resta al GALOPPO, e solo quando è quasi fermo passa al passo e poi
+  // all'idle. Prima bastava toccare la linea per far scattare l'animazione da
+  // fermo, e il cavallo scivolava avanti con le gambe immobili.
+  if (horse.finishTime) {
+    if (horse.speedLevel > 3.4) return "gallop";
+    if (horse.speedLevel > 1.2) return "walk";
+    return "afterRaceIdle";
+  }
   if (horse.sliding || horse.collisionFlash > 0.55) return "stumbleRecovery";
   if (horse.braking || horse.staminaLimited) return "slowDown";
   if (horse.boosting && horse.speedLevel >= 6.8) return "startBurst";
@@ -11865,7 +11881,10 @@ function updatePlayer(dt, time) {
       if (player.heading !== undefined) {
         player.heading += angleDiff(sArr.yaw, player.heading) * clamp(dt * 2.2, 0, 1);
       }
-      player.speedLevel = (player.speedLevel || 0) * (1 - clamp(dt * 1.4, 0, 1));
+      // AL GALOPPO fino alla fine: l'andatura scende con la velocità vera, ma non
+      // va sotto il piccolo galoppo finché il cavallo si muove ancora. Prima le
+      // gambe si spegnevano e il cavallo scivolava avanti da fermo.
+      player.speedLevel = Math.max(f > 0.02 ? 3.2 : 0, (player.travelSpeed || 0) * f * 0.9);
       placeHorse(player, time);
     }
     return;
@@ -12361,6 +12380,12 @@ function updateAiHorse(horse, dt, time) {
   if (!horse.finishTime && horse.progress >= track.length * FINISH_LAPS) {
     horse.finishTime = state.raceClock;
   }
+  // Dopo il traguardo l'andatura segue la velocità VERA: scala insieme a lei e
+  // resta di galoppo finché il cavallo corre ancora.
+  if (horse.finishTime) {
+    const fA = frenataArrivo(horse);
+    horse.speedLevel = Math.max(fA > 0.02 ? 3.6 : 0, (horse.speedLevel || 0) * fA);
+  }
   placeHorse(horse, time);
 }
 
@@ -12627,7 +12652,7 @@ function updateRace(dt, time) {
   // tiene viva la registrazione per il replay e lascia il campo proseguire oltre la
   // linea (nessuno si blocca sul traguardo).
   if (!state.victoryShown && state.horses.some((horse) => horse.finishTime)) {
-    state.raceRunout = 3.0;   // il tempo che serve al campo per scalare e fermarsi (2,6s + margine)
+    state.raceRunout = 5.0;   // chi prosegue fino a 60 unita' ci mette di piu' a scalare
     presentVictory();
   }
 
