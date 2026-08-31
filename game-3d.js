@@ -9576,6 +9576,63 @@ function startMossa(fromTratta = false) {
 function mossaSpeedMod(horse) {
   return (horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1;
 }
+// Prepara TUTTI i cavalli allo scatto: andatura, velocita' di crociera, heading,
+// ritardo di reazione, rampa di accelerazione, corsia di partenza. La usano sia
+// il via buono sia la MOSSA FALSA, che deve partire esattamente come una
+// partenza vera — e solo dopo essere interrotta.
+function preparaPartenza() {
+state.horses.forEach((horse) => {
+    if (isHuman(horse)) {
+      const effectiveAndatura = getPlayerEffectiveSpeed(horse); // 1..5
+      horse.effectiveSpeedLevel = effectiveAndatura;
+      const intensity = effectiveAndatura * 2; // intensità interna (animazione)
+      // Una partenza "lenta" (fermo al via) parte a intensità/velocità ridotte.
+      const slowStart = horse.startQuality === "slow";
+      horse.speedLevel = slowStart ? intensity * 0.4 : intensity;
+      horse.targetSpeedLevel = intensity;
+      const cruise = andaturaToSpeed(effectiveAndatura);
+      horse.travelSpeed = slowStart ? cruise * 0.4 : cruise;
+      // Heading iniziale = direzione della pista + eventuale deviazione del muso.
+      // NIENTE raddrizzamento automatico: se alla mossa eri girato/inclinato,
+      // parti così come sei e sei tu a doverti raddrizzare con lo sterzo.
+      horse.heading = sampleAt(horse.progress).yaw + (horse.mossaTurn || 0) + horse.launchHeadingDev;
+    } else {
+      // Velocità massima al via = obiettivo AI; la rincorsa eredita lo slancio.
+      const baseTarget = horse.isRincorsa
+        ? clamp(horse.rincorsaSpeed || 4, 3, 8)
+        : BASE_SPEED_LEVEL;
+      const qualityFactor = horse.startQuality === "slow" ? 0.35
+        : horse.startQuality === "closed" ? 0.5
+        : horse.startQuality === "dirty" ? 0.72
+        : horse.startQuality === "wide" ? 0.85
+        : 0.92;
+      const startSpeed = clamp(baseTarget * qualityFactor, 1, baseTarget);
+      horse.speedLevel = startSpeed;
+      horse.targetSpeedLevel = Math.max(baseTarget, startSpeed);
+      horse.effectiveSpeedLevel = startSpeed;
+      horse.surgeTimer = 0.4 + Math.random() * 0.6;
+      horse.surgeCooldown = 2.2 + Math.random() * 2.6;
+      horse.surgeTarget = baseTarget;
+      horse.boosting = false;
+      horse.heading = undefined;
+    }
+    // Se il cavallo era inclinato alla mossa PARTE inclinato (per le AI si
+    // raddrizza da solo galoppando, per gradi; il giocatore ha già l'heading).
+    horse.raceTurn = isHuman(horse) ? 0 : (horse.mossaTurn || 0);
+    // Ritardo di reazione individuale: chi è più reattivo scatta prima. La
+    // rincorsa è già lanciata, quindi non subisce ritardo.
+    horse.launchDelay = (1 - horse.reactivity) * LAUNCH_MAX_DELAY + (horse.corruptDelay || 0);   // rivale corrotta = +2,5s
+    horse.launchDelayTimer = horse.isRincorsa ? 0 : horse.launchDelay;
+    horse.launching = horse.launchDelayTimer > 0;
+    // Nessuno "scoppio" alla partenza: l'avanzamento riparte da ZERO e raggiunge
+    // la velocità piena GRADUALMENTE in 4 secondi (launchRamp 0→1 lineare).
+    horse.launchRamp = 0;
+    // Corsia di partenza: ogni cavallo va dritto dalla propria posizione di mossa
+    // per qualche secondo prima di cercare la traiettoria ideale.
+    horse.startLane = horse.lane;
+  });
+}
+
 function releaseRace() {
   { const tl = document.querySelector(".hud-top-left"); if (tl) tl.style.display = ""; const tr = document.querySelector(".hud-top-right"); if (tr) tr.style.display = ""; }   // #C: ripristina i box Posizione e Giro al Via
   // ── PARTENZA FUORI POSIZIONE ────────────────────────────────────────────
@@ -9669,56 +9726,7 @@ function releaseRace() {
     }
   }
 
-  state.horses.forEach((horse) => {
-    if (isHuman(horse)) {
-      const effectiveAndatura = getPlayerEffectiveSpeed(horse); // 1..5
-      horse.effectiveSpeedLevel = effectiveAndatura;
-      const intensity = effectiveAndatura * 2; // intensità interna (animazione)
-      // Una partenza "lenta" (fermo al via) parte a intensità/velocità ridotte.
-      const slowStart = horse.startQuality === "slow";
-      horse.speedLevel = slowStart ? intensity * 0.4 : intensity;
-      horse.targetSpeedLevel = intensity;
-      const cruise = andaturaToSpeed(effectiveAndatura);
-      horse.travelSpeed = slowStart ? cruise * 0.4 : cruise;
-      // Heading iniziale = direzione della pista + eventuale deviazione del muso.
-      // NIENTE raddrizzamento automatico: se alla mossa eri girato/inclinato,
-      // parti così come sei e sei tu a doverti raddrizzare con lo sterzo.
-      horse.heading = sampleAt(horse.progress).yaw + (horse.mossaTurn || 0) + horse.launchHeadingDev;
-    } else {
-      // Velocità massima al via = obiettivo AI; la rincorsa eredita lo slancio.
-      const baseTarget = horse.isRincorsa
-        ? clamp(horse.rincorsaSpeed || 4, 3, 8)
-        : BASE_SPEED_LEVEL;
-      const qualityFactor = horse.startQuality === "slow" ? 0.35
-        : horse.startQuality === "closed" ? 0.5
-        : horse.startQuality === "dirty" ? 0.72
-        : horse.startQuality === "wide" ? 0.85
-        : 0.92;
-      const startSpeed = clamp(baseTarget * qualityFactor, 1, baseTarget);
-      horse.speedLevel = startSpeed;
-      horse.targetSpeedLevel = Math.max(baseTarget, startSpeed);
-      horse.effectiveSpeedLevel = startSpeed;
-      horse.surgeTimer = 0.4 + Math.random() * 0.6;
-      horse.surgeCooldown = 2.2 + Math.random() * 2.6;
-      horse.surgeTarget = baseTarget;
-      horse.boosting = false;
-      horse.heading = undefined;
-    }
-    // Se il cavallo era inclinato alla mossa PARTE inclinato (per le AI si
-    // raddrizza da solo galoppando, per gradi; il giocatore ha già l'heading).
-    horse.raceTurn = isHuman(horse) ? 0 : (horse.mossaTurn || 0);
-    // Ritardo di reazione individuale: chi è più reattivo scatta prima. La
-    // rincorsa è già lanciata, quindi non subisce ritardo.
-    horse.launchDelay = (1 - horse.reactivity) * LAUNCH_MAX_DELAY + (horse.corruptDelay || 0);   // rivale corrotta = +2,5s
-    horse.launchDelayTimer = horse.isRincorsa ? 0 : horse.launchDelay;
-    horse.launching = horse.launchDelayTimer > 0;
-    // Nessuno "scoppio" alla partenza: l'avanzamento riparte da ZERO e raggiunge
-    // la velocità piena GRADUALMENTE in 4 secondi (launchRamp 0→1 lineare).
-    horse.launchRamp = 0;
-    // Corsia di partenza: ogni cavallo va dritto dalla propria posizione di mossa
-    // per qualche secondo prima di cercare la traiettoria ideale.
-    horse.startLane = horse.lane;
-  });
+  preparaPartenza();
 
   // NB: il freno/spinta di velocità in base alle vittorie è stato RIMOSSO (su
   // richiesta). L'unico svantaggio della più vittoriosa è la brenna garantita
@@ -9954,45 +9962,29 @@ function triggerMossaFalsa(motivo) {
   // mortaretto lo smentisce). La busta del tondino sfuma, tornerà al richiamo.
   try { fadeBusta(0.6); } catch (e) { /* niente */ }
   try { playStartMossa(); } catch (e) { /* niente */ }
-  // I cavalli SCATTANO in avanti come a una partenza vera (galoppo breve).
-  // Si parte da FERMI e si accelera (updateFalseStartRunout): prima si partiva
-  // gia' a velocita' piena, e si vedeva che era una finta.
-  state.horses.forEach((h) => {
-    h.falseStartSpeed = 0;
-    h.falseStartTarget = 8.5 + Math.random() * 4;
-    h.canapeStop = false;
-  });
+  // PARTENZA IDENTICA A QUELLA VERA: stessa preparazione del via buono — andatura,
+  // velocita' di crociera, heading dal muso che avevi ai canapi, ritardo di
+  // reazione individuale, rampa di accelerazione. Poi in updateFalseStartRunout
+  // girano le stesse funzioni della corsa. L'unica cosa finta e' che dopo quattro
+  // secondi il mortaretto la annulla.
+  preparaPartenza();
+  state.horses.forEach((h) => { h.canapeStop = false; });
 }
 
 // Avanzamento del FALSO AVVIO (4s): galoppo → 2s mortaretto → 4s ritorno al tondino.
 function updateFalseStartRunout(dt, time) {
   state.falseStartTimer += dt;
   state.canapiDrop += dt;                                 // il canapo frontale resta giù
-  const player = getPlayer();
-  const controls = getControls();
-  state.horses.forEach((h) => {
-    // SI RADDRIZZANO. Ai canapi ogni cavallo e' girato per conto suo (mossaTurn):
-    // se non lo si azzera, alla mossa falsa partono di traverso — era il difetto
-    // segnalato, sembravano lanciati storti invece che scattati verso la curva.
-    h.mossaTurn = lerp(h.mossaTurn || 0, 0, clamp(dt * 7, 0, 1));
-    // PARTENZA VERA, non una velocita' piatta: si scatta da fermi e si prende
-    // velocita' in circa mezzo secondo, ognuno con la propria foga.
-    if (h.falseStartTarget == null) h.falseStartTarget = 8.5 + Math.random() * 4;
-    h.falseStartSpeed = Math.min(h.falseStartTarget, (h.falseStartSpeed || 0) + dt * 26);
-    h.progress += h.falseStartSpeed * dt;
-    h.mossaProgress = h.progress;
-    // E CERCANO LA LORO CORSIA, come farebbero al via: chi punta il muro interno,
-    // chi si allarga. Il giocatore la sua la sceglie con le sue mani.
-    if (h === player && !h.autopilot) {
-      const steer = (controls.right ? 1 : 0) - (controls.left ? 1 : 0);
-      if (steer) h.targetLane = h.targetLane + steer * dt * 6;
-    }
-    const lim = outerLimitAt(h.progress);
-    h.targetLane = clamp(h.targetLane ?? h.lane, -lim, AI_LANE_LIMIT);
-    h.lane = clamp(lerp(h.lane, h.targetLane, clamp(dt * 2.4, 0, 1)), -lim, AI_LANE_LIMIT);
-    h.speedLevel = 8;                                     // gambe in galoppo
-    placeHorse(h, time);
-  });
+  // ── SI CORRE DAVVERO ──────────────────────────────────────────────────────
+  // Nessuna simulazione a parte: girano le STESSE funzioni della corsa, quindi il
+  // giocatore guida il suo cavallo e le AI si comportano come sempre — sterzate,
+  // corsie, spinte, tutto. L'unica differenza è che dopo quattro secondi si
+  // interrompe e si torna al tondino. Prima qui c'era un movimento finto (avanza
+  // dritto a velocità decisa a tavolino) e si vedeva benissimo che non era una
+  // partenza vera.
+  updatePlayer(dt, time);
+  state.horses.forEach((horse) => updateAiHorse(horse, dt, time));
+  resolveRaceCollisions(dt);
   if (!state.falseStartMortarettoDone && state.falseStartTimer >= 2) {
     state.falseStartMortarettoDone = true;
     playMortaretto(1.4);                                  // COLPO FORTE: si deve sentire sopra tutto
@@ -10014,7 +10006,10 @@ function resetMossaAfterFalsa() {
     h.called = false;
     h.entering = false; h.enterPhase = undefined; h.mossaTurn = 0; h.behaviorState = "idle";
     h.nervBackState = null; h.nervBackTimer = 0;   // si riparte dal tondino: nessuno resta "agitato"
-    h.blockingRincorsa = false; h.falseStartSpeed = 0; h.falseStartTarget = null;
+    h.blockingRincorsa = false;
+    // Si torna ai canapi: si spegne quello che il falso avvio aveva acceso.
+    h.launching = false; h.launchRamp = 0; h.travelSpeed = 0; h.speedLevel = 0;
+    h.heading = undefined; h.raceTurn = 0;
     h.returningToTondino = true;
     // TAGLIO: dopo la mossa FALSA si riparte DIRETTAMENTE dal tondino (snap immediato),
     // non col rientro lento a piedi. dt enorme → il passo copre tutta la distanza in 1 frame.
@@ -10036,7 +10031,7 @@ function resetMossaAfterFalsa() {
     rincorsa.wantsToEnter = false;
     rincorsa.rincorsaSpeed = 0;
     rincorsa.mossaSubState = "runup";
-    rincorsa.falseStartSpeed = 0;
+    rincorsa.travelSpeed = 0; rincorsa.speedLevel = 0;
   }
   state.mossaFalsaCooldown = 3.0;                         // la rincorsa aspetta prima di riprovare
   openAstaRincorsa();                                     // scoperta la rincorsa: si tratta
