@@ -13699,6 +13699,29 @@ function presentVictory() {
 // logica e con uno scarto personale, così non diventano dieci copie identiche.
 // È il modo per farle sembrare guidate invece che calcolate.
 const TRACCE_KEY = "palio.tracce.v1";
+// ══════════════════════════════════════════════════════════════════════════════
+// LA TRAIETTORIA MAESTRA — il giro buono, quello che le Contrade studiano.
+// Quando Mario Rossi VINCE, la linea che ha tenuto in quel Palio diventa il
+// riferimento: da li' in poi TUTTE le AI corrono su quella, non piu' su una
+// pescata a caso fra le ultime trenta. E' il modo in cui in Piazza si impara —
+// si guarda come ha girato chi ha vinto e si prova a rifare quel giro.
+// Ogni nuova vittoria sostituisce la precedente: il riferimento e' sempre
+// l'ultimo giro vincente.
+// ══════════════════════════════════════════════════════════════════════════════
+const TRACCIA_MAESTRA_KEY = "palio.traccia.maestra.v1";
+function caricaTracciaMaestra() {
+  try {
+    const m = JSON.parse(localStorage.getItem(TRACCIA_MAESTRA_KEY));
+    return (m && Array.isArray(m.traccia) && m.traccia.length) ? m : null;
+  } catch (e) { return null; }
+}
+function salvaTracciaMaestra(traccia, fantino, cavallo) {
+  try {
+    localStorage.setItem(TRACCIA_MAESTRA_KEY, JSON.stringify({
+      traccia, fantino: fantino || "", cavallo: cavallo || ""
+    }));
+  } catch (e) { /* niente */ }
+}
 const TRACCE_MAX = 30;              // quante corse si tengono
 const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
 // Quanto l'AI aderisce alla linea umana: 0.88 = ci sta praticamente incollata.
@@ -13743,10 +13766,16 @@ function registraPuntoTraccia(player) {
 function assegnaTracceAlleAI() {
   const tutte = caricaTracce();
   state.tracceDisponibili = tutte;
-  if (!tutte.length) return;
+  const maestra = caricaTracciaMaestra();
+  // IL GIRO DA COPIARE: la linea dell'ultima vittoria di Mario Rossi. Se non c'e'
+  // ancora nessuna vittoria registrata si usa la corsa completata piu' di recente,
+  // che e' comunque la piu' fresca. Solo se non c'e' proprio niente le Contrade
+  // tornano a pescarne una a caso fra le ultime trenta.
+  const riferimento = maestra ? maestra.traccia : (tutte.length ? tutte[tutte.length - 1] : null);
+  if (!tutte.length && !riferimento) return;
   state.horses.forEach((h) => {
     if (h.player && !h.autopilot) return;            // non a chi guida davvero
-    h.traccia = tutte[Math.floor(Math.random() * tutte.length)];
+    h.traccia = riferimento || tutte[Math.floor(Math.random() * tutte.length)];
     // Ognuna tiene la SUA linea, parallela a quella umana. Lo scarto è passato da
     // ±1.6 a ±2.6 perché con dieci cavalli incollati alla stessa traiettoria si
     // ammassavano tutti sulla corda: il giocatore che andava interno li trovava
@@ -13771,7 +13800,17 @@ function finishRace() {
   if (state.tracciaCorsa) {
     const piena = state.tracciaCorsa.filter((v) => v != null).length;
     // Solo se ha davvero corso: una traccia con quattro punti non insegna niente.
-    if (piena >= tracciaSlotTotali() * 0.5) salvaTraccia(state.tracciaCorsa);
+    if (piena >= tracciaSlotTotali() * 0.5) {
+      salvaTraccia(state.tracciaCorsa);
+      // HA VINTO? Allora questo e' IL giro: diventa la traiettoria maestra e da
+      // qui in avanti tutte le Contrade proveranno a rifarlo.
+      const p = getPlayer();
+      const primo = (getRanking() || [])[0];
+      if (p && primo === p && !p.autopilot && isMarioRossi(getAccount())) {
+        salvaTracciaMaestra(state.tracciaCorsa,
+          p.jockey && p.jockey.nick, p.horseName);
+      }
+    }
     state.tracciaCorsa = null;
   }
   state.mode = "finished";
