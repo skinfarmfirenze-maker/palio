@@ -12358,7 +12358,13 @@ function updateAiHorse(horse, dt, time) {
   {
     const umana = laneDaTraccia(horse);
     if (umana != null && state.mode === "race") {
-      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.85));
+      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95));
+      // TETTO DI SCOSTAMENTO. Le decisioni prese qui sopra (sorpasso, marcatura,
+      // parata) restano, ma non possono portare l'AI lontano dalla linea che
+      // l'umano teneva in questo punto: si sposta per passare o per chiudere, poi
+      // rientra. Senza questo tetto, una singola manovra la mandava larga e la
+      // traccia non si vedeva più.
+      horse.targetLane = clamp(horse.targetLane, umana - TRACCIA_SCOSTO, umana + TRACCIA_SCOSTO);
     }
   }
 
@@ -13589,7 +13595,12 @@ function presentVictory() {
 const TRACCE_KEY = "palio.tracce.v1";
 const TRACCE_MAX = 30;              // quante corse si tengono
 const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
-const TRACCIA_PESO = 0.55;          // quanto pesa la linea umana sulla scelta dell'AI
+// Quanto l'AI aderisce alla linea umana: 0.88 = ci sta praticamente incollata.
+const TRACCIA_PESO = 0.88;
+// E di quanto può staccarsene per fare la sua corsa (sorpassi, marcature, parate).
+// Poco più di due unità: si sposta quel tanto che basta a passare o a chiudere,
+// non abbastanza da inventarsi una traiettoria sua.
+const TRACCIA_SCOSTO = 2.2;
 
 function tracciaSlot(progress) {
   const L = track.length || 1;
@@ -13630,7 +13641,7 @@ function assegnaTracceAlleAI() {
     if (h.player && !h.autopilot) return;            // non a chi guida davvero
     h.traccia = tutte[Math.floor(Math.random() * tutte.length)];
     h.tracciaScarto = (Math.random() * 2 - 1) * 1.6; // ognuna tiene la sua linea
-    h.tracciaPeso = TRACCIA_PESO * (0.7 + Math.random() * 0.6);
+    h.tracciaPeso = TRACCIA_PESO * (0.9 + Math.random() * 0.15);   // tutte molto aderenti
   });
 }
 // La corsia suggerita dalla traccia in questo punto, o null se non c'è.
