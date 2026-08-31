@@ -11958,14 +11958,20 @@ function updatePlayer(dt, time) {
   const slidePenalty = player.sliding ? 0.965 : 1;
   const curvePenalty = clamp(1 - curve * Math.max(0, player.speedLevel - PLAYER_CURVE_PENALTY_SPEED) * 0.05, 0.66, 1) * slidePenalty;
 
-  // NIENTE FATTORE DI RAGGIO. C'era un moltiplicatore che, in curva, correggeva
-  // l'avanzamento in base a quanto si stava interni: sulla carta è la fisica
-  // giusta (la corda è più corta), in pratica era la causa del "risucchio" —
-  // qualunque valore gli si desse, o riconosceva meno strada di quella percorsa,
-  // o in curva stretta faceva schizzare chi teneva l'interno. Tolto del tutto:
-  // ora un metro percorso è un metro percorso, ovunque si stia sulla pista.
-  // A far girare i cavalli ci pensano l'AI (che segue le traiettorie registrate)
-  // e il giocatore, che sa di dover sterzare.
+  // ── LA CONVERSIONE (non è un bonus, è un cambio di unità) ────────────────
+  // Il "progresso" si misura lungo l'ASSE della pista, ma il giocatore si muove
+  // nel MONDO. Chi tiene la corda gira su un raggio più stretto dell'asse, quindi
+  // ogni metro che percorre vale PIÙ di un metro di pista: 3,1x a San Martino e
+  // 6,2x al Casato con la corsia a 10,9.
+  // Questo fattore fa quella conversione. Toglierlo (provato) NON elimina il
+  // risucchio: lo porta al massimo, perché al Casato il gioco riconoscerebbe il
+  // 16% del movimento fatto davvero. Il problema non era mai il fattore ma il suo
+  // TETTO, che lo fermava a 1,61x: ora è 6,25x, cioè sopra il massimo che serve,
+  // e il clamp resta solo come rete di sicurezza contro la divisione per zero.
+  const outwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
+  const innerOffset = -outwardLaneSign * player.lane;   // >0 = verso l'interno
+  const kappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
+  const radiusFactor = 1 / clamp(1 - innerOffset * kappaMag, 0.16, 1.5);
 
   // Il cavallo si muove nella direzione dell'heading; il moto viene proiettato
   // sulla pista in avanzamento (progress) e spostamento laterale (lane).
@@ -11977,7 +11983,7 @@ function updatePlayer(dt, time) {
   const alongTrack = fwdX * sample.tangent.x + fwdZ * sample.tangent.z; // cos(dev)
   const acrossTrack = fwdX * sample.normal.x + fwdZ * sample.normal.z;  // sin(dev)
   const prevLane = player.lane;
-  player.progress += travel * alongTrack * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
+  player.progress += travel * alongTrack * radiusFactor * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -12376,8 +12382,14 @@ function updateAiHorse(horse, dt, time) {
 
   const curvePenalty = clamp(1 - sample.curve * Math.max(0, horse.speedLevel - 6) * 0.036, 0.7, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
+  // Stessa conversione del giocatore, stesso tetto: se le AI ne avessero uno
+  // diverso, in curva stretta uno dei due guadagnerebbe per pura contabilità.
+  const aiOutwardLaneSign = Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
+  const aiInnerOffset = -aiOutwardLaneSign * horse.lane;
+  const aiKappaMag = Math.abs(sample.signedCurve) * track.samples.length / (16 * track.length);
+  const aiRadiusFactor = 1 / clamp(1 - aiInnerOffset * aiKappaMag, 0.16, 1.5);
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
-  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * aiRadiusFactor * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
