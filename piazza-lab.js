@@ -960,6 +960,28 @@ export function costruisciPiazza(ctx, opz = {}) {
       ...cond
     }));
   }
+  // ── SAGRATO dei varchi ─────────────────────────────────────────────────────
+  // Nei varchi delle vie non ci sono palchi a coprire il terreno, e fuori dalla
+  // striscia di tufo il suolo del gioco è il prato ribassato: la gente in piedi
+  // sembrava VOLARE (segnalato da Simone). Qui si stende un selciato a quota
+  // terra dal bordo pista fino alla bocca della via. Categoria allestimento:
+  // PIETRA (c'è sempre, è il pavimento della città).
+  const sagrato = new THREE.Group();
+  sagrato.name = "SagratoVie";
+  const matSagrato = opaco({ color: 0x8b7a63, roughness: 1 });
+  const stendiSagrato = (da, a, prof) => {
+    const st = stazioni(ctxEst, { lato: "esterno", extra: 0.1, passo: 2 });
+    const m = spazza(st, [
+      { d: 0, y: 0.02, v: 0, mat: 0 },
+      { d: prof, y: 0.02, v: 1 }
+    ], [matSagrato], { uScala: 4, soloTra: [{ da, a }] });
+    m.castShadow = false;
+    sagrato.add(m);
+  };
+  if (mossaCum) stendiSagrato(mossaCum.varcoPalchi.da - 0.5, mossaCum.varcoPalchi.a + 0.5, (opz.mossa.viaDalBordo ?? 6.2) + 1.8);
+  vie.forEach((v) => stendiSagrato(v.varco.da - 0.5, v.varco.a + 0.5, v.dalBordo + 1.8));
+  if (sagrato.children.length) g.add(sagrato);
+
   vie.forEach((v) => {
     g.add(costruisciFotografi(ctxEst, { da: v.varco.da + 0.4, a: v.varco.a - 0.4 }));
     if (v.impalcatura) {
