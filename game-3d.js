@@ -13600,9 +13600,10 @@ const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
 // Quanto l'AI aderisce alla linea umana: 0.88 = ci sta praticamente incollata.
 const TRACCIA_PESO = 0.88;
 // E di quanto può staccarsene per fare la sua corsa (sorpassi, marcature, parate).
-// Poco più di due unità: si sposta quel tanto che basta a passare o a chiudere,
-// non abbastanza da inventarsi una traiettoria sua.
-const TRACCIA_SCOSTO = 2.2;
+// 3,8 unità: quasi quattro corpi di cavallo, spazio vero per una manovra —
+// infilarsi in un varco, chiudere la porta a chi arriva — restando comunque
+// legata alla linea che l'umano teneva in quel punto.
+const TRACCIA_SCOSTO = 3.8;
 
 function tracciaSlot(progress) {
   const L = track.length || 1;
