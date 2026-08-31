@@ -20,7 +20,7 @@ import {
   mossaFlareAt, trackNarrowAt, trackHeightAt, createRibbonMesh, makeTufoTexture,
   createShapeMesh, TRACK_HALF_WIDTH
 } from "./pista-ring.js";
-import { costruisciPiazza, costruisciPalizzata, PALCHI_FONDO, MIS } from "./piazza-lab.js";
+import { costruisciPiazza, costruisciPalizzata, costruisciFollaCentro, costruisciMaterassi, PALCHI_FONDO, MIS } from "./piazza-lab.js";
 import { costruisciPalazzi } from "./palazzi-lab.js";
 
 const qp = new URLSearchParams(location.search);
@@ -107,9 +107,19 @@ const piazza = costruisciPiazza(ctx, {
   pubblico: qp.get("pubblico") !== "0",
   risoluzione: parseInt(qp.get("res") || "1024", 10),
   mossa: { da: track.length - 28, a: track.length },
-  palazzo: { cum: centroRettilineo() }
+  palazzo: { cum: centroRettilineo() },
+  // Gli accessi delle vie: San Martino (con impalcatura) e la via del lato
+  // dell'ufficio turistico (solo fotografi).
+  vie: [
+    { cum: 153, larghezza: 6, impalcatura: true },
+    { cum: 335, larghezza: 6, impalcatura: false }
+  ]
 });
 scene.add(costruisciPalizzata(ctx, { da: 292.5, a: 323.5 }));
+// Materassi di San Martino: stesso intervallo del gioco (SM_IN−1 .. SM_OUT+17).
+scene.add(costruisciMaterassi(ctx, { da: 155.5, a: 198.5 }));
+// Folla del centro: ?folla=N (0 per spegnerla). Default: piazza dell'assegnazione, piena.
+if (qp.get("folla") !== "0") scene.add(costruisciFollaCentro(ctx, { quanti: parseInt(qp.get("folla") || "6000", 10) }));
 // Facciata segnaposto del Palazzo nel banco: un muro a bordo+3.2 largo 34, per
 // vedere cappella/entrone/palchi delle comparse contro qualcosa.
 if (qp.get("palazzo") !== "0") {
@@ -133,8 +143,11 @@ if (qp.get("facciate") !== "0") {
     risoluzione: parseInt(qp.get("resFacciate") || "512", 10),
     // Il Palazzo Pubblico è un pezzo a sé: la cortina gli lascia il varco.
     varchi: [{ da: 0.565, a: 0.635 }],
-    // Via del Casato sbuca in piazza all'apice della curva.
-    strade: [{ giro: 0.813, larghezza: 6 }]
+    // Via del Casato all'apice della curva; la Costarella subito dopo la mossa.
+    strade: [{ giro: 0.813, larghezza: 6 }, { giro: 5.5 / track.length, larghezza: 7 },
+      { giro: 153 / track.length, larghezza: 6 }, { giro: 335 / track.length, larghezza: 6 }],
+    // L'unico palazzo basso della piazza: alla curva di San Martino.
+    bassi: [{ giro: 169 / track.length }]
   });
   scene.add(palazzi.gruppo);
 }
@@ -186,6 +199,9 @@ function inquadra() {
     const dietro = sampleAt(cum - 11);
     occhio = dietro.point.clone().addScaledVector(campoOutward(dietro.point), 6.5).setY(trackHeightAt(cum - 11) + 3.0);
     mira = punto(7.5, 1.3);
+  } else if (VISTA === "pianta") {    // in pianta, perpendicolare (per confronti col satellite)
+    occhio = punto(0, 62 / ZOOM);
+    mira = punto(0.01, 0);
   } else if (VISTA === "cappella") {  // il fronte del Palazzo dalla pista
     occhio = punto(BORDO - 14 / ZOOM, 2.0 + h * 0 + 3.2);
     mira = punto(BORDO + 2.8, 2.6);

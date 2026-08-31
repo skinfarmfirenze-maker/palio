@@ -1561,3 +1561,69 @@ export function costruisciFollaCentro(ctx, opz = {}) {
   g.add(corpi, teste);
   return g;
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 9. I MATERASSI DI SAN MARTINO
+// ──────────────────────────────────────────────────────────────────────────────
+// Richiesta di Simone: «più alti e più bianchi» — nelle foto vere sono una
+// PARETE di protezione chiara e imbottita, non un cordolo: sezioni verticali
+// cucite, quasi bianche, leggermente reclinate all'indietro, sporche di tufo
+// alla base. Sostituiscono il loop dei box in buildCurvePadding: il gioco
+// chiama costruisciMaterassi(ctx, { da: SM_IN − 1, a: SM_OUT + 17 }).
+export function texturaMaterassi({ risoluzione = 512 } = {}) {
+  const W = risoluzione, H = Math.round(risoluzione * 0.55);
+  const { c, x } = tela(W, H);
+  x.fillStyle = "#f0ede4";
+  x.fillRect(0, 0, W, H);
+  const seg = W / 6;                            // un materasso per segmento
+  for (let px = 0; px < W; px += seg) {
+    // Leggera variazione di bianco fra un materasso e l'altro.
+    x.fillStyle = `rgba(${Math.random() < 0.5 ? "218,212,198" : "255,253,247"},${0.10 + Math.random() * 0.12})`;
+    x.fillRect(px + 1.5, 0, seg - 3, H);
+    x.fillStyle = "rgba(120,110,95,0.5)";       // cucitura verticale
+    x.fillRect(px, 0, 2, H);
+    // Trapuntatura orizzontale appena accennata.
+    for (let y = H * 0.16; y < H * 0.96; y += H * 0.16) {
+      x.fillStyle = "rgba(150,142,126,0.28)";
+      x.fillRect(px + 3, y, seg - 6, 1.4);
+      x.fillStyle = "rgba(255,255,250,0.35)";
+      x.fillRect(px + 3, y + 1.4, seg - 6, 1);
+    }
+    // Bottoni della trapuntatura.
+    x.fillStyle = "rgba(126,116,98,0.4)";
+    for (let y = H * 0.24; y < H * 0.9; y += H * 0.32) {
+      [0.33, 0.66].forEach((t) => { x.beginPath(); x.arc(px + seg * t, y, 2, 0, TAU); x.fill(); });
+    }
+  }
+  // Tufo che risale dalla base: in gara ci sbattono zoccoli e polvere.
+  const g = x.createLinearGradient(0, H, 0, H * 0.62);
+  g.addColorStop(0, "rgba(198,166,108,0.55)");
+  g.addColorStop(1, "rgba(198,166,108,0)");
+  x.fillStyle = g;
+  x.fillRect(0, H * 0.62, W, H * 0.38);
+  rumore(x, W, H, 0.05);
+  return finisci(c, 1, 1);
+}
+
+export function costruisciMaterassi(ctx, opz = {}) {
+  const H = opz.altezza ?? 1.9;                 // era 1.02: «più alti»
+  const SP = opz.spessore ?? 0.45;
+  const g = new THREE.Group();
+  g.name = "MaterassiSanMartino";
+  const imbottito = opaco({ map: opz.texturaMaterassi || texturaMaterassi(), roughness: 0.88 });
+  const retro = opaco({ color: 0xd8d2c2, roughness: 0.92 });
+
+  // Stanno a bordo+0.05 (davanti alla palancata a +0.35); la svasatura della
+  // mossa qui non arriva, la strettoia sì ed è già dentro largoEsterno.
+  const staz = stazioni(ctx, { lato: "esterno", extra: opz.sporgenza ?? 0.05, passo: opz.passo || 2 });
+  const zone = { soloTra: [{ da: opz.da, a: opz.a }], varchi: opz.varchi || null };
+
+  // Parete imbottita: fronte quasi verticale (reclinata di 8 cm), cima e retro.
+  g.add(spazza(staz, [
+    { d: 0, y: 0, v: 0, mat: 0 },
+    { d: 0.08, y: H, v: 1, mat: 1 },
+    { d: SP, y: H, v: 1, mat: 1 },
+    { d: SP, y: 0, v: 0 }
+  ], [imbottito, retro], { uScala: opz.segmento ?? 4.2, ...zone }));
+  return g;
+}
