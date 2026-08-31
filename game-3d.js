@@ -12248,7 +12248,9 @@ function updateAiHorse(horse, dt, time) {
   // che CALA = USCITA (allarga). cornerPhase: +1 entrata … −1 uscita … 0 fuori curva.
   const curveRate = (sample.curve - (horse.cornerCurvePrev ?? sample.curve)) / Math.max(dt, 0.001);
   horse.cornerCurvePrev = sample.curve;
-  horse.cornerPhase = lerp(horse.cornerPhase ?? 0, clamp(curveRate * 1.2, -1, 1), clamp(dt * 6, 0, 1));
+  // Piu' lento di prima (era dt*6): la fase entrata→apice→uscita scivola invece di
+  // scattare, cosi' il bersaglio di corsia non salta da un fotogramma all'altro.
+  horse.cornerPhase = lerp(horse.cornerPhase ?? 0, clamp(curveRate * 1.2, -1, 1), clamp(dt * 3, 0, 1));
   // USCITA LARGA ESTESA: superato l'apice (curva alta che cala), il cavallo "corre
   // largo" verso lo steccato esterno e ci resta ~1.6s anche sul rettilineo che
   // segue, poi rientra sulla linea. È così che l'uscita risulta MOLTO larga.
@@ -12541,7 +12543,7 @@ function updateAiHorse(horse, dt, time) {
   // raggiungere e' piu' interna di dove sono, si insegue con la stessa energia.
   const iSignIn = -Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
   const versoDentro = iSignIn > 0 ? horse.targetLane > horse.lane : horse.targetLane < horse.lane;
-  if (versoDentro) laneFollow = Math.max(laneFollow, 7);
+  if (versoDentro) laneFollow = Math.max(laneFollow, 5.5);
   horse.lane += (horse.targetLane - horse.lane) * clamp(dt * laneFollow, 0, 1);
   horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
   // ── NIENTE TETTO DI CURVA PER LE AI ───────────────────────────────────────
@@ -12557,6 +12559,18 @@ function updateAiHorse(horse, dt, time) {
   // limiti veri restano lo steccato esterno e il colonnino, piu' gli altri
   // cavalli. Chi entra troppo forte va largo perche' non riesce a girare, non
   // perche' una tabella glielo impone.
+  // ── NIENTE SCIVOLATE LATERALI DA TELETRASPORTO ────────────────────────────
+  // Il bersaglio in curva cambia di parecchio fra l'ingresso largo e l'apice
+  // stretto, e senza un tetto il cavallo copriva quello scarto quasi tutto in un
+  // fotogramma: fino a 127 unita' al secondo DI LATO, mentre in avanti va a 16-20.
+  // Si vedeva come uno strappo. Adesso lo spostamento laterale ha la sua velocita'
+  // massima, come ce l'ha quello in avanti: la linea e' la stessa, ma ci si arriva
+  // muovendosi, non saltando.
+  {
+    const passoMax = AI_VELOCITA_LATERALE * dt;
+    horse.lane = clamp(horse.lane, previousLane - passoMax, previousLane + passoMax);
+    horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
+  }
   horse.laneVelocity = clamp((horse.lane - previousLane) / Math.max(dt, 0.001), -PLAYER_LANE_VELOCITY_LIMIT, PLAYER_LANE_VELOCITY_LIMIT);
   // Urto sullo steccato/materassi anche per le AI: schiacciata al limite di corsia
   // e arrivata forte di lato (di solito per una spinta/tamponamento) → rischio
@@ -12570,7 +12584,11 @@ function updateAiHorse(horse, dt, time) {
   // lasciarlo a loro le avrebbe rese piu' lente di lui in ogni curva. Un metro e'
   // un metro per tutti; chi entra male in curva va largo, e la strada piu' lunga
   // e' gia' la sua penalita'.
-  const curvePenalty = 1;
+  // Un filo piu' piano in curva, come si fa davvero: al massimo -8% sull'apice
+  // piu' stretto, e solo per chi corre forte. Non e' il vecchio freno (che
+  // arrivava a -30% e si sentiva come un risucchio): serve a far girare le
+  // Contrade con la curva invece di scaraventarcisi dentro.
+  const curvePenalty = 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
   horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
@@ -13797,8 +13815,12 @@ const INGRESSO_LARGO = 1.6;   // unita' verso l'esterno in avvicinamento (era 3.
 // La traiettoria che tiene Mario Rossi: largo prima, strettissimo all'apice, e
 // dal Casato si esce ancora stretti. Le fanno solo le Contrade col fantino bravo
 // in curva; le altre restano sulla linea rotonda qui sopra.
+const AI_VELOCITA_LATERALE = 12;   // unita'/s di spostamento LATERALE (in avanti si va a 16-20).
+                                   // Sotto i 12 non farebbero in tempo a chiudere la curva: il
+                                   // taglio ingresso→apice e' di ~16 unita' e la curva dura ~1.3s.
+const AI_CURVA_PIANO = 0.08;       // quanto si rallenta in curva stretta ad andatura alta (8%)
 const AI_TAGLIANO_CURVA = 4;       // quante Contrade la sanno prendere cosi'
-const CURVA_INGRESSO = -0.62;      // in entrata: corsia -7.1, quasi allo steccato di fuori
+const CURVA_INGRESSO = -0.45;      // in entrata: corsia -5.2 (l'allargata vera la fa INGRESSO_LARGO_TAGLIO, prima della curva)
 const CURVA_APICE = 0.95;          // all'apice: corsia 10.9, a sfiorare il colonnino
 const CURVA_USCITA_CASATO = 0.66;  // dal Casato si esce STRETTI: corsia 7.6
 const CURVA_USCITA_SM = 0.45;      // da San Martino si esce stretti, ma meno che dal Casato: corsia 5.2
