@@ -12475,7 +12475,17 @@ function updateAiHorse(horse, dt, time) {
   horse.targetLane = clamp(horse.targetLane, -aiOuterLim, AI_LANE_LIMIT);
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
-  const laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
+  let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
+  // ── DENTRO SI VA CON LA STESSA PRONTEZZA CON CUI SI VIENE PORTATI FUORI ────
+  // Qui c'era un'asimmetria che teneva le AI larghe: per riportarle FUORI dalla
+  // linea umana il cap qui sotto usa una stretta rapida (dt*7), mentre per
+  // portarcele DENTRO c'era solo questo inseguimento morbido. In curva non basta:
+  // la linea si stringe all'apice e loro ci arrivano quando l'apice e' gia'
+  // passato, cosi' non andavano mai interne quanto te. Quando la corsia da
+  // raggiungere e' piu' interna di dove sono, si insegue con la stessa energia.
+  const iSignIn = -Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
+  const versoDentro = iSignIn > 0 ? horse.targetLane > horse.lane : horse.targetLane < horse.lane;
+  if (versoDentro) laneFollow = Math.max(laneFollow, 7);
   horse.lane += (horse.targetLane - horse.lane) * clamp(dt * laneFollow, 0, 1);
   horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
   // ── CAP DURO sull'interno in curva, in base alla velocità ──────────────────
