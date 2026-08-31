@@ -7380,12 +7380,12 @@ function nuovoMandato(cmp) {
 const ROSTER_CAVALLI = {
   "Panezio":            { epoca: "storico", tier: "bono",      stamina: 90,  potenza: 4, calma: 5, turns: 5 },
   "Topolone":           { epoca: "storico", tier: "bombolone", stamina: 92,  potenza: 4, calma: 2, turns: 3 },
-  "Volpino":            { epoca: "storico", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
-  "Trattu de Zamaglia": { epoca: "storico", tier: "brenna",    stamina: 71,  potenza: 1, calma: 5, turns: 5, scossoStamina: 16 },
+  "Volpino":            { epoca: "moderno", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
+  "Trattu de Zamaglia": { epoca: "moderno", tier: "brenna",    stamina: 71,  potenza: 1, calma: 5, turns: 5, scossoStamina: 16 },
   "Uberta de Mores":    { epoca: "storico", tier: "brenna",    stamina: 78,  potenza: 2, calma: 2, turns: 2 },
   "Gaudenzia":          { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 3, turns: 4 },
   "Mirabella":          { epoca: "storico", tier: "bono",      stamina: 86,  potenza: 4, calma: 2, turns: 3, scossoStamina: -15 },
-  "Fedora Saura":       { epoca: "storico", tier: "bombolone", stamina: 80,  potenza: 3, calma: 3, turns: 3 },
+  "Fedora Saura":       { epoca: "moderno", tier: "bombolone", stamina: 80,  potenza: 3, calma: 3, turns: 3 },
   "Pytheos":            { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 3, turns: 4, scossoStamina: -15 },
   "Quebel":             { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 4, turns: 4 },
   "Rimini":             { epoca: "storico", tier: "bombolone", stamina: 97,  potenza: 2, calma: 2, turns: 2 },
@@ -7396,27 +7396,27 @@ const ROSTER_CAVALLI = {
   "Comancio":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 3, calma: 5, turns: 5 },
   "Selvaggia":          { epoca: "storico", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
   "Uberto":             { epoca: "storico", tier: "brenna",    stamina: 76,  potenza: 3, calma: 4, turns: 4 },
-  "Vipera":             { epoca: "moderno", tier: "bombolone", stamina: 94,  potenza: 5, calma: 1, turns: 1, scossoStamina: 13 },
+  "Vipera":             { epoca: "storico", tier: "bombolone", stamina: 94,  potenza: 5, calma: 1, turns: 1, scossoStamina: 13 },
   "Oppio":              { epoca: "moderno", tier: "bombolone", stamina: 96,  potenza: 3, calma: 1, turns: 1, scossoStamina: -10 },
-  "Benitos":            { epoca: "storico", tier: "bombolone", stamina: 89,  potenza: 5, calma: 1, turns: 1 },
+  "Benitos":            { epoca: "moderno", tier: "bombolone", stamina: 89,  potenza: 5, calma: 1, turns: 1 },
   "Diodoro":            { epoca: "moderno", tier: "bombolone", stamina: 98,  potenza: 5, calma: 2, turns: 3 },
   "Ungaros":            { epoca: "moderno", tier: "bono",      stamina: 82,  potenza: 2, calma: 2, turns: 2 },
   "Zenis":              { epoca: "moderno", tier: "brenna",    stamina: 79,  potenza: 4, calma: 2, turns: 2 },
   "Figaro":             { epoca: "storico", tier: "brenna",    stamina: 76,  potenza: 2, calma: 2, turns: 3 },
   "Oriolu de Zamaglia": { epoca: "storico", tier: "brenna",    stamina: 70,  potenza: 1, calma: 1, turns: 2 },
   "Re Artù":            { epoca: "storico", tier: "brenna",    stamina: 73,  potenza: 2, calma: 3, turns: 4 },
-  "Zodiach":            { epoca: "moderno", tier: "bombolone", stamina: 90,  potenza: 4, calma: 3, turns: 2 },
+  "Zodiach":            { epoca: "storico", tier: "bombolone", stamina: 90,  potenza: 4, calma: 3, turns: 2 },
   "Remorex":            { epoca: "moderno", tier: "bombolone", stamina: 97,  potenza: 4, calma: 2, turns: 3, scossoStamina: 10 },
   "Urbino":             { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 4, turns: 5 },
   "Zio Frac":           { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 1, calma: 4, turns: 3, scossoStamina: -15 },
   "Preziosa Penelope":  { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 4 },
-  "Galleggiante":       { epoca: "moderno", tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
+  "Galleggiante":       { epoca: "storico", tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
   "Anda e Bola":        { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 3, calma: 5, turns: 5 },
   "Reo Confesso":       { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 2, calma: 3, turns: 4 },
   "Viso d'Angelo":      { epoca: "moderno", tier: "bono",      stamina: 86,  potenza: 1, calma: 4, turns: 5 },
   "Violenta da Clodia": { epoca: "moderno", tier: "bombolone", stamina: 100, potenza: 2, calma: 3, turns: 2, terzoGiroStamina: 2, scossoStamina: -10 },
   "Indianos":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 1, calma: 5, turns: 1 },
-  "Berio":              { epoca: "moderno", tier: "bono",      stamina: 85,  potenza: 5, calma: 4, turns: 4 },
+  "Berio":              { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 5, calma: 4, turns: 4 },
   "Brivido Sardo":      { epoca: "moderno", tier: "brenna",    stamina: 77,  potenza: 5, calma: 5, turns: 5 },
   "Mocambo":            { epoca: "moderno", tier: "brenna",    stamina: 80,  potenza: 5, calma: 5, turns: 2 },
 };
@@ -7457,8 +7457,8 @@ function applicaEpoca(epoca) {
   JOCKEYS.push(...(storica ? JOCKEYS_STORICI : JOCKEYS_MODERNI));
   // I cavalli e i fantini PROPOSTI DAI GIOCATORI e accettati non appartengono a
   // un'epoca: restano in tutt'e due, altrimenti sparirebbero al primo cambio.
-  if (propostiCavalli) applyAcceptedHorses(propostiCavalli);
-  if (propostiFantini) applyAcceptedJockeys(propostiFantini);
+  if (propostiCavalli) applyAcceptedHorses(propostiCavalli, storica);
+  if (propostiFantini) applyAcceptedJockeys(propostiFantini, storica);
 }
 function applicaImpostazioni() {
   const s = leggiImpostazioni();
@@ -14719,15 +14719,36 @@ function statsForAcceptedHorse(tier, name) {
   // shift SENZA segno (>>>): con >> alcuni nomi davano modulo NEGATIVO (calma/turns < 1).
   return { tier, stamina, potenza: 1 + (s % 5), calma: 1 + ((s >>> 4) % 5), turns: 1 + ((s >>> 8) % 5) };
 }
-function applyAcceptedHorses(map) {
+function applyAcceptedHorses(map, storica) {
   if (!map) return;
   propostiCavalli = map;   // da rimettere dopo un cambio d'epoca
   Object.keys(map).forEach((name) => {
     const nm = String(name || "").trim();
     if (!nm) return;
+    // ── IL FILTRO D'EPOCA VALE ANCHE QUI ────────────────────────────────────
+    // Questa funzione veniva chiamata SUBITO DOPO che applicaEpoca aveva ripulito
+    // il roster, e ci rimetteva dentro tutto senza guardare l'epoca: cosi' il
+    // filtro si disfaceva da solo e nel Palio storico rientravano i barberi
+    // moderni. Peggio: un cavallo del roster a cui l'admin ha toccato la classe
+    // finisce in questa stessa lista, quindi rientrava anche lui — ricreato con
+    // statistiche generiche al posto delle sue.
+    const canonico = ROSTER_CAVALLI[nm];
+    if (canonico) {
+      // Barbero vero del roster: qui dentro c'e' solo perche' l'admin ne ha
+      // cambiato la classe. Entra solo se e' della sua epoca; il resto lo fa
+      // gia' applicaEpoca.
+      if ((canonico.epoca === "storico") !== (storica === true)) return;
+      const tier = String(map[name] || "bono").toLowerCase();
+      if (HORSE_ROSTER[nm]) HORSE_ROSTER[nm].tier = tier;
+      return;
+    }
+    // Barbero PROPOSTO da un giocatore: non appartiene a nessuna epoca reale,
+    // quindi corre nel Palio moderno e resta fuori da quello storico, che deve
+    // avere solo i barberi documentati.
+    if (storica === true) return;
     const tier = String(map[name] || "bono").toLowerCase();
     if (!HORSE_ROSTER[nm]) HORSE_ROSTER[nm] = statsForAcceptedHorse(tier, nm);
-    else HORSE_ROSTER[nm].tier = tier;   // se l'admin cambia il tier, aggiornalo
+    else HORSE_ROSTER[nm].tier = tier;
     if (TRATTA_HORSE_NAMES.indexOf(nm) < 0) TRATTA_HORSE_NAMES.push(nm);
   });
 }
@@ -14765,7 +14786,7 @@ function cachedAccepted(key, action, extra, applyFn, pick, always, cb) {
 }
 function fetchAcceptedHorses(cb) {
   cachedAccepted("palio.cache.horses", "acceptedHorses", null,
-    (p) => applyAcceptedHorses(p || {}), (d) => d.horses || {}, null, cb);
+    (p) => applyAcceptedHorses(p || {}, leggiImpostazioni().epoca === "storico"), (d) => d.horses || {}, null, cb);
 }
 // Fantini proposti e accettati → aggiunti a JOCKEYS con stat deterministiche dal nome.
 // Statistiche FISSE per alcuni fantini accettati (impostate a mano). {m,d,t,f,c,ing}.
@@ -14798,18 +14819,30 @@ function statsForAcceptedJockey(name) {
 // · "Bruschelli" È Trecciolino (Gigi/Luigi Bruschelli). Si scartano: resta un solo
 // fantino per persona (si tiene Spago, Virgola, trecciolino).
 const JOCKEY_DUP_SKIP = new Set(["Michel putzu", "Andrea sanna", "Bruschelli"]);
-function applyAcceptedJockeys(map) {
+function applyAcceptedJockeys(map, storica) {
   if (!map) return;
   propostiFantini = map;   // idem
+  // I nick canonici delle due epoche, per non rimettere in lista un fantino che
+  // il filtro ha appena tolto (era il motivo per cui nel Palio storico montavano
+  // Trecciolino, Grandine e compagnia).
+  const canonici = new Set([...JOCKEYS_STORICI, ...JOCKEYS_MODERNI].map((j) => j.nick.toLowerCase()));
   Object.keys(map).forEach((name) => {
     const nm = String(name || "").trim().slice(0, 24);
     if (!nm || JOCKEY_DUP_SKIP.has(nm)) return;
-    if (!JOCKEYS.some((j) => j.nick === nm)) JOCKEYS.push(statsForAcceptedJockey(nm));
+    const key = nm.toLowerCase();
+    // Fantino VERO di una delle due liste: ci pensa applicaEpoca a metterlo se e'
+    // dell'epoca giusta. Qui non si tocca — se no rientra quello sbagliato.
+    if (canonici.has(key)) return;
+    // Fantino PROPOSTO da un giocatore: nessuna epoca, quindi solo nel moderno.
+    if (storica === true) return;
+    // Confronto NORMALIZZATO: era lettera per lettera, e "aceto" scritto minuscolo
+    // passava accanto ad "Aceto" — nella stessa corsa correvano due Andrea Degortes.
+    if (!JOCKEYS.some((j) => (j.nick || "").toLowerCase() === key)) JOCKEYS.push(statsForAcceptedJockey(nm));
   });
 }
 function fetchAcceptedJockeys(cb) {
   cachedAccepted("palio.cache.jockeys", "accepted", { kind: "jockey" },
-    (p) => applyAcceptedJockeys(p || {}), (d) => d.items || {}, null, cb);
+    (p) => applyAcceptedJockeys(p || {}, leggiImpostazioni().epoca === "storico"), (d) => d.items || {}, null, cb);
 }
 // OVERRIDE STAT decisi dall'admin (approva/cambia i voti): li applica a roster/fantini.
 const HORSE_STAT_MAP = { potenza: "potenza", turn: "turns", turns: "turns", stamina: "stamina", calma: "calma" };
