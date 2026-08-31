@@ -9303,7 +9303,12 @@ function startMossa(fromTratta = false) {
   // rincorsa; dopo il 25° secondo di tensione si allineano come sempre.
   state.canapiChaos = Math.random() < (2 / 3);
   if (state.canapiChaos) {
-    const pool = state.horses.filter((h) => !h.isRincorsa && !h.player);
+    // LE PRIME DUE POSTE NON CI STANNO. Quando il gruppo si butta tutto da un
+    // lato, le due Contrade piu' a destra (postIndex 0 e 1, corsie 9.9 e 8.0)
+    // tengono la loro posta invece di seguire il trambusto: sono messe bene e
+    // conviene loro restare li' per provare a partire meglio, anche se poi
+    // spesso la mossa sara' falsa lo stesso.
+    const pool = state.horses.filter((h) => !h.isRincorsa && !h.player && (h.postIndex ?? 9) > 1);
     for (let i = pool.length - 1; i > 0; i -= 1) { const jj = Math.floor(Math.random() * (i + 1)); const tmp = pool[i]; pool[i] = pool[jj]; pool[jj] = tmp; }
     const nAttori = 4 + Math.floor(Math.random() * 2);   // 4 o 5 Contrade
     pool.slice(0, nAttori).forEach((h, idx) => { h.chaosActor = true; h.chaosOffset = (idx * 5.3) % 21; });
@@ -10974,6 +10979,20 @@ function updateMossa(dt, time) {
         }
         horse.canapeStop = false;
         horse.behaviorState = "caos";
+      } else if (tt < 27) {
+        // FINITO IL CASINO. Per cinque secondi chi il Mossiere non ha chiamato
+        // fuori torna alla SUA posta e si rimette dritto: la fila si ricompone da
+        // sola, senza aspettare un richiamo. (La guardia qui sopra garantisce che
+        // siamo fra i chiamati e dentro i canapi: chi e' stato mandato fuori non
+        // passa di qui.) Passati i cinque secondi si lascia il campo ai
+        // comportamenti normali, altrimenti questi cavalli resterebbero incollati
+        // alla posta per tutto il resto della mossa, senza piu' agitarsi ne'
+        // girarsi: sarebbero statue.
+        horse.mossaLane += ((horse.postLane ?? 0) - horse.mossaLane) * clamp(dt * 1.5, 0, 1);
+        horse.mossaTurn += (0 - horse.mossaTurn) * clamp(dt * 2.2, 0, 1);
+        horse.shoveDir = 0;
+        horse.canapeStop = false;
+        horse.behaviorState = "idle";
       }
     }
 
