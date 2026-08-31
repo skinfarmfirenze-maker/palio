@@ -11953,7 +11953,11 @@ function updatePlayer(dt, time) {
   // Sterzo dipende da curva E velocità:
   // Sensibilità di sterzata (tabella condivisa con le AI): rettilineo 0.80; in
   // curva dipende dall'andatura — più si va forte, più si va larghi.
-  const turnMult = steerMultForCurve(curve, player.effectiveSpeedLevel);
+  // Sterzo SEMPRE UGUALE. Prima in curva rispondeva meno — fino a un terzo ad
+  // andatura piena — quindi proprio dove serviva girare il volante si induriva e
+  // il cavallo sembrava trascinato. Adesso la risposta è la stessa ovunque: giri
+  // tu, quanto vuoi, e la pista è solo una forma da seguire.
+  const turnMult = STRAIGHT_STEER;
   const turnRate = PLAYER_STEER_TURN_RATE * turnMult;
   player.heading += steerDir * turnRate * dt;
   // NIENTE CURVA AUTOMATICA. Qui c'era un limite (±60°) misurato SULLA TANGENTE
@@ -11969,7 +11973,13 @@ function updatePlayer(dt, time) {
   player.sliding = Math.abs(headingDev) > 0.42 && player.speedLevel > 5.2;
 
   const slidePenalty = player.sliding ? 0.965 : 1;
-  const curvePenalty = clamp(1 - curve * Math.max(0, player.speedLevel - PLAYER_CURVE_PENALTY_SPEED) * 0.05, 0.66, 1) * slidePenalty;
+  // NIENTE PENALITÀ DI CURVA. Qui la curvatura toglieva fino al 34% di velocità
+  // ad andatura alta: al Casato, che è la curva più stretta, era la fetta più
+  // grossa del "risucchio" ed è l'ultima rimasta. La forma della pista non deve
+  // frenare nessuno: se giri male vai largo e trovi lo steccato, che è la
+  // conseguenza giusta. Resta solo la penalità da SBANDATA (slidePenalty), che
+  // dipende da come sei messo tu, non da dove passa la pista.
+  const curvePenalty = slidePenalty;
 
   // NESSUN EFFETTO DELLA CORSIA SULLA VELOCITÀ. Né rallentamento né spinta: la
   // corsia decide dove passi, non quanto avanzi. Ci abbiamo provato in tutti i
