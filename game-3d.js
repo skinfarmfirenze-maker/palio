@@ -10505,6 +10505,16 @@ function updateMossa(dt, time) {
       const composed = clamp((tt - 5) / 14, 0, 1);
       const breakWave = Math.sin(tt * 0.7 + horse.phase * 0.2) * 0.5 + 0.5;   // 0..1
       const settle = clamp(composed * (0.32 + 0.55 * breakWave), 0, 0.72);
+      // ── RICOMPOSIZIONE DELLA FILA QUANDO LA MOSSA VA PER LE LUNGHE ─────────
+      // Il riallineamento ordinario qui sopra (settle) e' fermo a 0.72 e viene poi
+      // moltiplicato per 0.8: al massimo riporta le Contrade a poco piu' di meta'
+      // strada verso la loro posta. Va bene nei primi secondi — la fila deve
+      // restare viva — ma dopo un minuto e mezzo di mossa le lasciava ancora
+      // schiacciate una sull'altra. Da 35 secondi in poi questo secondo richiamo
+      // sale fino a riportarle DAVVERO alla posta, senza aspettare che il Mossiere
+      // le chiami fuori: e' quello che fa un fantino che aspetta da tanto — si
+      // rimette al suo posto e sta li'.
+      const attesa = clamp(((state.mossaTimer || 0) - 35) / 15, 0, 1);
 
       // ── TENUTA "PESANTE" della posta, con varianza per-cavallo holdWeight ∈
       // [-2,+2]: ogni cavallo cerca di TENERE la sua posta in maniera pesante.
@@ -10722,6 +10732,11 @@ function updateMossa(dt, time) {
         progGoal = lerp(progGoal, MOSSA_FRONT_LIMIT - 1.0, settle);
         if (settle > 0.35) horse.behaviorState = "idle";
       }
+      if (attesa > 0) {
+        laneGoal = lerp(laneGoal, postLane, attesa);
+        progGoal = lerp(progGoal, MOSSA_FRONT_LIMIT - 1.0, attesa);
+        if (attesa > 0.5) horse.behaviorState = "idle";
+      }
 
       // ── VERO CASINO ai canapi (in ~2/3 dei palii): nei primi 25s dalla scoperta
       // della rincorsa TUTTE stringono da un lato (di solito interno), si vanno
@@ -10846,7 +10861,7 @@ function updateMossa(dt, time) {
       // Rincorsa dell'obiettivo RALLENTATA (1.6→0.9 e 2.0→1.1): il cavallo si
       // sposta e si gira con calma. NON toccare invece followRate più sotto:
       // quella è la velocità di RECUPERO della posta dopo una spinta.
-      horse.mossaLane += (clamp(laneGoal, -AI_LANE_LIMIT, AI_LANE_LIMIT) - horse.mossaLane) * clamp(dt * 0.9, 0, 1);
+      horse.mossaLane += (clamp(laneGoal, -AI_LANE_LIMIT, AI_LANE_LIMIT) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
       // (La nerbata non arretra più: la spinta laterale è nel blocco NERBATO comune sotto.)
       horse.mossaProgress = clamp(progGoal, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
       horse.mossaTurn += (turnGoal - horse.mossaTurn) * clamp(dt * 1.1, 0, 1);
