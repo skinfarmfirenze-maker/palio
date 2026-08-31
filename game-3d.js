@@ -13774,7 +13774,18 @@ function laneDaTraccia(horse) {
   if (!t) return null;
   const v = t[tracciaSlot(horse.progress)];
   if (v == null) return null;
-  return v + (horse.tracciaScarto || 0);
+  // ── LO SCOSTAMENTO SI STRINGE SULLE LINEE ESTREME ─────────────────────────
+  // Ogni AI tiene la sua linea parallela alla tua, spostata di un po', se no si
+  // incollano tutte alla stessa e ti imbottigliano. Ma con uno scostamento fisso
+  // c'era un difetto: quando tu passi attaccato al colonnino, dall'altra parte
+  // c'e' tutta la pista libera, quindi chi ha lo scostamento verso l'esterno se
+  // ne va largo di due unita' e mezzo — un quarto di pista — e la tua linea non
+  // si riconosce piu'. Chi lo ha verso l'interno invece viene tagliato dal muro.
+  // Percio' lo scostamento si restringe man mano che la tua linea si avvicina a
+  // un bordo: al centro resta pieno (li' c'e' spazio da entrambi i lati), sulla
+  // corda si riduce a un terzo e le Contrade ti seguono davvero.
+  const estremita = clamp(Math.abs(v) / (AI_LANE_LIMIT || 1), 0, 1);
+  return v + (horse.tracciaScarto || 0) * (1 - 0.6 * estremita);
 }
 
 function finishRace() {
