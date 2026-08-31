@@ -4664,17 +4664,21 @@ function cycleCameraMode() {
     showMessage(nomi[VISTE_CADUTA[state.cadutaVista]] || "", 0.9);
     return;
   }
-  const order = ["follow", "overhead", "top3", "firstperson"];
+  // TUTTE le inquadrature, sempre: la tua sul cavallo per prima, poi le due da
+  // regia (le stesse del replay), poi le altre. Prima laterale e aerea si vedevano
+  // solo cadendo.
+  const order = ["follow", "laterale", "aerea", "top3", "overhead", "firstperson"];
   const idx = order.indexOf(state.cameraMode);
   state.cameraMode = order[(idx + 1) % order.length];
-  const label = state.cameraMode === "follow"
-    ? "Inseguimento"
-    : state.cameraMode === "overhead"
-      ? "Dall'alto"
-      : state.cameraMode === "top3"
-        ? "Sui primi 3 dall'alto"
-        : "Prima persona";
-  showMessage(`Camera: ${label}`, 0.7);
+  const nomi = {
+    follow: "Il tuo cavallo",
+    laterale: "Laterale, di profilo",
+    aerea: "Aerea su San Martino",
+    top3: "Sui primi 3 dall'alto",
+    overhead: "Tutta la Piazza",
+    firstperson: "Prima persona",
+  };
+  showMessage(`Camera: ${nomi[state.cameraMode] || ""}`, 0.9);
 }
 
 // Camera "sui primi 3 dall'alto": insegue RAVVICINATO le prime tre Contrade da
@@ -13616,8 +13620,21 @@ function finishRace() {
     if (piena >= tracciaSlotTotali() * 0.5) salvaTraccia(state.tracciaCorsa);
     state.tracciaCorsa = null;
   }
+  // FINITO IL PALIO la regia della caduta si spegne: se il giocatore era a terra,
+  // la camera restava sulla testa della corsa anche a gara conclusa e la premiazione
+  // si guardava dall'alto. Torna la vista che aveva prima di cadere.
+  ripristinaCameraCaduta();
   state.mode = "finished";
   presentVictory(); // fallback difensivo: no-op se già mostrata
+}
+
+// Spegne la regia delle tre inquadrature e rimette la vista di prima.
+function ripristinaCameraCaduta() {
+  if (!state.cameraAutoCaduta) return;
+  state.cameraMode = state.cameraModePrima || "follow";
+  state.cameraAutoCaduta = false;
+  state.cadutaVista = 0;
+  state.cadutaTimer = 0;
 }
 
 // ── REPLAY DELL'ULTIMO GIRO ──────────────────────────────────────────────────
@@ -13886,15 +13903,18 @@ function cameraSeguiLaCorsaSeCadi(player, dt) {
   }
 }
 
-// Le tre inquadrature sulla testa della corsa, le stesse del replay del vincitore.
-// Torna true se ha preso lei il comando della camera.
-function cameraRegiaCaduta(dt) {
-  if (!state.cameraAutoCaduta) return false;
-  const primo = state.horses
-    .filter((h) => !h.isRincorsa && h.group)
-    .sort((a, b) => (b.progress || 0) - (a.progress || 0))[0];
-  if (!primo) return false;
-  const vista = VISTE_CADUTA[state.cadutaVista || 0];
+// Chi sta davanti a tutti: le inquadrature da regia lo seguono quando il
+// giocatore è a terra.
+function primoInCorsa() {
+  return state.horses.filter((h) => !h.isRincorsa && h.group)
+    .sort((a, b) => (b.progress || 0) - (a.progress || 0))[0] || null;
+}
+
+// LE INQUADRATURE. Sono le stesse del replay del vincitore e valgono su
+// QUALUNQUE soggetto: il tuo cavallo mentre corri, chi è in testa se sei a terra.
+// Torna true se la vista ha preso il comando della camera.
+function applicaVista(vista, primo, dt) {
+  if (!primo || !primo.group) return false;
 
   if (vista === "alto") return computeTop3Camera(dt);   // dall'alto sulle prime tre
 
@@ -13932,6 +13952,13 @@ function cameraRegiaCaduta(dt) {
   return true;
 }
 
+// Regia automatica mentre sei a terra: le tre inquadrature sulla testa della
+// corsa, che si alternano da sole.
+function cameraRegiaCaduta(dt) {
+  if (!state.cameraAutoCaduta) return false;
+  return applicaVista(VISTE_CADUTA[state.cadutaVista || 0], primoInCorsa(), dt);
+}
+
 function updateCamera(dt) {
   const player = getPlayer() || state.demoHorses[0];
   if (!player) return;
@@ -13951,6 +13978,13 @@ function updateCamera(dt) {
     player.group.userData.firstPersonHidden.forEach((part) => {
       part.visible = show;
     });
+  }
+
+  // Laterale e aerea scelte a mano col tasto C: inquadrano TE mentre corri, e chi
+  // è in testa se il tuo cavallo è fuori gioco (a terra o scosso).
+  if (inGameplay && (state.cameraMode === "laterale" || state.cameraMode === "aerea")) {
+    const sogg = (player.caduto || player.scosso) ? primoInCorsa() : player;
+    if (applicaVista(state.cameraMode, sogg, dt)) return;
   }
 
   // Camera sui primi 3 dall'alto (funziona anche in "assisti" e se il giocatore
