@@ -11062,7 +11062,7 @@ function updateMossa(dt, time) {
   // questo caso la mossa è comunque VALIDA (niente mossa falsa).
   if (state.mossaTimer >= MOSSA_MAX_DURATION && !(state.forcedStartWindow > 0) && allNineCalledAndAtCanape()) {
     state.forcedStartWindow = 10;
-    if (state.messageTimer <= 0) showMessage("5 minuti scaduti: la rincorsa parte — mossa valida!", 2.2, "good");
+    // (niente scritta sui 5 minuti scaduti: la rincorsa parte e basta)
   }
   if (state.forcedStartWindow > 0) {
     state.forcedStartWindow -= dt;
@@ -12374,9 +12374,7 @@ function updateAiHorse(horse, dt, time) {
       if (rival) {
         // scivola sulla corsia della rivale per tagliarle la linea (marcatura)
         horse.targetLane = lerp(horse.targetLane, rival.lane, clamp(dt * 1.5 * rk, 0, 0.5));
-        if (rk >= 0.9 && state.messageTimer <= 0 && Math.random() < dt * 0.06) {
-          showMessage(`${horse.name} marca ${rival.name}`, 0.9);
-        }
+        // (niente scritta "marca": la marcatura si vede in pista, non si legge)
       }
     }
   }
