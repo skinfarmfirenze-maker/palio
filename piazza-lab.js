@@ -13,7 +13,7 @@
 //     una fitta serie di stecche verticali). È bassa, chiara, e si vede sempre
 //     sullo sfondo del lastricato.
 //   · LATO ESTERNO (verso i palazzi) → la "palancata" dipinta: pannelli di legno
-//     verde salvia decorati a finti marmi, rosoni quadrilobati e scudi, con
+//     verde fondoPalancata decorati a finti marmi, rosoni quadrilobati e scudi, con
 //     bordure a dentelli e un corrimano di legno scuro sopra. È più alta.
 //   · Dietro la palancata salgono i PALCHI: gradinate di legno bruno addossate
 //     alle facciate, con le scalette diagonali di servizio.
@@ -64,8 +64,8 @@ export const COL = {
   // di Simone: verde -> marrone -> ROSSO-MARRONE (28/08), terra di Siena bruciata:
   // rosso mattone con dentro il bruno, non un bordeaux violaceo. Il nome della chiave
   // e' rimasto quello vecchio per non rompere i riferimenti del modulo.
-  salvia: "#7f3d2d",
-  salviaScuro: "#5a2a1f",   // ombre e venature del rosso-marrone
+  fondoPalancata: "#7f3d2d",
+  fondoScuro: "#5a2a1f",   // ombre e venature del rosso-marrone
   crema: "#e7dfc4",
   avorio: "#f0ead6",
   ocra: "#b9964e",
@@ -296,8 +296,8 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
 
   for (let i = 0; i < pannelli; i += 1) {
     const x0 = i * P;
-    // Fondo verde salvia, sporcato: il legno dipinto non è mai piatto.
-    x.fillStyle = COL.salvia;
+    // Fondo verde fondoPalancata, sporcato: il legno dipinto non è mai piatto.
+    x.fillStyle = COL.fondoPalancata;
     x.fillRect(x0, 0, P, H);
     for (let k = 0; k < 26; k += 1) {
       const g = x.createRadialGradient(
@@ -320,7 +320,7 @@ export function texturaPalancata({ risoluzione = 1024, pannelli = 4, onEmblema =
     dentelli(x, bordo * 0.26, W, bordo * 0.42, P * 0.045, COL.rossoDec, COL.verdeDec);
     dentelli(x, H - bordo * 0.72, W, bordo * 0.42, P * 0.045, COL.verdeDec, COL.rossoDec);
     x.restore();
-    x.strokeStyle = COL.salviaScuro; x.lineWidth = P * 0.008;
+    x.strokeStyle = COL.fondoScuro; x.lineWidth = P * 0.008;
     x.strokeRect(x0 + P * 0.004, bordo, P - P * 0.008, H - bordo * 2.25);
 
     // Montanti chiari ai lati: incorniciano il pannello anche in verticale.
@@ -427,7 +427,7 @@ export function texturaLegno({ risoluzione = 512, tinta = "#6b4430" } = {}) {
 }
 
 // ── Legno VERDE SALVIA-GRIGIO della staccionata interna ──────────────────────
-// (i pilastrini sono di marmo; il legno fra loro è dipinto salvia-grigio,
+// (i pilastrini sono di marmo; il legno fra loro è dipinto fondoPalancata-grigio,
 // come nelle foto — il verde della piazza sta QUI, non sulla palancata).
 export function texturaLegnoChiaro({ risoluzione = 256 } = {}) {
   const W = risoluzione, H = risoluzione;
