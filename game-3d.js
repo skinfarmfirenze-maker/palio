@@ -5403,7 +5403,7 @@ function estrazioneDone() {
     // Esito CAMPAGNA (deciso in nextCampaignPalio): corri / assisti / salta.
     if (cmp.currentMode === "play") { setEstrazioneLine("La tua Contrada è stata estratta! Corri il Palio.", "#7fd98c"); if (go) go.textContent = "Vai alla Tratta →"; }
     else if (cmp.currentMode === "spectate") { setEstrazioneLine(`La tua Contrada non corre, ma corre la rivale ${cmp.rival.name}: fai di TUTTO per non farla vincere!`, "#e8896f"); if (go) go.textContent = "Vai al Palio →"; }
-    else { setEstrazioneLine("Né la tua Contrada né la rivale sono uscite: si va al prossimo Palio.", "#c9bfa8"); if (go) go.textContent = "Prossimo Palio →"; }
+    else { setEstrazioneLine("Né la tua Contrada né la rivale sono uscite: puoi guardarlo lo stesso o saltarlo.", "#c9bfa8"); if (go) go.textContent = "Avanti →"; }
   } else {
     setEstrazioneLine("Le dieci Contrade del Palio sono fatte. Ora la Tratta: i cavalli.", "#7fd98c");
   }
@@ -6171,11 +6171,64 @@ function campaignRoutePalio() {
     state.selectedContrada = cmp.rival;      // il cavallo-focus è la rivale (autopilot): assisti
     campaignSpectateSetup();
   } else {
-    cmp.log.push({ idx: cmp.palioIndex, mode: "skip", winner: null, result: "skip" });
-    cmp.palioIndex += 1;
-    saveCampaignProgress();
-    nextCampaignPalio();
+    // Non corri tu e non corre la rivale: prima il Palio si saltava e basta.
+    // Adesso si sceglie — perche' un Palio si guarda comunque, e intanto si vede
+    // chi monta cosa e chi sta andando forte.
+    chiediSaltaOVedi();
   }
+}
+
+// ── SALTI O GUARDI? ─────────────────────────────────────────────────────────
+// Compare quando in questo Palio non c'e' ne' la tua Contrada ne' la rivale.
+function chiediSaltaOVedi() {
+  const cmp = state.campaign;
+  const anno = Math.floor(cmp.palioIndex / 2) + 1;
+  const mese = cmp.currentType === "agosto" ? "Palio d'Agosto"
+    : cmp.currentType === "straordinario" ? "Palio straordinario" : "Palio di Luglio";
+  campaignOverlay((panel) => {
+    const k = document.createElement("div"); k.className = "cmp-kicker";
+    k.textContent = mese + " — anno " + anno;
+    const t = document.createElement("div"); t.className = "cmp-title";
+    t.textContent = "La tua Contrada non corre";
+    const p = document.createElement("div"); p.className = "cmp-text";
+    p.innerHTML = cmp.rival
+      ? "Nemmeno la <b>" + cmp.rival.name + "</b> e' stata estratta: qualunque cosa succeda, non cambia niente per te. Puoi guardarlo lo stesso."
+      : "Questa volta il campo e' tutto di altri. Puoi guardarlo lo stesso.";
+    const riga = document.createElement("div");
+    riga.style.cssText = "display:flex;gap:12px;justify-content:center;flex-wrap:wrap";
+    const vedi = document.createElement("button");
+    vedi.className = "cmp-btn"; vedi.textContent = "Vedi il Palio";
+    vedi.addEventListener("click", () => { closeCampaignOverlay(); vediPalioDaFuori(); });
+    const salta = document.createElement("button");
+    salta.className = "cmp-btn"; salta.textContent = "Salta";
+    salta.style.background = "#4a4238";
+    salta.addEventListener("click", () => { closeCampaignOverlay(); saltaPalioCampagna(); });
+    riga.append(vedi, salta);
+    panel.append(k, t, p, riga);
+  });
+}
+
+// Salta: com'era prima — si segna nel registro del mandato e si va al prossimo.
+function saltaPalioCampagna() {
+  const cmp = state.campaign;
+  cmp.log.push({ idx: cmp.palioIndex, mode: "skip", winner: null, result: "skip" });
+  cmp.palioIndex += 1;
+  saveCampaignProgress();
+  nextCampaignPalio();
+}
+
+// Guarda da fuori: stessa gara autonoma dell'ASSISTI. Non essendoci ne' la tua
+// Contrada ne' la rivale, la telecamera segue una delle Contrade in campo, presa
+// fra le prime estratte: e' il Palio visto dal palco, senza niente in gioco.
+function vediPalioDaFuori() {
+  const cmp = state.campaign;
+  cmp.guardatoDaFuori = true;   // per il registro: e' stato visto, non saltato
+  // Si passa in modalita' ASSISTI: da qui in poi il Palio e' identico a quello che
+  // si guarda quando corre la rivale — accoppiate, telecamere, registro del
+  // mandato e passaggio al Palio successivo funzionano tutti allo stesso modo.
+  cmp.currentMode = "spectate";
+  state.selectedContrada = (cmp.currentDraw && cmp.currentDraw[0]) || cmp.contrada;
+  campaignSpectateSetup();
 }
 
 // ASSISTI: gara autonoma (tutti AI, cavallo-focus = rivale in autopilot), niente
