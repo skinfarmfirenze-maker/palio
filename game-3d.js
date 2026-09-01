@@ -15356,6 +15356,10 @@ const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
 // (I mesi in JavaScript partono da zero: 8 = settembre.)
 const APERTURA_DA = new Date(2026, 8, 1, 22, 30, 0).getTime();   // 1 settembre 2026, 22:30
 const APERTURA_A  = new Date(2026, 8, 1, 23, 0, 0).getTime();    // 1 settembre 2026, 23:00
+// Alle 23:05 si chiude per davvero: chi e' rimasto dentro si vede ricaricare la
+// pagina e trova il gate, anche se sta correndo. I cinque minuti fra le 23:00 e le
+// 23:05 servono a far finire il Palio a chi lo aveva gia' cominciato.
+const CHIUSURA_FORZATA = new Date(2026, 8, 1, 23, 5, 0).getTime();
 function aperturaInCorso() {
   const ora = Date.now();
   return ora >= APERTURA_DA && ora < APERTURA_A;
@@ -16527,9 +16531,11 @@ function init() {
     try {
       if (!demoBloccaQuesto()) return;
       if (document.getElementById("demoGate")) return;
-      // Chi e' in mezzo a un Palio lo finisce: la chiusura della finestra non gli
-      // ricarica la pagina sotto i piedi. Il controllo torna al giro dopo.
-      if (state.mode === "mossa" || state.mode === "race" || state.mode === "replayWin") return;
+      // Fra le 23:00 e le 23:05 chi e' in mezzo a un Palio lo finisce: non gli si
+      // ricarica la pagina sotto i piedi. Dalle 23:05 in poi si ricarica comunque,
+      // corsa o non corsa: il gioco e' chiuso e restano dentro solo i tre abilitati.
+      const inPartita = state.mode === "mossa" || state.mode === "race" || state.mode === "replayWin";
+      if (inPartita && Date.now() < CHIUSURA_FORZATA) return;
       location.reload();
     } catch (e) { /* niente */ }
   }, 15000);
