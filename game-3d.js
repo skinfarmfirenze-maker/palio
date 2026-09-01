@@ -15728,7 +15728,7 @@ function updateAccountChip() {
 const TIPS_VERSION = "3";   // bumpa per rimostrarli a tutti
 const GAME_TIPS = [
   ["🫁", "Attenzione alla stamina dei cavalli!", "Il fiato del cavallo ti deve bastare 3 giri: non sparare tutto subito."],
-  ["🌀", "Attenzione alle curve!", "Se le prendi a 3-4-5 il cavallo non gira, a meno che non ti allarghi molto."],
+  ["🌀", "Tieni la corda in curva.", "La pista interna è più corta: allargati PRIMA della curva e stringi all'apice, a sfiorare il colonnino. Chi gira largo fa più strada."],
   ["🤝", "Non saltare gli accordi.", "Come pensi di vincere il Palio se salti gli accordi con le altre contrade?"],
   ["⚡", "Comprati la rincorsa!", "Se ti sei comprato la rincorsa puoi partire a 5 come il Tittìa!!!! Tanto ti danno la mossa."],
 ];
