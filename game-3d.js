@@ -15387,7 +15387,12 @@ function accountAbilitato(acc) {
   return !!mail && GIOCATORI_ABILITATI.has(mail);
 }
 function demoBloccaQuesto() {
-  if (isAdminUrl()) return false;                  // admin: sempre libero
+  // ?admin nell'URL non basta piu' a giocare: non chiede nessuna password, quindi
+  // chiunque lo conoscesse entrava anche a gioco chiuso. Ora l'esenzione vale solo
+  // se sei GIA' fra gli abilitati. Il pannello admin resta raggiungibile lo stesso
+  // (le sue operazioni le protegge il server con la password vera); da un
+  // dispositivo dove non sei loggato, prima fai login e poi ci entri.
+  if (isAdminUrl() && accountAbilitato(getAccount())) return false;
   if (Date.now() < DEMO_CLOSE_AT) return false;    // demo non ancora iniziata
   const acc = getAccount();
   if (!acc) return false;                          // non ancora registrato: lascialo entrare a registrarsi
