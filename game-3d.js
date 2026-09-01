@@ -15333,6 +15333,17 @@ const CYCLE_MS = 48 * 3600 * 1000;                               // durata di og
 // Dalle 21:00 del 21 ago 2026 il gioco entra in DEMO: chiuso a tutti tranne gli
 // sviluppatori (Mario Rossi), SENZA timer/countdown.
 const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
+// ── FINESTRA DI APERTURA ────────────────────────────────────────────────────
+// Mezz'ora in cui il gioco e' aperto a TUTTI GLI ISCRITTI, non solo ai tre
+// abilitati. Comincia e finisce da sola, senza che nessuno debba fare niente:
+// alle 23:00 il gioco torna chiuso esattamente com'era prima.
+// (I mesi in JavaScript partono da zero: 8 = settembre.)
+const APERTURA_DA = new Date(2026, 8, 1, 22, 30, 0).getTime();   // 1 settembre 2026, 22:30
+const APERTURA_A  = new Date(2026, 8, 1, 23, 0, 0).getTime();    // 1 settembre 2026, 23:00
+function aperturaInCorso() {
+  const ora = Date.now();
+  return ora >= APERTURA_DA && ora < APERTURA_A;
+}
 const MESI_IT = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 function fmtDataIt(ts) { const d = new Date(ts); return d.getDate() + " " + MESI_IT[d.getMonth()] + " alle " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 // Il pannello ADMIN non è MAI bloccato dalla DEMO (ci si entra con ?admin o #admin).
@@ -15360,6 +15371,7 @@ function demoBloccaQuesto() {
   if (Date.now() < DEMO_CLOSE_AT) return false;    // demo non ancora iniziata
   const acc = getAccount();
   if (!acc) return false;                          // non ancora registrato: lascialo entrare a registrarsi
+  if (aperturaInCorso()) return false;             // finestra aperta: gioca chiunque sia iscritto
   return !accountAbilitato(acc);                   // registrato ma non abilitato → blocco
 }
 function ensurePasswordGate() {
@@ -16404,6 +16416,9 @@ function init() {
     try {
       if (!demoBloccaQuesto()) return;
       if (document.getElementById("demoGate")) return;
+      // Chi e' in mezzo a un Palio lo finisce: la chiusura della finestra non gli
+      // ricarica la pagina sotto i piedi. Il controllo torna al giro dopo.
+      if (state.mode === "mossa" || state.mode === "race" || state.mode === "replayWin") return;
       location.reload();
     } catch (e) { /* niente */ }
   }, 15000);
