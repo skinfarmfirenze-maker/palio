@@ -13857,6 +13857,8 @@ const TRACCIA_PESO = 0.88;
 // infilarsi in un varco, chiudere la porta a chi arriva — restando comunque
 // legata alla linea che l'umano teneva in quel punto.
 const TRACCIA_SCOSTO = 3.8;
+// Le andature con cui si puo' rivedere il Palio (bottoni nell'HUD del replay).
+const REPLAY_VELOCITA = [0.5, 0.8, 1, 1.5];
 // ── COME LE AI PRENDONO LE CURVE (frazioni della semi-larghezza, 11.5) ──────
 // Numeri in chiaro, da girare se la linea non convince: sono le tre cose che
 // decidono quanto passano interne a San Martino e al Casato.
@@ -14008,7 +14010,7 @@ function startWinnerReplay() {
     segments: [
       { from: 0, to: R.frames.length - 1, label: "il Palio, dalla mossa all'arrivo" },
     ],
-    seg: 0, frac: 0, wIdx, speed: 1.0, segTime: 0,
+    seg: 0, frac: 0, wIdx, speed: state.replaySpeed || 1, segTime: 0,
   };
   state.replayPlay.i = state.replayPlay.segments[0].from;
   // Replay VERO: si riparte con TUTTI i fantini in sella; cadono poi al frame
@@ -14051,7 +14053,10 @@ function updateReplayWin(dt) {
     h.lane = lerp(a[k][1], b[k][1], f);
     h.laneVelocity = 0;
     h.heading = undefined;
-    h.speedLevel = clamp((b[k][0] - a[k][0]) / 0.05 / 2.1, 0, 9);  // animazione dal moto reale
+    // L'animazione segue il moto REGISTRATO, ma va scalata per la velocita' di
+    // riproduzione: a 0,5x il cavallo scorre a meta' e con le gambe a ritmo pieno
+    // sembrerebbe pattinare sul tufo; a 1,5x, al contrario, scivolerebbe.
+    h.speedLevel = clamp((b[k][0] - a[k][0]) / 0.05 / 2.1 * (P.speed || 1), 0, 9);
     placeHorse(h, time);
     // SCOSSO nel replay: mostra il fantino cadere nel frame in cui è caduto DAVVERO.
     const rider = h.group && h.group.userData && h.group.userData.jockey;
@@ -14153,7 +14158,43 @@ function buildReplayHud(winner, segLabel) {
   skip.textContent = "Salta il replay";
   skip.style.cssText = "position:absolute;bottom:30px;left:50%;transform:translateX(-50%);pointer-events:auto;font:inherit;cursor:pointer;border-radius:10px;padding:10px 24px;border:1px solid rgba(240,203,53,.5);background:rgba(20,14,8,.72);color:#f3e7cf";
   skip.addEventListener("click", endWinnerReplay);
-  hud.append(label, skip);
+  // ── VELOCITA' DEL REPLAY ──────────────────────────────────────────────────
+  // Quattro andature: al rallentatore per guardarsi una curva o un incrocio,
+  // a velocita' vera per rivedere il Palio com'e' andato, e piu' svelto per
+  // arrivare in fondo senza aspettare. La scelta resta per i replay successivi.
+  const barra = document.createElement("div");
+  barra.style.cssText = "position:absolute;bottom:84px;left:50%;transform:translateX(-50%);"
+    + "pointer-events:auto;display:flex;gap:8px;align-items:center";
+  const eti = document.createElement("span");
+  eti.textContent = "Velocità";
+  eti.style.cssText = "font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.75;margin-right:4px";
+  barra.appendChild(eti);
+  const attuale = state.replaySpeed || 1;
+  REPLAY_VELOCITA.forEach((v) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.vel = String(v);
+    b.textContent = (String(v).replace(".", ",")) + "×";
+    b.style.cssText = "pointer-events:auto;font:inherit;font-size:15px;cursor:pointer;border-radius:9px;"
+      + "padding:7px 14px;border:1px solid rgba(240,203,53,.45);background:rgba(20,14,8,.72);color:#f3e7cf";
+    if (Math.abs(v - attuale) < 0.001) {
+      b.style.background = "rgba(240,203,53,.92)";
+      b.style.color = "#1a1208";
+      b.style.fontWeight = "700";
+    }
+    b.addEventListener("click", () => {
+      state.replaySpeed = v;                                  // resta per i prossimi replay
+      if (state.replayPlay) state.replayPlay.speed = v;
+      [...barra.querySelectorAll("button")].forEach((x) => {
+        const suo = Math.abs(parseFloat(x.dataset.vel) - v) < 0.001;
+        x.style.background = suo ? "rgba(240,203,53,.92)" : "rgba(20,14,8,.72)";
+        x.style.color = suo ? "#1a1208" : "#f3e7cf";
+        x.style.fontWeight = suo ? "700" : "400";
+      });
+    });
+    barra.appendChild(b);
+  });
+  hud.append(label, barra, skip);
   document.body.appendChild(hud);
 }
 
