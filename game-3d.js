@@ -14571,6 +14571,8 @@ function bindEvents() {
   });
   const suggestBtn = document.getElementById("suggestBtn");
   if (suggestBtn) suggestBtn.addEventListener("click", openSuggestOverlay);
+  const propBtn = document.getElementById("proponiCavalloBtn");
+  if (propBtn) propBtn.addEventListener("click", openProponiCavallo);
   ui.backToMenuButton.addEventListener("click", openMenuScreen);
   { const sb = document.getElementById("settingsBtn"); if (sb) sb.addEventListener("click", openSettingsScreen); }
   // "Vai alla Mossa" / "Corri di nuovo": prima si sceglie il Palio (luglio /
@@ -14925,9 +14927,23 @@ function applyAcceptedHorses(map, storica) {
     // quindi corre nel Palio moderno e resta fuori da quello storico, che deve
     // avere solo i barberi documentati.
     if (storica === true) return;
-    const tier = String(map[name] || "bono").toLowerCase();
-    if (!HORSE_ROSTER[nm]) HORSE_ROSTER[nm] = statsForAcceptedHorse(tier, nm);
-    else HORSE_ROSTER[nm].tier = tier;
+    // Il valore puo' essere "bono" (formato vecchio) o "bono:88", dove il numero
+    // e' la stamina scelta da chi ha proposto il cavallo.
+    const grezzo = String(map[name] || "bono").toLowerCase();
+    const pezzi = grezzo.split(":");
+    const tier = pezzi[0] || "bono";
+    const stamProposta = parseInt(pezzi[1], 10);
+    if (!HORSE_ROSTER[nm]) {
+      HORSE_ROSTER[nm] = statsForAcceptedHorse(tier, nm);
+      if (Number.isFinite(stamProposta) && stamProposta > 0) {
+        HORSE_ROSTER[nm].stamina = clamp(stamProposta, 70, 100);
+      }
+    } else {
+      HORSE_ROSTER[nm].tier = tier;
+      if (Number.isFinite(stamProposta) && stamProposta > 0) {
+        HORSE_ROSTER[nm].stamina = clamp(stamProposta, 70, 100);
+      }
+    }
     if (TRATTA_HORSE_NAMES.indexOf(nm) < 0) TRATTA_HORSE_NAMES.push(nm);
   });
 }
@@ -15898,6 +15914,101 @@ function maybeShowFeedbackBroadcast() {
       sub: "Per favore aiutaci a migliorare il gioco per tutta Siena: lasciaci un feedback sincero.",
     }), 1200);
   } catch (e) { /* niente */ }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PROPONI UN BARBERO — dalla home, aperto a tutti gli iscritti.
+// Si sceglie il nome, la fascia (brenna, bono, bombolone) e il fiato. La proposta
+// resta in attesa: entra in gioco solo quando viene accettata dal pannello admin,
+// perche' "dal 2008 in poi" e un fiato sensato non li puo' controllare nessuno
+// in automatico.
+// ══════════════════════════════════════════════════════════════════════════════
+function openProponiCavallo() {
+  if (document.getElementById("propCavalloOverlay")) return;
+  const acc = getAccount();
+  const ov = document.createElement("div");
+  ov.id = "propCavalloOverlay";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;flex-direction:column;align-items:center;"
+    + "justify-content:center;gap:13px;background:rgba(10,7,4,.88);color:#f3e7cf;font-family:inherit;padding:24px;"
+    + "text-align:center;overflow:auto";
+  const campo = "font:inherit;font-size:15px;padding:11px 13px;border-radius:10px;border:1px solid rgba(240,203,53,.45);"
+    + "background:rgba(255,246,225,.1);color:#f3e7cf;width:min(420px,88vw);box-sizing:border-box";
+  ov.innerHTML =
+    '<div style="font-size:clamp(19px,3.2vw,28px);font-weight:800;color:#f0cb35">🐴 Proponici un barbero</div>'
+    + '<div style="opacity:.85;font-size:14px;max-width:520px">Cavalli <b>moderni, dal 2008 in poi</b>. Se viene accettato, correra&#39; il Palio di tutti.</div>'
+    + '<input id="propNome" type="text" maxlength="28" placeholder="Nome del cavallo" style="' + campo + '">'
+    + '<div style="font-size:13px;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:2px">Che cavallo e&#39;</div>'
+    + '<div id="propTier" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"></div>'
+    + '<div style="font-size:13px;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:6px">Fiato</div>'
+    + '<input id="propStam" type="range" min="70" max="100" value="85" style="width:min(420px,88vw);accent-color:#f0cb35">'
+    + '<div id="propStamVal" style="font-size:15px;font-weight:700;color:#f0cb35">85 &nbsp;<span style="font-weight:400;opacity:.7;font-size:13px">— tiene bene i tre giri</span></div>'
+    + '<div style="display:flex;gap:10px;margin-top:6px">'
+    + '<button type="button" id="propInvia" style="font:inherit;font-size:16px;font-weight:800;padding:11px 26px;border-radius:10px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer">Proponi</button>'
+    + '<button type="button" id="propAnnulla" style="font:inherit;font-size:16px;font-weight:700;padding:11px 22px;border-radius:10px;border:1px solid rgba(240,203,53,.4);background:transparent;color:#f3e7cf;cursor:pointer">Annulla</button>'
+    + '</div>'
+    + '<div id="propMsg" style="min-height:18px;font-size:14px;color:#7fd98c"></div>';
+  document.body.appendChild(ov);
+
+  // le tre fasce, con la spiegazione di cosa vogliono dire
+  const FASCE = [
+    { id: "brenna",    et: "Brenna",    spiega: "un cavallo scarso" },
+    { id: "bono",      et: "Bono",      spiega: "un buon cavallo" },
+    { id: "bombolone", et: "Bombolone", spiega: "un cavallone" },
+  ];
+  let tierScelto = "bono";
+  const boxT = ov.querySelector("#propTier");
+  FASCE.forEach((fa) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.tier = fa.id;
+    b.innerHTML = '<b>' + fa.et + '</b><br><span style="font-size:12px;opacity:.75;font-weight:400">' + fa.spiega + '</span>';
+    b.style.cssText = "font:inherit;font-size:15px;cursor:pointer;border-radius:10px;padding:9px 16px;line-height:1.3;"
+      + "border:1px solid rgba(240,203,53,.45);background:rgba(20,14,8,.72);color:#f3e7cf";
+    b.addEventListener("click", () => {
+      tierScelto = fa.id;
+      [...boxT.querySelectorAll("button")].forEach((x) => {
+        const suo = x.dataset.tier === fa.id;
+        x.style.background = suo ? "rgba(240,203,53,.92)" : "rgba(20,14,8,.72)";
+        x.style.color = suo ? "#1a1208" : "#f3e7cf";
+      });
+    });
+    boxT.appendChild(b);
+  });
+  boxT.querySelector('[data-tier="bono"]').click();   // preselezionato
+
+  const stam = ov.querySelector("#propStam");
+  const stamVal = ov.querySelector("#propStamVal");
+  const descriviFiato = (v) => v <= 78 ? "si spegne prima della fine"
+    : v <= 88 ? "tiene bene i tre giri" : "non finisce mai la benzina";
+  stam.addEventListener("input", () => {
+    stamVal.innerHTML = stam.value + ' &nbsp;<span style="font-weight:400;opacity:.7;font-size:13px">— '
+      + descriviFiato(parseInt(stam.value, 10)) + '</span>';
+  });
+
+  const nome = ov.querySelector("#propNome");
+  ["keydown", "keyup", "keypress"].forEach((ev) => nome.addEventListener(ev, (e) => e.stopPropagation()));
+  const msg = ov.querySelector("#propMsg");
+  const chiudi = () => ov.remove();
+  ov.querySelector("#propAnnulla").addEventListener("click", chiudi);
+  ov.querySelector("#propInvia").addEventListener("click", () => {
+    const n = (nome.value || "").trim();
+    if (n.length < 2) { msg.style.color = "#e8896f"; msg.textContent = "Scrivi il nome del cavallo."; return; }
+    msg.style.color = "#f3e7cf"; msg.textContent = "Invio…";
+    fetch(ACCOUNT_API, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "proposeHorse", name: n, tier: tierScelto,
+        stamina: parseInt(stam.value, 10),
+        voter: (acc && acc.email) || "",
+      }),
+    }).then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok || !j.ok) { msg.style.color = "#e8896f"; msg.textContent = "Non è riuscito. Riprova fra poco."; return; }
+        msg.style.color = "#7fd98c";
+        msg.textContent = j.already ? "Questo cavallo era già stato proposto." : "Proposta inviata, grazie!";
+        setTimeout(chiudi, 1600);
+      })
+      .catch(() => { msg.style.color = "#e8896f"; msg.textContent = "Non è riuscito. Riprova fra poco."; });
+  });
 }
 
 function openSuggestOverlay(opts) {

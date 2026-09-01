@@ -466,11 +466,16 @@ async function propose(body, res) {
   const by = String(body.voter || "").trim().slice(0, 80);
   let tier = String(body.tier || "bono").trim().toLowerCase();
   if (!POLL_TIERS.has(tier)) tier = "bono";
+  // STAMINA proposta dal giocatore. Tenuta dentro l'intervallo dei barberi veri
+  // (70-100): fuori di li' non e' un cavallo, e' un mezzo per vincere sempre.
+  let stamina = parseInt(body.stamina, 10);
+  if (!Number.isFinite(stamina)) stamina = 0;
+  else stamina = Math.max(70, Math.min(100, stamina));
   if (!name || name.length < 2) { res.status(400).json({ error: "nome" }); return; }
   const field = name.toLowerCase();
   const [{ result: existing }] = await redisPipeline([["HGET", propHash(kind), field]]);
   if (existing) { res.status(200).json({ ok: true, already: true }); return; }  // già proposto
-  const entry = JSON.stringify({ name, tier, by, created: Date.now(), status: "pending", kind });
+  const entry = JSON.stringify({ name, tier, stamina, by, created: Date.now(), status: "pending", kind });
   await redisPipeline([["HSET", propHash(kind), field, entry]]);
   res.status(200).json({ ok: true });
 }
@@ -520,8 +525,14 @@ async function proposalDecide(body, res) {
   if (decision === "accept") {
     let tier = String(body.tier || p.tier || "bono").toLowerCase();
     if (!POLL_TIERS.has(tier)) tier = "bono";
-    p.status = "accepted"; p.tier = tier;
-    const val = kind === "horse" ? tier : "1";
+    // Se chi propone ha scelto una stamina, la si porta accanto al tier come
+    // "tier:stamina" (es. "bono:88"). Senza, resta il solo tier come prima: il
+    // formato vecchio continua a funzionare.
+    let stam = parseInt(body.stamina != null ? body.stamina : p.stamina, 10);
+    if (!Number.isFinite(stam) || stam <= 0) stam = 0;
+    else stam = Math.max(70, Math.min(100, stam));
+    p.status = "accepted"; p.tier = tier; if (stam) p.stamina = stam;
+    const val = kind === "horse" ? (stam ? tier + ":" + stam : tier) : "1";
     await redisPipeline([
       ["HSET", propHash(kind), field, JSON.stringify(p)],
       ["HSET", accHash(kind), p.name, val],
