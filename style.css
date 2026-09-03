@@ -1082,3 +1082,16 @@ textarea {
   .screen, .screen *, #hvOverlay *, #sfOverlay *, #campaignOverlay * { min-height: 0; }
   .result-summary, .cmp-kicker, .hud-label { font-size: 11px !important; }
 }
+
+/* Firma dell'autore in fondo al pannello della home: piccola e discreta,
+   sotto i comandi, senza rubare spazio al titolo. */
+.firma-autore {
+  margin: 14px 0 0;
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: rgba(243, 231, 207, .52);
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .firma-autore { font-size: 10px; margin-top: 10px; }
+}
