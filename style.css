@@ -157,13 +157,20 @@ body {
   align-items: stretch;
 }
 .contrada-flag {
-  width: 100%;
-  height: 66px;
-  object-fit: cover;
+  /* Le bandiere sono immagini QUADRATE (70x70). Prima il riquadro era largo
+     quanto la card e alto 66: l'immagine veniva ingrandita per riempirlo e
+     tagliata sopra e sotto, cioe' proprio dove sta lo stemma. Ora il riquadro e'
+     quadrato come l'immagine — non si taglia piu' niente — ed e' centrato. */
+  width: 72px;
+  height: 72px;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 4px;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.35);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-  margin-bottom: 2px;
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .contrada-card strong {
@@ -287,9 +294,14 @@ kbd {
   transform: rotate(-3deg);
 }
 .winner-flag {
+  /* Il drappellone e' verticale (58x84) ma la bandiera e' quadrata: con "cover"
+     veniva tagliata ai fianchi. Con "contain" ci sta tutta, centrata. */
   display: block;
   width: 100%;
   height: 100%;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
 }
 .winner-text { display: flex; flex-direction: column; gap: 2px; }
 .winner-kicker {
