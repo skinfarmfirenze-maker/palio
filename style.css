@@ -1083,15 +1083,26 @@ textarea {
   .result-summary, .cmp-kicker, .hud-label { font-size: 11px !important; }
 }
 
-/* Firma dell'autore in fondo al pannello della home: piccola e discreta,
-   sotto i comandi, senza rubare spazio al titolo. */
+/* La home incolonna il pannello e, SOTTO DI ESSO, la firma dell'autore: serve
+   perche' .screen e' un flex centrato, e senza questo involucro la firma
+   finirebbe di fianco al pannello invece che sotto. */
+.menu-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Firma dell'autore: FUORI dal pannello, sul tufo della Piazza. Un filo piu'
+   grande di prima e con un pelo di contrasto in piu', perche' qui sotto non ha
+   il fondo scuro del pannello che l'aiutava a staccare. */
 .firma-autore {
-  margin: 14px 0 0;
-  font-size: 11px;
+  margin: 16px 0 0;
+  font-size: 11.6px;
   letter-spacing: .05em;
-  color: rgba(243, 231, 207, .52);
+  color: rgba(243, 231, 207, .62);
   text-align: center;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .7);
 }
 @media (max-width: 640px) {
-  .firma-autore { font-size: 10px; margin-top: 10px; }
+  .firma-autore { font-size: 10.5px; margin-top: 12px; }
 }
