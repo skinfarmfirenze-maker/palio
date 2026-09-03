@@ -6457,7 +6457,7 @@ function campaignCorruptionScreen() {
         // PRIMA la cifra, POI le finalità (cosa deve fare il fantino corrotto).
         const ctrl = document.createElement("div");
         ctrl.style.cssText = "display:flex;flex-direction:column;gap:4px;flex:0 0 auto;align-items:flex-end;min-width:236px";
-        const openBtn = document.createElement("button"); openBtn.className = "cmp-btn"; openBtn.style.cssText = "margin:0;font-size:13px;padding:6px 14px"; openBtn.textContent = `Corrompi · ${cost}`;
+        const openBtn = document.createElement("button"); openBtn.className = "cmp-btn"; openBtn.style.cssText = "margin:0;font-size:13px;padding:6px 14px"; openBtn.textContent = `Accordo · ${cost}`;
         // "Nerba/Buttati sulla mia rivale" NON compaiono se stai corrompendo proprio il
         // fantino della rivale (non può attaccare sé stesso).
         const isRival = !!(cmp.rival && h.id === cmp.rival.id);
