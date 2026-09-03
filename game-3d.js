@@ -6432,10 +6432,10 @@ function campaignCorruptionScreen() {
     const budget = contradaBudget(cmp.contrada.id);
     const rivalRunning = !!(cmp.rival && others.some((h) => h.id === cmp.rival.id));   // ordini "rivale" solo se corre
     const k = document.createElement("p"); k.className = "cmp-kicker"; k.textContent = `Contrada ${cmp.contrada.name} · Budget ${budget} denari`;
-    const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Corruzione dei fantini";
+    const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Accordi con i fantini";
     /* (le finalità si scelgono ora in una schermata dedicata: vedi openFinalitaScreen) */
     const sub = document.createElement("div"); sub.className = "cmp-text"; sub.style.fontSize = "14px";
-    sub.innerHTML = "Corrompi un fantino avversario: <b>clicca la cifra</b>, poi scegli <b>cosa deve fare</b>. Costo = 80 × fedeltà, +50% per ogni finalità in più. I soldi spariscono dal gioco.";
+    sub.innerHTML = "Prendi un accordo col fantino di un'altra Contrada: <b>clicca la cifra</b>, poi scegli <b>cosa deve fare</b>. Costo = 80 × fedeltà, +50% per ogni finalità in più. I soldi spariscono dal gioco.";
     const list = document.createElement("div"); list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:16px 0;max-height:44vh;overflow:auto";
     others.forEach((h) => {
       const j = h.jockey; if (!j) return;
@@ -6449,7 +6449,7 @@ function campaignCorruptionScreen() {
       info.innerHTML = rigaContrada(h);
       const simpleBtn = (txt, opts) => { const b = document.createElement("button"); b.className = "cmp-btn"; b.style.cssText = "margin:0;font-size:14px;padding:7px 16px;flex:0 0 auto"; b.textContent = txt; b.disabled = true; if (opts && opts.bg) b.style.background = opts.bg; else b.style.opacity = ".5"; return b; };
       let btn;
-      if (mine) btn = simpleBtn("Corrotto ✓", { bg: "#2e6b46" });
+      if (mine) btn = simpleBtn("D'accordo ✓", { bg: "#2e6b46" });
       else if (taken) btn = simpleBtn("Fuori portata");
       else if (h._corRefused) btn = simpleBtn("Ha rifiutato");
       else if (cost > budget) btn = simpleBtn(`${cost} · no fondi`);
@@ -6477,7 +6477,7 @@ function campaignCorruptionScreen() {
             + (sel.indexOf("buttati") >= 0 ? 100 : 0)
             + (sel.indexOf("resta") >= 0 ? corruptionCost(j) * 2 : 0);
           openFinalitaScreen({
-            kicker: "Corruzione",
+            kicker: "Accordi",
             titolo: `${h.name} · ${nickUp(j.nick)}`,
             sub: `fedeltà ${j.fedelta || 3} · base ${cost} denari · +50% per ogni finalità in più`,
             obiettivi,
@@ -7219,7 +7219,7 @@ function campaignAccordiScreen(spectate) {
       cols.appendChild(wrap);
     }
 
-    const go = document.createElement("button"); go.className = "cmp-btn"; go.textContent = "Alla corruzione →";
+    const go = document.createElement("button"); go.className = "cmp-btn"; go.textContent = "Agli accordi con i fantini →";
     go.addEventListener("click", () => { closeCampaignOverlay(); campaignAIAccordi(); campaignCorruptionScreen(); });
     panel.append(k, t, sub, voci, cols, go);
   });
@@ -9558,7 +9558,8 @@ function startMossa(fromTratta = false) {
     // Se un'AI ha corrotto il TUO fantino, lui si vende: durante la MOSSA, a
     // raffiche di 10s, smette di risponderti e va a parare la rivale di chi l'ha
     // pagato (oppure si gira ai canapi). In CORSA il controllo resta sempre tuo.
-    // All'inizio di ogni raffica compare l'avviso "Forse il tuo fantino è corrotto…".
+    // (l'avviso a schermo su un accordo alle tue spalle e' stato togliuto dai canapi:
+  // la cosa si vede dal cavallo che si sfila, non si legge.)
     const boughtBy = cor[playerId];
     const me = byId[playerId];
     if (playing && me && boughtBy && boughtBy !== playerId) {
@@ -15097,7 +15098,7 @@ const CHANGELOG_NOVITA = [
   ["👤", "Il tuo profilo", "Tieni traccia dei tuoi palii corsi e vinti."],
   ["🏆", "Albo delle Vittorie", "Condiviso con tutta Siena, e tutto il mondo!"],
   ["⚖️", "Corsa più equilibrata", "Chi resta troppo indietro viene riavvicinato: più testa a testa fino al bandierino."],
-  ["🤝", "Accordi e corruzioni fra contrade", "In Campagna puoi trattare la mossa, parare la rivale e comprare fantini altrui."],
+  ["🤝", "Gli accordi contano.", "In Campagna puoi trattare la mossa, far parare la rivale e prendere accordi coi fantini delle altre."],
   ["🏇", "Modalità Campagna da Capitano", "Stagione di palii, budget, aste della rincorsa e fantini che non tradiscono subito."],
   ["🗳️", "La vostra voce sui cavalli e fantini", "Sondaggio sui cavalli, proposta di nuovi cavalli e nuovi fantini: decidete voi."],
   ["💬", "Feedback e consigli", "Ci dite come migliorare il gioco e noi lo facciamo."],
