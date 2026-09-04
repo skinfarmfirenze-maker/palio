@@ -8865,7 +8865,7 @@ function ensureSceltaStyle() {
 #sfOverlay h2{margin:6px 0 2px;font-size:clamp(20px,3.4vw,32px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase}
 #sfOverlay .sf-sub{opacity:.85;font-size:14px;margin-bottom:4px}
 #sfCountdown{font-size:26px;font-weight:800;color:#f0cb35;margin-bottom:12px}
-#sfGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;width:min(1050px,96vw)}
+#sfGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:8px;width:min(1100px,96vw)}
 #sfGrid.locked .sf-card{pointer-events:none}
 .sf-card.rifiutato{opacity:.72;border-color:rgba(232,137,111,.65)}
 .sf-card.rifiutato:hover{transform:none}
@@ -8885,6 +8885,7 @@ function ensureSceltaStyle() {
 .sf-stat{display:flex;align-items:center;gap:8px;font-size:12px;margin:3px 0}
 .sf-stat span{flex:0 0 78px;opacity:.85}
 .sf-pips{display:flex;gap:3px}
+.sf-num{display:none;font-weight:700;color:#f0cb35;font-size:11px;letter-spacing:.02em}
 .sf-pip{width:13px;height:8px;border-radius:2px;background:rgba(255,255,255,.16)}
 .sf-pip.on{background:#f0cb35}
 .sf-taken{position:absolute;top:9px;right:10px;font-size:10.5px;font-weight:700;color:#e9dcae;background:rgba(0,0,0,.5);border:1px solid rgba(240,203,53,.35);border-radius:5px;padding:2px 7px;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -8898,12 +8899,12 @@ function ensureSceltaStyle() {
 .sf-cross{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;
   font-size:52px;font-weight:900;color:rgba(220,60,45,.9);text-shadow:0 2px 8px rgba(0,0,0,.6);pointer-events:none}
 #sfOverlay.accoppiate .sf-acc{width:min(560px,94vw);display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.sf-arow{display:flex;align-items:center;gap:10px;background:rgba(18,13,8,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:14px}
+.sf-arow{display:flex;align-items:center;gap:7px;background:rgba(18,13,8,.7);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:8px 12px;font-size:14px}
 .sf-arow.player{border-color:#f0cb35;box-shadow:0 0 0 1px rgba(240,203,53,.4)}
 .sf-sw{display:flex;width:12px;height:17px;border-radius:2px;overflow:hidden;flex:0 0 auto;border:1px solid rgba(0,0,0,.4)}
 .sf-sw span{flex:1}
-.sf-arow .c{flex:0 0 96px;font-weight:700}
-.sf-arow .h{flex:1;opacity:.85}
+.sf-arow .c{flex:0 0 auto;min-width:0;font-weight:700;white-space:nowrap}
+.sf-arow .h{flex:1;opacity:.85;margin-left:4px}
 .sf-arow .j{flex:0 0 auto;color:#f0cb35;font-weight:700}
 #sfGoBtn{margin-top:14px;font:inherit;cursor:pointer;border-radius:10px;padding:12px 30px;border:none;background:#f0cb35;color:#1a1206;font-weight:800}
 #sfConfirmBtn{margin-top:16px;font:inherit;cursor:pointer;border-radius:10px;padding:11px 30px;border:none;background:#f0cb35;color:#1a1206;font-weight:800}
@@ -8912,9 +8913,14 @@ function ensureSceltaStyle() {
 }
 
 function statPips(n) {
+  // Due forme della stessa cosa: i PALLINI (si vedono da computer, dove c'e'
+  // spazio) e il NUMERO scritto "3/5" (si vede da telefono, dove cinque pallini
+  // per cinque statistiche per quattordici fantini diventano illeggibili).
+  // Quale si veda lo decide il CSS: qui ci sono tutti e due, sempre.
   let h = '<div class="sf-pips">';
   for (let i = 1; i <= 5; i += 1) h += '<div class="sf-pip' + (i <= n ? ' on' : '') + '"></div>';
-  return h + '</div>';
+  h += '</div><span class="sf-num">' + n + '/5</span>';
+  return h;
 }
 
 function buildSceltaFantinoUI() {
@@ -8980,13 +8986,13 @@ function buildSceltaFantinoUI() {
   });
 }
 
-// Accoppiate finali: Contrada — Cavallo — Fantino, poi "Vai alla Mossa".
+// Accoppiate finali: Contrada — Cavallo — Fantino, poi "Vai agli accordi".
 function showAccoppiateFinali() {
   const ov = document.getElementById("sfOverlay");
   if (!ov) { startMossa(true); return; }
   ov.classList.add("accoppiate");
   ov.innerHTML = '<h2>Le accoppiate</h2><div class="sf-sub">Contrada · Cavallo (fascia) · Fantino</div><div class="sf-acc"></div>'
-    + '<button type="button" id="sfGoBtn">Vai alla Mossa →</button>';
+    + '<button type="button" id="sfGoBtn">Vai agli accordi →</button>';
   const box = ov.querySelector(".sf-acc");
   state.horses.slice().sort((a, b) => a.name.localeCompare(b.name, "it")).forEach((h) => {
     const j = state.scelta.assigned[h.id];
@@ -9150,7 +9156,7 @@ function buildTrattaHud() {
     '<div id="trattaPanel"><div class="tp-head">Accoppiate</div></div>' +
     '<div class="tt-bottom"><div id="trattaLine"></div><div class="tt-btns">' +
     '<button type="button" id="trattaSkipBtn">Salta il sorteggio</button>' +
-    '<button type="button" id="trattaGoBtn" class="go" style="display:none">Vai al tondino →</button>' +
+    '<button type="button" id="trattaGoBtn" class="go" style="display:none">Vai avanti →</button>' +
     '</div></div>';
   document.body.appendChild(hud);
   document.getElementById("trattaSkipBtn").addEventListener("click", trattaSkip);
