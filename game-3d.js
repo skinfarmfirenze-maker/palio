@@ -7717,7 +7717,8 @@ function ensureVotoCavalliStyle() {
 #hvOverlay h2{margin:6px 0 2px;font-size:clamp(18px,3vw,30px);letter-spacing:.12em;color:#f0cb35;text-transform:uppercase;padding:0 130px}
 #hvOverlay .hv-sub{opacity:.9;font-size:14px;margin-bottom:12px;text-align:center;max-width:640px;padding:0 8px}
 #hvCount{font-weight:800;color:#f0cb35}
-#hvGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;width:min(1050px,97vw)}
+#hvGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:min(1050px,97vw)}
+#hvOverlay .hv-voti{font-size:14px;font-weight:700;margin-bottom:10px;letter-spacing:.04em}
 .hv-card{position:relative;text-align:left;background:rgba(255,246,225,.1);border:1px solid rgba(240,203,53,.4);
   border-radius:12px;padding:10px 12px;cursor:pointer;transition:transform .1s ease,border-color .12s,box-shadow .12s}
 .hv-card:hover{transform:translateY(-2px);border-color:#f0cb35}
@@ -7735,8 +7736,9 @@ function ensureVotoCavalliStyle() {
 .hv-votes::before{content:"🏇";margin-right:3px;font-size:10px}
 .hv-votes.hot{opacity:1;color:#ffd977;background:rgba(240,203,53,.16);border-color:rgba(240,203,53,.5)}
 .hv-votes.bump{transform:scale(1.28)}
-/* Cavalli attualmente nei 10 che correrebbero (per voti): bordo oro. */
-.hv-card.inrun{border-color:#f0cb35;box-shadow:0 0 0 1px rgba(240,203,53,.45)}
+/* Niente bordo oro sui cavalli piu' votati: illuminava di giallo mezza griglia
+   (i bomboloni prendono piu' voti, quindi erano quasi sempre loro) e si
+   confondeva con la scelta vera, che e' il bordo verde dei TUOI voti. */
 .hv-card.voted.inrun{box-shadow:0 0 0 2px rgba(127,217,140,.55)}
 #hvConfirmBtn{margin-top:14px;font:inherit;cursor:pointer;border-radius:10px;padding:12px 32px;border:none;background:#f0cb35;color:#1a1206;font-weight:800}
 #hvConfirmBtn:disabled{opacity:.5;cursor:not-allowed}
@@ -7746,8 +7748,9 @@ function ensureVotoCavalliStyle() {
 @media (max-height:620px), (max-width:1024px){
   #hvOverlay{padding:6px 10px}
   #hvOverlay h2{font-size:15px;margin:0;letter-spacing:.06em;padding:0 118px}
-  #hvOverlay .hv-sub{font-size:11px;margin:2px 0 5px;max-width:none;line-height:1.22;padding:0 118px}
-  #hvGrid{grid-template-columns:repeat(5,1fr);gap:5px;width:min(1200px,99vw)}
+  #hvOverlay .hv-sub{font-size:12px;margin:2px 0 4px;max-width:none;line-height:1.25;padding:0 10px}
+  #hvOverlay .hv-voti{font-size:12px;margin-bottom:6px}
+  #hvGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;width:min(1200px,99vw)}
   .hv-card{padding:5px 8px;border-radius:8px}
   .hv-name{font-size:12px;padding-right:12px}
   .hv-tier{font-size:9px;margin-top:2px;padding:1px 6px}
@@ -7758,7 +7761,7 @@ function ensureVotoCavalliStyle() {
 @media (max-width:560px){
   #hvOverlay h2{padding:0 6px;font-size:15px}
   #hvOverlay .hv-sub{padding:0 6px}
-  #hvGrid{grid-template-columns:repeat(3,1fr)}
+  #hvGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
 }`;
   document.head.appendChild(s);
 }
@@ -7769,10 +7772,9 @@ function buildSceltaCavalliUI() {
   const old = document.getElementById("hvOverlay"); if (old) old.remove();
   const ov = document.createElement("div"); ov.id = "hvOverlay";
   ov.innerHTML = '<h2>La scelta dei cavalli</h2>'
-    + '<div class="hv-sub">I Capitani votano i barberi aspiranti (solo la fascia è nota). '
-    + 'Puoi votarne fino a <b>' + HORSE_VOTE_MAX + '</b>: i <b>' + HORSE_VOTE_RUN + '</b> più votati correranno il Palio '
-    + 'e alla Tratta saranno sorteggiati alle Contrade. Il badge 🏇 mostra <b>in diretta</b> i voti degli altri Capitani. '
-    + '&nbsp;Voti: <span id="hvCount">0/' + HORSE_VOTE_MAX + '</span></div>'
+    + '<div class="hv-sub">I ' + HORSE_VOTE_RUN + ' capitani votano i cavalli che correranno il palio, '
+    + 'tu puoi votarne fino a ' + HORSE_VOTE_MAX + '</div>'
+    + '<div class="hv-voti">Voti <span id="hvCount">0/' + HORSE_VOTE_MAX + '</span></div>'
     + '<div id="hvGrid"></div>'
     + '<button type="button" id="hvConfirmBtn">Conferma i voti →</button>';
   document.body.appendChild(ov);
