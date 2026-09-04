@@ -115,6 +115,7 @@ const HORSE_BLOCK_LENGTH = 3.30;
 // li spingessi. 1.02 = il corpo più un margine minimo.
 const HORSE_BLOCK_WIDTH = 1.02;
 const HORSE_PASS_CLEARANCE = 1.95;
+const SPINTA_CANAPI = 1.10;   // quanto si sposta chi perde la contesa ai canapi (+10%)
 const LEADER_STAMINA_EXTRA_DRAIN = 0.9;
 const CAMPO_RADIUS = 68;
 const CAMPO_BASE_Z = -36;
@@ -11986,7 +11987,11 @@ function resolveMossaCrowd(dt) {
         const frontSpinge = premeFront && Math.sign(premeFront) === Math.sign(back.lane - front.lane);
         const sBack = (back.jkMossa || 3) * (back.jkDifesa || 3) * (back.potenza || 3) * (backSpinge ? 3 : 1);
         const sFront = (front.jkMossa || 3) * (front.jkDifesa || 3) * (front.potenza || 3) * (frontSpinge ? 3 : 1);
-        const tot = 2 * lPush;
+        // Quanto ci si sposta davvero quando due cavalli si contendono la posta.
+      // Alzato del 10%: chi ha la potenza per farsi largo deve vedere l'altro
+      // muoversi per davvero. La divisione resta la stessa — chi e' piu' forte
+      // cede meno — quindi il 10% in piu' se lo prende chi spinge meglio.
+      const tot = 2 * lPush * SPINTA_CANAPI;
         back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), -AI_LANE_LIMIT, AI_LANE_LIMIT);
         front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), -AI_LANE_LIMIT, AI_LANE_LIMIT);
         // Chi viene spinto NON rientra subito alla sua posta: marcalo così il ritorno
