@@ -7926,6 +7926,11 @@ function enforceTierFreni(assign) {
 function beginTratta() {
   ensureAudio();
   if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
+  // SILENZIO ALLA TRATTA. La marcia coi tamburi parte all'estrazione e dura
+  // dodici secondi: se la Tratta comincia subito dopo, resta a suonare sotto le
+  // chiamate dei cavalli e delle Contrade, che sono la cosa da sentire. Qui si
+  // taglia: il sorteggio si annuncia a voce, non in musica.
+  try { stopPalioSounds(); } catch (e) { /* niente */ }
   clearConfetti();
   createEntrants();                       // i 10 cavalli/Contrade in gara (giocatore incluso)
   // In Campagna i 10 cavalli sono quelli VOTATI dai Capitani (scelta-cavalli);
@@ -14282,7 +14287,18 @@ function buildReplayHud(winner, segLabel) {
     });
     barra.appendChild(b);
   });
-  hud.append(label, barra, skip);
+  // ── CAMBIA INQUADRATURA ───────────────────────────────────────────────────
+  // Da computer basta il tasto C, ma durante il replay l'HUD di gara e' nascosto
+  // e con esso il bottone C: da telefono non c'era piu' modo di cambiare vista.
+  // Qui ce n'e' uno accanto alle velocita', che fa la stessa cosa del tasto.
+  const cam = document.createElement("button");
+  cam.type = "button";
+  cam.textContent = "🎥 Inquadratura";
+  cam.style.cssText = "position:absolute;bottom:30px;right:calc(env(safe-area-inset-right,0px) + 18px);"
+    + "pointer-events:auto;font:inherit;font-size:15px;cursor:pointer;border-radius:10px;padding:10px 18px;"
+    + "border:1px solid rgba(240,203,53,.5);background:rgba(20,14,8,.72);color:#f3e7cf";
+  cam.addEventListener("click", cycleCameraMode);
+  hud.append(label, barra, skip, cam);
   document.body.appendChild(hud);
 }
 
