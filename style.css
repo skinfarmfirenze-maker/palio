@@ -761,13 +761,21 @@ body:not(.touch-device) .touch-controls {
   .leaderboard { display: none !important; }
   #minimap { display: none !important; }
   /* Il pannello Andatura/Stamina/Rischio starebbe sopra il joystick: alzalo. */
+  /* Il pannello Andatura sta FRA il tasto Menu (in alto) e la freccia ▲ che
+     alza l'andatura. La freccia arriva a 154px dal fondo e il pannello partiva
+     da 150: si sovrapponevano di quattro pixel. Ora parte appena sopra la
+     freccia, ed e' piu' compatto — cosi' la sua cima scende parecchio e non
+     va piu' a ridosso del Menu. */
   .hud-bottom-left {
-    bottom: 150px;
+    bottom: 160px;
     left: calc(env(safe-area-inset-left, 0px) + 12px);
     min-width: 0;
-    transform: scale(0.9);
+    transform: scale(0.78);
     transform-origin: bottom left;
   }
+  .hud-bottom-left .hud-label { font-size: 9.5px; letter-spacing: .1em; }
+  .hud-bottom-left .hud-value { font-size: 26px; line-height: 1.05; }
+  .hud-bottom-left .hud-meter { margin: 3px 0; }
 }
 
 /* ---- Bottone "‹ Menu" fisso in alto a sinistra (torna al menu, taglia audio) ---- */

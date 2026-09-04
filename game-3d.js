@@ -5675,6 +5675,11 @@ function ensureCampaignStyle() {
     .acc-voci{display:none !important}
     .acc-lungo{display:none !important}
     .acc-sub{font-size:12px !important;margin:2px 0 4px !important}
+    /* Accordi coi FANTINI: le righe si stringono e restano una sotto l'altra,
+       col nome e il costo che non si accavallano piu'. */
+    .acc-fantini{gap:4px !important;margin:6px 0 !important;max-height:56vh !important}
+    .acc-fantini > div{padding:4px 8px !important;font-size:11.5px !important;gap:6px !important;flex-wrap:nowrap !important}
+    .acc-fantini .cmp-btn{font-size:11.5px !important;padding:4px 9px !important;flex:0 0 auto !important}
     .cmp-ctrl{min-width:0 !important;width:100% !important;align-items:stretch !important}
     .cmp-ctrl label{font-size:13px !important;line-height:1.3 !important;gap:10px !important;padding:5px 2px}
     .cmp-ctrl input[type=checkbox]{width:20px !important;height:20px !important;flex:0 0 auto;margin-top:0}
@@ -6454,8 +6459,9 @@ function campaignCorruptionScreen() {
     const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Accordi con i fantini";
     /* (le finalità si scelgono ora in una schermata dedicata: vedi openFinalitaScreen) */
     const sub = document.createElement("div"); sub.className = "cmp-text"; sub.style.fontSize = "14px";
-    sub.innerHTML = "Prendi un accordo col fantino di un'altra Contrada: <b>clicca la cifra</b>, poi scegli <b>cosa deve fare</b>. Costo = 80 × fedeltà, +50% per ogni finalità in più. I soldi spariscono dal gioco.";
-    const list = document.createElement("div"); list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:16px 0;max-height:44vh;overflow:auto";
+    sub.innerHTML = "I denari pagati ai fantini sono <b>persi a prescindere</b>.";
+    const list = document.createElement("div"); list.className = "acc-fantini";
+    list.style.cssText = "display:flex;flex-direction:column;gap:6px;margin:16px 0;max-height:44vh;overflow:auto";
     others.forEach((h) => {
       const j = h.jockey; if (!j) return;
       const cost = corruptionCost(j);
