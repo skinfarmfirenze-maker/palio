@@ -71,28 +71,36 @@ export const CONTRADE = [
 //   meta     = diviso a metà in verticale, le maniche seguono il lato (Drago)
 //   quarti   = quarti alternati, maniche opposte al petto (Lupa, Onda)
 //   righe    = righe verticali sottili (Istrice, Civetta)
-//   pannelli = corpo di un colore, spalle e maniche di un altro (Leocorno…)
 //   bande    = bande verticali larghe (Oca)
-// Campi: corpo [A,B] · maniche [sinistra, destra] · spalle (opz.) · liste ·
-//        pantaloni · banda (laterale) · zucchino [spicchi…] · fascia (bordo casco)
+// NON esiste il carrè orizzontale sulle spalle: nelle foto dei fantini i colori
+// del giubbetto corrono SEMPRE per il lungo (quarti, metà, bande, righe) e la
+// manica continua i quarti del busto. Una fascia orizzontale sul petto è la cosa
+// che tradisce subito il falso.
+// Campi: corpo [A,B] · maniche [sinistra, destra] · liste · pantaloni ·
+//        banda (laterale) · zucchino [spicchi…] · fascia (bordo casco)
 export const DIVISE = {
   aquila:       { taglio: "pieno",    corpo: [LIV.gialloOro],            maniche: [LIV.gialloOro, LIV.gialloOro], liste: LIV.nero,     filetto: LIV.turchino, pantaloni: LIV.gialloOro, banda: LIV.nero,     zucchino: [LIV.gialloOro, LIV.gialloOro], fascia: LIV.nero },
   bruco:        { taglio: "pieno",    corpo: [LIV.verde],                maniche: [LIV.verde, LIV.verde],         liste: LIV.giallo,   filetto: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.giallo],        fascia: LIV.turchino },
   chiocciola:   { taglio: "quarti",   corpo: [LIV.rossoAcceso, LIV.giallo], maniche: [LIV.giallo, LIV.rossoAcceso], liste: LIV.turchino, pantaloni: LIV.rossoAcceso, banda: LIV.giallo, zucchino: [LIV.rossoAcceso, LIV.giallo], fascia: LIV.turchino },
   civetta:      { taglio: "righe",    corpo: [LIV.rosso, LIV.nero],      maniche: [LIV.nero, LIV.rosso],          liste: LIV.bianco,   pantaloni: LIV.nero,      banda: LIV.rosso,    zucchino: [LIV.rosso, LIV.nero],          fascia: LIV.bianco },
   drago:        { taglio: "meta",     corpo: [LIV.verde, LIV.rosso],     maniche: [LIV.verde, LIV.rosso],         liste: LIV.giallo,   pantaloni: LIV.rosso,     banda: LIV.verde,    zucchino: [LIV.verde, LIV.rosso],         fascia: LIV.giallo },
-  giraffa:      { taglio: "pannelli", corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco], spalle: LIV.rosso, liste: LIV.rosso, pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso], fascia: LIV.rosso },
+  giraffa:      { taglio: "quarti",   corpo: [LIV.bianco, LIV.rosso],    maniche: [LIV.rosso, LIV.bianco],        liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.rosso,    zucchino: [LIV.bianco, LIV.rosso],        fascia: LIV.rosso },
   istrice:      { taglio: "righe",    corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco],       liste: LIV.blu,      righe: [LIV.rosso, LIV.blu, LIV.nero], pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso, LIV.bianco, LIV.blu, LIV.bianco, LIV.nero], fascia: LIV.blu },
-  leocorno:     { taglio: "pannelli", corpo: [LIV.arancio],              maniche: [LIV.bianco, LIV.bianco], spalle: LIV.bianco, liste: LIV.azzurro, pantaloni: LIV.bianco, banda: LIV.arancio, zucchino: [LIV.arancio, LIV.bianco], fascia: LIV.azzurro },
+  leocorno:     { taglio: "quarti",   corpo: [LIV.bianco, LIV.arancio],  maniche: [LIV.arancio, LIV.bianco],      liste: LIV.azzurro,  pantaloni: LIV.bianco,    banda: LIV.arancio,  zucchino: [LIV.arancio, LIV.bianco],      fascia: LIV.azzurro },
   lupa:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.nero],     maniche: [LIV.nero, LIV.bianco],         liste: LIV.arancio,  pantaloni: LIV.bianco,    banda: LIV.nero,     zucchino: [LIV.bianco, LIV.nero],         fascia: LIV.arancio },
   nicchio:      { taglio: "pieno",    corpo: [LIV.blu],                  maniche: [LIV.blu, LIV.blu],             liste: LIV.giallo,   collo: LIV.rosso, filetto: LIV.rosso, pantaloni: LIV.blu, banda: LIV.giallo, zucchino: [LIV.blu, LIV.blu], fascia: LIV.giallo },
   oca:          { taglio: "bande",    corpo: [LIV.bianco, LIV.verde],    maniche: [LIV.bianco, LIV.bianco],       liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.bianco],        fascia: LIV.rosso },
   onda:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.celeste],  maniche: [LIV.celeste, LIV.bianco],      liste: LIV.celeste,  pantaloni: LIV.bianco,    banda: LIV.celeste,  zucchino: [LIV.bianco, LIV.celeste],      fascia: LIV.celeste },
-  pantera:      { taglio: "pannelli", corpo: [LIV.blu],                  maniche: [LIV.rosso, LIV.rosso], spalle: LIV.rosso, liste: LIV.bianco, pantaloni: LIV.rosso, banda: LIV.blu, zucchino: [LIV.rosso, LIV.blu], fascia: LIV.bianco },
-  selva:        { taglio: "pannelli", corpo: [LIV.arancio],              maniche: [LIV.verde, LIV.verde], spalle: LIV.verde, liste: LIV.bianco, pantaloni: LIV.arancio, banda: LIV.verde, zucchino: [LIV.verde, LIV.arancio], fascia: LIV.bianco },
-  tartuca:      { taglio: "pannelli", corpo: [LIV.turchino],             maniche: [LIV.giallo, LIV.giallo], spalle: LIV.giallo, liste: LIV.giallo, pantaloni: LIV.turchino, banda: LIV.giallo, zucchino: [LIV.giallo, LIV.turchino], fascia: LIV.giallo },
+  // Pantera: rosso e azzurro a QUARTI INCROCIATI listati di bianco (foto Velluto
+  // 2025, Provenzano 2011 e Assunta: di fronte una metà per colore, di fianco il
+  // quarto davanti e quello dietro diversi). Pantaloni rossi con banda azzurra.
+  pantera:      { taglio: "quarti",   corpo: [LIV.azzurro, LIV.rosso],   maniche: [LIV.rosso, LIV.azzurro],       liste: LIV.bianco,   pantaloni: LIV.rosso,     banda: LIV.azzurro,  zucchino: [LIV.rosso, LIV.azzurro],       fascia: LIV.bianco },
+  selva:        { taglio: "quarti",   corpo: [LIV.arancio, LIV.verde],   maniche: [LIV.verde, LIV.arancio],       liste: LIV.bianco,   pantaloni: LIV.arancio,   banda: LIV.verde,    zucchino: [LIV.verde, LIV.arancio],       fascia: LIV.bianco },
+  tartuca:      { taglio: "quarti",   corpo: [LIV.giallo, LIV.turchino], maniche: [LIV.turchino, LIV.giallo],     liste: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.turchino, zucchino: [LIV.giallo, LIV.turchino],     fascia: LIV.turchino },
   torre:        { taglio: "pieno",    corpo: [LIV.scarlatto],            maniche: [LIV.scarlatto, LIV.scarlatto], liste: LIV.azzurro,  filetto: LIV.bianco, pantaloni: LIV.scarlatto, banda: LIV.bianco, zucchino: [LIV.scarlatto, LIV.scarlatto], fascia: LIV.azzurro },
-  valdimontone: { taglio: "pieno",    corpo: [LIV.pesco],                maniche: [LIV.pesco, LIV.pesco], spalle: LIV.giallo, liste: LIV.rosso, filetto: LIV.bianco, pantaloni: LIV.pesco, banda: LIV.giallo, zucchino: [LIV.rosso, LIV.giallo, LIV.bianco], fascia: LIV.bianco },
+  // Valdimontone: "giubbetto e pantaloni rosa pesco con mostre rosse bianche e
+  // gialle" (sito ufficiale) — tinta unita, nessun carrè sulle spalle.
+  valdimontone: { taglio: "pieno",    corpo: [LIV.pesco],                maniche: [LIV.pesco, LIV.pesco],         liste: LIV.rosso,    filetto: LIV.bianco, pantaloni: LIV.pesco, banda: LIV.giallo, zucchino: [LIV.rosso, LIV.giallo, LIV.bianco], fascia: LIV.bianco },
 };
 
 // Divisa di una Contrada; se non è definita, ricade sui quarti coi tre colori.
@@ -359,7 +367,7 @@ export function texturaGiubbetto(contrada) {
     case "bande":       // bande verticali larghe alternate (Oca)
       for (let i = 0; i < 8; i += 1) { g.fillStyle = i % 2 ? cB : cA; g.fillRect(Math.round(i * W / 8), 0, Math.ceil(W / 8) + 1, H); }
       break;
-    default:            // pieno, pannelli, righe: campo uniforme
+    default:            // pieno, righe: campo uniforme
       g.fillStyle = cA; g.fillRect(0, 0, W, H);
   }
   if (D.taglio === "righe") {
@@ -373,15 +381,12 @@ export function texturaGiubbetto(contrada) {
       g.fillRect(Math.round(x), 0, spW, H);
     }
   }
-  if (D.spalle) {
-    // pannello delle SPALLE nel colore delle maniche (Leocorno, Giraffa, Pantera…):
-    // la parte alta del giubbetto è dello stesso colore delle maniche
-    g.fillStyle = D.spalle; g.fillRect(0, 0, W, Math.round(H * 0.20));
-    g.fillStyle = L; g.fillRect(0, Math.round(H * 0.20) - 2, W, 3);
-  }
-  // cuciture: centro petto e centro schiena
+  // cuciture: centro petto e centro schiena; nei quarti e nelle bande la lista
+  // corre anche sui fianchi, dove i due colori si incontrano (è la "listatura"
+  // bianca che si vede nelle foto di Pantera, Selva, Leocorno).
   g.fillStyle = L;
-  [0, 0.5].forEach((u) => g.fillRect(uX(u, W), 0, 2, H));
+  const cuciture = (D.taglio === "quarti") ? [0, 0.25, 0.5, 0.75] : [0, 0.5];
+  cuciture.forEach((u) => g.fillRect(uX(u, W) - (u ? 2 : 0), 0, u ? 4 : 2, H));
   g.fillRect(W - 2, 0, 2, H);
   // filetto del secondo colore di lista sui fianchi (Aquila, Bruco, Nicchio, Torre, Valdimontone)
   if (D.filetto) { g.fillStyle = D.filetto; [0.25, 0.75].forEach((u) => g.fillRect(uX(u, W) - 2, 0, 4, H)); }
@@ -415,11 +420,24 @@ export function texturaGiubbetto(contrada) {
 export function texturaManica(contrada, lato = 1) {
   // lato: -1 = manica sinistra, +1 = destra. Nelle divise a metà e a quarti le due
   // maniche hanno colori diversi (Drago: verde/rosso; Lupa: nero/bianco).
-  const W = 64, H = 128;
+  const W = 128, H = 128;
   const { cv, g } = tela(W, H);
   const D = divisaDi(contrada);
   const col = D.maniche[lato < 0 ? 0 : 1];
   g.fillStyle = col; g.fillRect(0, 0, W, H);
+  if (D.taglio === "quarti") {
+    // La manica CONTINUA i quarti del busto: metà davanti di un colore, metà
+    // dietro dell'altro, con la lista sulle due cuciture (nelle foto — Pantera,
+    // Tartuca, Giraffa — la riga corre per il lungo del braccio, dalla spalla al
+    // polso). u=0 è dietro (align DIETRO, come il busto), u=0.5 è davanti.
+    const cA = D.corpo[0], cB = D.corpo[1] || D.corpo[0];
+    const dietro = lato < 0 ? cA : cB;      // quarto posteriore del suo lato
+    const davanti = lato < 0 ? cB : cA;     // quarto anteriore del suo lato
+    g.fillStyle = dietro;  g.fillRect(0, 0, W, H);
+    g.fillStyle = davanti; g.fillRect(uX(0.25, W), 0, Math.round(W * 0.5), H);
+    g.fillStyle = D.liste;
+    [0.25, 0.75].forEach((u) => g.fillRect(uX(u, W) - 2, 0, 4, H));
+  }
   if (D.taglio === "righe" && D.righe) {
     const spW = Math.round(W * 0.045);
     let k = 0;
