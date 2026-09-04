@@ -6051,7 +6051,10 @@ function refreshCampaignMoney() {
   if (!el) {
     el = document.createElement("div");
     el.id = "cmpMoney";
-    el.style.cssText = "position:fixed;top:14px;right:calc(env(safe-area-inset-right,0px) + 16px);z-index:200;display:flex;align-items:center;gap:8px;"
+    // Il margine destro si stringe da telefono (16 → 6): il box stava troppo
+    // dentro lo schermo e sembrava fuori posto. La distanza dalla fotocamera
+    // resta garantita dall'area sicura del sistema.
+    el.style.cssText = "position:fixed;top:14px;right:calc(env(safe-area-inset-right,0px) + var(--money-gap,16px));z-index:200;display:flex;align-items:center;gap:8px;"
       + "background:rgba(20,14,8,.82);border:1px solid rgba(240,203,53,.55);border-radius:11px;padding:8px 14px;"
       + "font-family:inherit;color:#f3e7cf;font-size:15px;box-shadow:0 3px 14px rgba(0,0,0,.5);pointer-events:none";
     el.innerHTML = '<span style="width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe680,#e0a800);'
@@ -7758,7 +7761,15 @@ function ensureVotoCavalliStyle() {
 /* Telefono/tablet (poca altezza O poca larghezza): compatta tutto così i 20 barberi
    + testata + bottone entrano nello schermo. Soglia ampia = scatta su più device. */
 @media (max-height:620px), (max-width:1024px){
-  #hvOverlay{padding:6px 10px}
+  /* Su iPhone in orizzontale la fotocamera mangia una fascia di lato: il
+     contenuto si tiene dentro l'area sicura, se no la colonna di sinistra
+     finisce sotto la tacca. E le card si stringono, che di spazio vuoto
+     dentro i bottoni ce n'era troppo. */
+  #hvOverlay{padding:6px calc(env(safe-area-inset-right,0px) + 8px) 6px calc(env(safe-area-inset-left,0px) + 8px)}
+  .hv-card{padding:4px 7px !important}
+  .hv-name{font-size:12px !important;padding-right:2px !important}
+  .hv-tier{margin-top:3px !important;font-size:10px !important;padding:1px 7px !important}
+  .hv-votes{bottom:4px !important;right:5px !important;font-size:10.5px !important;padding:0 5px !important}
   #hvOverlay h2{font-size:15px;margin:0;letter-spacing:.06em;padding:0 118px}
   #hvOverlay .hv-sub{font-size:12px;margin:2px 0 4px;max-width:none;line-height:1.25;padding:0 10px}
   #hvOverlay .hv-voti{font-size:12px;margin-bottom:6px}
@@ -9142,16 +9153,20 @@ function ensureTrattaHudStyle() {
 @media (max-width:900px), (max-height:520px){
   #trattaPanel{
     display:grid;
-    left:6px; right:6px; width:auto; top:74px;
+    left:calc(env(safe-area-inset-left,0px) + 6px);
+    right:calc(env(safe-area-inset-right,0px) + 6px);
+    width:auto; top:66px;
     grid-template-columns:1fr 1fr;
     grid-template-rows:repeat(5,auto);
     grid-auto-flow:column;
-    gap:4px 8px;
+    gap:3px 8px;
   }
   #trattaPanel .tp-head{display:none}
-  .tp-row{padding:4px 7px;gap:6px;font-size:11.5px;border-radius:7px}
-  .tp-name{flex:0 0 74px}
-  .tp-sw{width:10px;height:14px}
+  /* Righe basse e stringate: prima ogni riga era un bottone quasi vuoto. */
+  .tp-row{padding:2px 6px;gap:5px;font-size:10.5px;border-radius:6px}
+  .tp-name{flex:0 0 64px}
+  .tp-horse{font-size:10px}
+  .tp-sw{width:8px;height:12px}
   #trattaHud .tt-title h2{font-size:20px}
   #trattaHud .tt-title p{font-size:11px;margin-top:3px}
   #trattaHud .tt-title{top:12px}

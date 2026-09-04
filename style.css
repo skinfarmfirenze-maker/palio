@@ -1095,6 +1095,18 @@ textarea {
   .sf-pips { display: none !important; }
   .sf-num { display: inline !important; font-size: 10.5px !important; }
 
+  /* Il box dei denari si accosta di piu' al bordo destro (16px → 6px):
+     dentro lo schermo sembrava fuori posto. Dalla fotocamera lo tiene
+     lontano l'area sicura del sistema, che resta sommata a questo margine. */
+  :root { --money-gap: 6px; }
+
+  /* Anche la scelta della contrada e le accoppiate stanno dentro l'area sicura. */
+  #screenSelect .panel,
+  #sfOverlay.accoppiate .sf-acc {
+    margin-left: env(safe-area-inset-left, 0px) !important;
+    margin-right: env(safe-area-inset-right, 0px) !important;
+  }
+
   /* ── LE ACCOPPIATE: cinque a sinistra e cinque a destra, tutte a schermo. */
   #sfOverlay.accoppiate .sf-acc {
     width: 99vw !important;
