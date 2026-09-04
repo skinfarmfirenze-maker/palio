@@ -14123,6 +14123,15 @@ function startWinnerReplay() {
   });
   showScreen(null);
   state.mode = "replayWin";
+  // ── L'AUDIO DEL REPLAY E' QUELLO DELLA CORSA ─────────────────────────────
+  // Il replay mostra il Palio, quindi si sente il Palio: il brusio della Piazza
+  // e lo zoccolio del gruppo. Prima erano gia' sfumati (due secondi e mezzo dopo
+  // l'arrivo) e sopra restava il Passo alla Vittoria, che e' la musica della
+  // premiazione: per settanta secondi di corsa si sentiva la musica sbagliata,
+  // e negli ultimi venticinque il silenzio, perche' dura quarantacinque.
+  try { fadePalioSound("PASSOAVITTORIA.mp3", 0.6); } catch (e) { /* niente */ }
+  try { startCrowdBed(0.3); } catch (e) { /* niente */ }
+  try { startGaloppo(0.34); } catch (e) { /* niente */ }
   // Si parte dalla regia (i tagli scelti dal gioco); con C si gira fra tutte le
   // altre inquadrature. La vista che avevi in corsa si ritrova alla fine.
   state.cameraModePrimaDelReplay = state.cameraMode;
@@ -14246,6 +14255,11 @@ function updateReplayWin(dt) {
 }
 
 function endWinnerReplay() {
+  // Finito il replay si torna ai risultati: via il suono della corsa, torna il
+  // Passo alla Vittoria — che e' la musica di quel momento.
+  try { fadeCrowdBed(1.2); } catch (e) { /* niente */ }
+  try { fadeGaloppo(1.2); } catch (e) { /* niente */ }
+  try { playPalioSound("PASSOAVITTORIA.mp3", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
   // Torna la vista che avevi in corsa: il replay non te la cambia.
   if (state.cameraModePrimaDelReplay) {
     state.cameraMode = state.cameraModePrimaDelReplay;
