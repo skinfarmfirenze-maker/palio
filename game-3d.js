@@ -9115,7 +9115,29 @@ function ensureTrattaHudStyle() {
 .tp-row.filled .tp-horse{opacity:1}
 .tp-row.flash{animation:tpFlash .9s ease}
 @keyframes tpFlash{0%{background:rgba(240,203,53,.4)}100%{background:rgba(18,13,8,.74)}}
-@media (max-width:820px){#trattaPanel{display:none}}`;
+/* ── TELEFONO: le accoppiate su DUE colonne, 5 e 5 ────────────────────────
+   Prima sotto gli 820px il pannello spariva del tutto (display:none): alla
+   Tratta, da telefono, non si vedeva a chi toccava quale cavallo — cioe' la
+   cosa piu' importante di quella schermata. Adesso le dieci Contrade stanno
+   tutte a schermo: cinque incolonnate a sinistra e cinque a destra, fra il
+   titolo e i bottoni. La testata "Accoppiate" si toglie: lo dice il titolo. */
+@media (max-width:900px), (max-height:520px){
+  #trattaPanel{
+    display:grid;
+    left:6px; right:6px; width:auto; top:74px;
+    grid-template-columns:1fr 1fr;
+    grid-template-rows:repeat(5,auto);
+    grid-auto-flow:column;
+    gap:4px 8px;
+  }
+  #trattaPanel .tp-head{display:none}
+  .tp-row{padding:4px 7px;gap:6px;font-size:11.5px;border-radius:7px}
+  .tp-name{flex:0 0 74px}
+  .tp-sw{width:10px;height:14px}
+  #trattaHud .tt-title h2{font-size:20px}
+  #trattaHud .tt-title p{font-size:11px;margin-top:3px}
+  #trattaHud .tt-title{top:12px}
+}`;
   document.head.appendChild(s);
 }
 
