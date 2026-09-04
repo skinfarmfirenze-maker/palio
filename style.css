@@ -775,7 +775,7 @@ body:not(.touch-device) .touch-controls {
   }
   .hud-bottom-left .hud-label { font-size: 9.5px; letter-spacing: .1em; }
   .hud-bottom-left .hud-value { font-size: 26px; line-height: 1.05; }
-  .hud-bottom-left .hud-meter { margin: 3px 0; }
+  .hud-bottom-left .bar { margin: 3px 0; height: 5px; }
 }
 
 /* ---- Bottone "‹ Menu" fisso in alto a sinistra (torna al menu, taglia audio) ---- */
