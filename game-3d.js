@@ -1623,32 +1623,22 @@ function buildStartLine() {
   // di track.samples). Qui la linea sta a progress 0, quindi la svasatura si calcola
   // da quel valore: usando s.cum si otteneva NaN e l'intero canape spariva.
   const flareQui = mossaFlareAt(0);
-  const stripeSpacing = 0.84;
-  // Verso l'ESTERNO le strisce arrivano fino al bordo svasato, altrimenti la linea
-  // si interrompeva a metà del tratto allargato.
-  const stripeCount = Math.floor(TRACK_HALF_WIDTH / stripeSpacing);
-  const stripeCountOut = Math.floor((TRACK_HALF_WIDTH + flareQui) / stripeSpacing);
-  for (let i = -stripeCountOut; i < stripeCount; i += 1) {
-    const p = s.point.clone().addScaledVector(s.normal, i * stripeSpacing + stripeSpacing * 0.5);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.035, 1.05), i % 2 === 0 ? materials.white : materials.black);
-    box.position.set(p.x, 0.075, p.z);
-    box.rotation.y = s.yaw + Math.PI / 2;
-    addAllestimento(box);
-  }
+  // NIENTE SCACCHIERA. Qui c'era una fila di cassette bianche e nere alternate
+  // che attraversava la pista sotto il canape, come la linea d'arrivo di un
+  // ippodromo. In Piazza non c'e': sotto i canapi c'e' il tufo e basta.
   // Il canape ANTERIORE tocca i PALCHI ESTERNI: la ringhiera sta 0.72 oltre il
   // bordo svasato della pista, e il canapo si ancora lì — non deve restare un
   // varco fra la fune e lo steccato.
   const estCanape = -(TRACK_HALF_WIDTH + flareQui + 0.72);
   const a = s.point.clone().addScaledVector(s.normal, estCanape).addScaledVector(s.tangent, -0.8);
   const b = s.point.clone().addScaledVector(s.normal, TRACK_HALF_WIDTH).addScaledVector(s.tangent, -0.8);
-  const c = s.point.clone().addScaledVector(s.normal, estCanape).addScaledVector(s.tangent, 0.95);
-  const d = s.point.clone().addScaledVector(s.normal, TRACK_HALF_WIDTH).addScaledVector(s.tangent, 0.95);
   state.canapi = new THREE.Group();
-  state.canapi.add(makeCylinderBetween(a.clone().setY(0.54), b.clone().setY(0.54), 0.058, materials.rope));
-  state.canapi.add(makeCylinderBetween(c.clone().setY(0.46), d.clone().setY(0.46), 0.048, materials.redRope));
+  // UN CANAPE SOLO, di canapa. Prima ce n'erano due, e il secondo era ROSSO:
+  // davanti ai cavalli, in Piazza, di canape ce n'e' uno — e la fune e' di
+  // canapa, grossa. Ingrossato da 0.058 a 0.085 perche' e' una corda vera.
+  state.canapi.add(makeCylinderBetween(a.clone().setY(0.54), b.clone().setY(0.54), 0.085, materials.rope));
   const groundCanapo = new THREE.Group();
   groundCanapo.add(makeCylinderBetween(a.clone().setY(0.095), b.clone().setY(0.095), 0.025, materials.rope));
-  groundCanapo.add(makeCylinderBetween(c.clone().setY(0.1), d.clone().setY(0.1), 0.02, materials.redRope));
   addAllestimento(groundCanapo);
   [a, b, c, d].forEach((point) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.15, 8), materials.wood);
@@ -14079,13 +14069,25 @@ function finishRace() {
 // rivede TUTTO IL PALIO con la camera sul VINCITORE: dove prende il vantaggio,
 // come entra nelle curve, la volata verso il drappellone.
 function recordReplayFrame(dt) {
-  const R = state.replay || (state.replay = { frames: [], acc: 0 });
+  const R = state.replay || (state.replay = { frames: [], tempi: [], acc: 0, t: 0 });
+  if (!R.tempi) { R.tempi = []; R.t = 0; }
+  R.t += dt;                    // tempo di GIOCO trascorso dall'inizio della corsa
   R.acc += dt;
   if (R.acc < 0.05) return;
-  R.acc = 0;
+  // ── QUI IL REPLAY ANDAVA PIU' VELOCE DELLA CORSA ─────────────────────────
+  // Prima c'era "R.acc = 0", che butta via il tempo in eccesso: se un giro di
+  // gioco dura 0.02s, il terzo tick porta l'accumulatore a 0.06 e i due
+  // centesimi in piu' si perdono. L'intervallo VERO fra due fotogrammi diventa
+  // cosi' piu' lungo di 0.05 — ma la riproduzione assumeva 0.05 esatti, e il
+  // Palio scorreva piu' svelto di com'era andato. Adesso si sottrae (niente
+  // tempo buttato) e soprattutto si SEGNA il momento di ogni fotogramma: la
+  // riproduzione va a tempo, non a conteggio, quindi 1x dura quanto la gara e
+  // 0,5x esattamente il doppio, anche se il gioco perde qualche colpo.
+  R.acc -= 0.05;
   // Registra anche lo stato SCOSSO per-frame (3° valore): così nel replay il
   // fantino cade nel momento in cui è caduto DAVVERO, non da inizio replay.
   R.frames.push(state.horses.map((h) => [h.progress, h.lane, h.scosso ? 1 : 0]));
+  R.tempi.push(R.t);
 }
 
 // Replay del PALIO INTERO: dalla mossa al drappellone, senza tagli, a velocita'
@@ -14103,7 +14105,7 @@ function startWinnerReplay() {
     segments: [
       { from: 0, to: R.frames.length - 1, label: "il Palio, dalla mossa all'arrivo" },
     ],
-    seg: 0, frac: 0, wIdx, speed: state.replaySpeed || 1, segTime: 0,
+    seg: 0, frac: 0, wIdx, speed: state.replaySpeed || 1, segTime: 0, tempo: 0,
   };
   state.replayPlay.i = state.replayPlay.segments[0].from;
   // Replay VERO: si riparte con TUTTI i fantini in sella; cadono poi al frame
@@ -14126,12 +14128,27 @@ function updateReplayWin(dt) {
   const R = state.replay, P = state.replayPlay;
   if (!R || !P) { endWinnerReplay(); return; }
   let seg = P.segments[P.seg];
-  P.frac += (dt * P.speed) / 0.05;
-  while (P.frac >= 1 && P.i < seg.to) { P.i += 1; P.frac -= 1; }
+  // Si avanza nel TEMPO: quanto tempo di gara mostrare, moltiplicato per la
+  // velocita' scelta. Poi si cerca il fotogramma che a quel tempo corrisponde.
+  // Cosi' 1x dura esattamente quanto la corsa e 0,5x il doppio, per costruzione.
+  const tempi = R.tempi;
+  P.tempo = (P.tempo || 0) + dt * P.speed;
+  const tPartenza = (tempi && tempi[seg.from]) || 0;
+  const bersaglio = tPartenza + P.tempo;
+  if (tempi) {
+    while (P.i < seg.to && tempi[P.i + 1] != null && tempi[P.i + 1] <= bersaglio) P.i += 1;
+    const ta = tempi[P.i] ?? 0;
+    const tb = tempi[P.i + 1] ?? (ta + 0.05);
+    P.frac = clamp((bersaglio - ta) / Math.max(0.001, tb - ta), 0, 1);
+  } else {
+    // Nastro vecchio senza tempi: si torna al conteggio di prima.
+    P.frac += (dt * P.speed) / 0.05;
+    while (P.frac >= 1 && P.i < seg.to) { P.i += 1; P.frac -= 1; }
+  }
   // Fine del segmento → passa al prossimo, o chiudi il replay.
   if (P.i >= seg.to && P.frac >= 1) {
     if (P.seg < P.segments.length - 1) {
-      P.seg += 1; seg = P.segments[P.seg]; P.i = seg.from; P.frac = 0; P.segTime = 0;
+      P.seg += 1; seg = P.segments[P.seg]; P.i = seg.from; P.frac = 0; P.segTime = 0; P.tempo = 0;
       const lab = document.getElementById("replayLabel");
       if (lab) lab.textContent = "Replay — " + seg.label + "   ·   C cambia inquadratura";
     } else { endWinnerReplay(); return; }
