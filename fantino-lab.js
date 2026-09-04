@@ -31,7 +31,9 @@ export const LIV = {
   arancio:    "#E07A24",
   rosaAntico: "#C87F8E",
   rossoRosa:  "#EE93A4",   // Valdimontone: rosa CHIARO (schiarito ancora su richiesta di Simone), lontano dalla Chiocciola
-  rossoAcceso: "#DC2A33",  // Chiocciola: accanto al giallo il rosso base si spegne, qui è alzato per pareggiare la Giraffa
+  rossoAcceso: "#DC2A33",
+  pesco:      "#E8907C",   // Valdimontone: il giubbetto vero è rosa pesco, non rosso (foto + sito ufficiale)
+  scarlatto:  "#C41E2C",   // Torre: "tutto rosso scarlatto" (sito ufficiale)  // Chiocciola: accanto al giallo il rosso base si spegne, qui è alzato per pareggiare la Giraffa
   celeste:    "#5AB0E0",
   azzurro:    "#1E7BC4",
   blu:        "#1B4FA0",
@@ -59,6 +61,47 @@ export const CONTRADE = [
   { id: "torre", name: "Torre", colors: [LIV.cremisi, LIV.cremisi, LIV.bianco], silkStripe: LIV.blu },
   { id: "valdimontone", name: "Valdimontone", colors: [LIV.rossoRosa, LIV.giallo, LIV.bianco] },
 ];
+
+// ══ 0b. LE DIVISE VERE ═══════════════════════════════════════════════════════
+// Come è fatto DAVVERO il giubbetto di ciascuna Contrada, dalle foto dei fantini
+// in Piazza e dai siti ufficiali (Valdimontone, Nicchio, Torre). La bandiera dà i
+// colori, ma il TAGLIO del giubbetto è di ogni Contrada: non esiste uno schema
+// unico. Sei tagli ricorrono:
+//   pieno    = corpo e maniche di un solo colore, liste ai bordi (Aquila, Torre…)
+//   meta     = diviso a metà in verticale, le maniche seguono il lato (Drago)
+//   quarti   = quarti alternati, maniche opposte al petto (Lupa, Onda)
+//   righe    = righe verticali sottili (Istrice, Civetta)
+//   pannelli = corpo di un colore, spalle e maniche di un altro (Leocorno…)
+//   bande    = bande verticali larghe (Oca)
+// Campi: corpo [A,B] · maniche [sinistra, destra] · spalle (opz.) · liste ·
+//        pantaloni · banda (laterale) · zucchino [spicchi…] · fascia (bordo casco)
+export const DIVISE = {
+  aquila:       { taglio: "pieno",    corpo: [LIV.gialloOro],            maniche: [LIV.gialloOro, LIV.gialloOro], liste: LIV.nero,     filetto: LIV.turchino, pantaloni: LIV.gialloOro, banda: LIV.nero,     zucchino: [LIV.gialloOro, LIV.gialloOro], fascia: LIV.nero },
+  bruco:        { taglio: "pieno",    corpo: [LIV.verde],                maniche: [LIV.verde, LIV.verde],         liste: LIV.giallo,   filetto: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.giallo],        fascia: LIV.turchino },
+  chiocciola:   { taglio: "quarti",   corpo: [LIV.rossoAcceso, LIV.giallo], maniche: [LIV.giallo, LIV.rossoAcceso], liste: LIV.turchino, pantaloni: LIV.rossoAcceso, banda: LIV.giallo, zucchino: [LIV.rossoAcceso, LIV.giallo], fascia: LIV.turchino },
+  civetta:      { taglio: "righe",    corpo: [LIV.rosso, LIV.nero],      maniche: [LIV.nero, LIV.rosso],          liste: LIV.bianco,   pantaloni: LIV.nero,      banda: LIV.rosso,    zucchino: [LIV.rosso, LIV.nero],          fascia: LIV.bianco },
+  drago:        { taglio: "meta",     corpo: [LIV.verde, LIV.rosso],     maniche: [LIV.verde, LIV.rosso],         liste: LIV.giallo,   pantaloni: LIV.rosso,     banda: LIV.verde,    zucchino: [LIV.verde, LIV.rosso],         fascia: LIV.giallo },
+  giraffa:      { taglio: "pannelli", corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco], spalle: LIV.rosso, liste: LIV.rosso, pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso], fascia: LIV.rosso },
+  istrice:      { taglio: "righe",    corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco],       liste: LIV.blu,      righe: [LIV.rosso, LIV.blu, LIV.nero], pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso, LIV.bianco, LIV.blu, LIV.bianco, LIV.nero], fascia: LIV.blu },
+  leocorno:     { taglio: "pannelli", corpo: [LIV.arancio],              maniche: [LIV.bianco, LIV.bianco], spalle: LIV.bianco, liste: LIV.azzurro, pantaloni: LIV.bianco, banda: LIV.arancio, zucchino: [LIV.arancio, LIV.bianco], fascia: LIV.azzurro },
+  lupa:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.nero],     maniche: [LIV.nero, LIV.bianco],         liste: LIV.arancio,  pantaloni: LIV.bianco,    banda: LIV.nero,     zucchino: [LIV.bianco, LIV.nero],         fascia: LIV.arancio },
+  nicchio:      { taglio: "pieno",    corpo: [LIV.blu],                  maniche: [LIV.blu, LIV.blu],             liste: LIV.giallo,   collo: LIV.rosso, filetto: LIV.rosso, pantaloni: LIV.blu, banda: LIV.giallo, zucchino: [LIV.blu, LIV.blu], fascia: LIV.giallo },
+  oca:          { taglio: "bande",    corpo: [LIV.bianco, LIV.verde],    maniche: [LIV.bianco, LIV.bianco],       liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.bianco],        fascia: LIV.rosso },
+  onda:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.celeste],  maniche: [LIV.celeste, LIV.bianco],      liste: LIV.celeste,  pantaloni: LIV.bianco,    banda: LIV.celeste,  zucchino: [LIV.bianco, LIV.celeste],      fascia: LIV.celeste },
+  pantera:      { taglio: "pannelli", corpo: [LIV.blu],                  maniche: [LIV.rosso, LIV.rosso], spalle: LIV.rosso, liste: LIV.bianco, pantaloni: LIV.rosso, banda: LIV.blu, zucchino: [LIV.rosso, LIV.blu], fascia: LIV.bianco },
+  selva:        { taglio: "pannelli", corpo: [LIV.arancio],              maniche: [LIV.verde, LIV.verde], spalle: LIV.verde, liste: LIV.bianco, pantaloni: LIV.arancio, banda: LIV.verde, zucchino: [LIV.verde, LIV.arancio], fascia: LIV.bianco },
+  tartuca:      { taglio: "pannelli", corpo: [LIV.turchino],             maniche: [LIV.giallo, LIV.giallo], spalle: LIV.giallo, liste: LIV.giallo, pantaloni: LIV.turchino, banda: LIV.giallo, zucchino: [LIV.giallo, LIV.turchino], fascia: LIV.giallo },
+  torre:        { taglio: "pieno",    corpo: [LIV.scarlatto],            maniche: [LIV.scarlatto, LIV.scarlatto], liste: LIV.azzurro,  filetto: LIV.bianco, pantaloni: LIV.scarlatto, banda: LIV.bianco, zucchino: [LIV.scarlatto, LIV.scarlatto], fascia: LIV.azzurro },
+  valdimontone: { taglio: "pieno",    corpo: [LIV.pesco],                maniche: [LIV.pesco, LIV.pesco], spalle: LIV.giallo, liste: LIV.rosso, filetto: LIV.bianco, pantaloni: LIV.pesco, banda: LIV.giallo, zucchino: [LIV.rosso, LIV.giallo, LIV.bianco], fascia: LIV.bianco },
+};
+
+// Divisa di una Contrada; se non è definita, ricade sui quarti coi tre colori.
+export function divisaDi(contrada) {
+  const d = DIVISE[contrada.id];
+  if (d) return d;
+  const [c0, c1, c2] = contrada.colors;
+  return { taglio: "quarti", corpo: [c0, c1], maniche: [c0, c0], liste: c2, pantaloni: c1, banda: c0, zucchino: [c0, c1], fascia: c2 };
+}
 
 // ══ 1. MOTORE GEOMETRICO ══════════════════════════════════════════════════════
 // loftLimb(): genera un membro come superficie continua.
@@ -298,38 +341,55 @@ function seededRnd(seed) {
 // GIUBBETTO: campo a quarti alternati, cuciture verticali nel colore delle liste,
 // collo e orlo, alamari sul petto (le asole che si vedono nelle foto).
 export function texturaGiubbetto(contrada) {
-  const W = 384, H = 480;   // più fitto: lo stemma dipinto qui deve restare leggibile
+  const W = 384, H = 480;
   const { cv, g } = tela(W, H);
-  const [c0, c1, c2] = contrada.colors;
-  // Quarti: dietro-dx | davanti-dx | davanti-sx | dietro-sx
-  const quarti = [c1, c0, c1, c0];
-  quarti.forEach((c, i) => { g.fillStyle = c; g.fillRect(uX(i / 4, W), 0, Math.ceil(W / 4) + 1, H); });
-  if (contrada.fasce) {
-    // Livrea a FASCE (Istrice): campo uniforme nel colore principale, attraversato
-    // da gruppi di righe sottili nei colori delle fasce — così tutti i colori della
-    // Contrada compaiono sul giubbetto, non solo i primi due.
-    g.fillStyle = c0; g.fillRect(0, 0, W, H);
+  const D = divisaDi(contrada);
+  const cA = D.corpo[0], cB = D.corpo[1] || D.corpo[0];
+  const L = D.liste;
+  // CAMPO secondo il TAGLIO della Contrada. u: 0 = cucitura dietro, 0.25 = fianco
+  // destro, 0.5 = centro petto, 0.75 = fianco sinistro.
+  switch (D.taglio) {
+    case "meta":        // metà verticale: destra cB, sinistra cA (Drago)
+      g.fillStyle = cB; g.fillRect(0, 0, uX(0.5, W), H);
+      g.fillStyle = cA; g.fillRect(uX(0.5, W), 0, W, H);
+      break;
+    case "quarti":      // quarti alternati (Lupa, Onda, Chiocciola)
+      [cB, cA, cB, cA].forEach((c, i) => { g.fillStyle = c; g.fillRect(uX(i / 4, W), 0, Math.ceil(W / 4) + 1, H); });
+      break;
+    case "bande":       // bande verticali larghe alternate (Oca)
+      for (let i = 0; i < 8; i += 1) { g.fillStyle = i % 2 ? cB : cA; g.fillRect(Math.round(i * W / 8), 0, Math.ceil(W / 8) + 1, H); }
+      break;
+    default:            // pieno, pannelli, righe: campo uniforme
+      g.fillStyle = cA; g.fillRect(0, 0, W, H);
+  }
+  if (D.taglio === "righe") {
+    // righe verticali sottili, cicliche nei colori delle righe (Istrice: rosso/blu/nero;
+    // Civetta: rosso/nero sul campo)
+    const colori = D.righe || [cB];
     const spW = Math.round(W * 0.020);
     let k = 0;
     for (let x = W * 0.045; x < W * 0.98; x += W * 0.085, k += 1) {
-      g.fillStyle = contrada.fasce[k % contrada.fasce.length];
+      g.fillStyle = colori[k % colori.length];
       g.fillRect(Math.round(x), 0, spW, H);
     }
   }
-  // Cuciture: centro schiena (u=0/1), fianchi (u=0.25 e 0.75), centro petto (u=0.5).
-  g.fillStyle = c2;
-  [0, 0.5].forEach((u) => g.fillRect(uX(u, W), 0, 2, H));          // centro petto e schiena
-  g.fillRect(W - 2, 0, 2, H);
-  // Righina del secondo colore di lista, sui fianchi (Istrice, Nicchio, Pantera…).
-  if (contrada.silkStripe && !contrada.fasce) {
-    g.fillStyle = contrada.silkStripe;
-    [0.22, 0.78].forEach((u) => g.fillRect(uX(u, W) - 2, 0, 4, H));
+  if (D.spalle) {
+    // pannello delle SPALLE nel colore delle maniche (Leocorno, Giraffa, Pantera…):
+    // la parte alta del giubbetto è dello stesso colore delle maniche
+    g.fillStyle = D.spalle; g.fillRect(0, 0, W, Math.round(H * 0.20));
+    g.fillStyle = L; g.fillRect(0, Math.round(H * 0.20) - 2, W, 3);
   }
-  // Collo (in alto) e orlo (in basso).
-  g.fillStyle = c2; g.fillRect(0, 0, W, Math.round(H * 0.012));
-  g.fillStyle = c2; g.fillRect(0, vY(0.04, H), W, Math.round(H * 0.022));
-  // ALAMARI: le tre asole chiare sul davanti del giubbetto.
-  g.fillStyle = c2;
+  // cuciture: centro petto e centro schiena
+  g.fillStyle = L;
+  [0, 0.5].forEach((u) => g.fillRect(uX(u, W), 0, 2, H));
+  g.fillRect(W - 2, 0, 2, H);
+  // filetto del secondo colore di lista sui fianchi (Aquila, Bruco, Nicchio, Torre, Valdimontone)
+  if (D.filetto) { g.fillStyle = D.filetto; [0.25, 0.75].forEach((u) => g.fillRect(uX(u, W) - 2, 0, 4, H)); }
+  // collo (Nicchio lo ha rosso) e orlo
+  g.fillStyle = D.collo || L; g.fillRect(0, 0, W, Math.round(H * 0.012));
+  g.fillStyle = L; g.fillRect(0, vY(0.04, H), W, Math.round(H * 0.022));
+  // alamari sul petto
+  g.fillStyle = L;
   [0.72, 0.60, 0.48].forEach((v) => {
     g.fillRect(uX(0.5, W) - Math.round(W * 0.032), vY(v, H), Math.round(W * 0.064), Math.round(H * 0.012));
   });
@@ -352,20 +412,23 @@ export function texturaGiubbetto(contrada) {
 
 // MANICA: colore principale con polsino in liste e una spalla appena più chiara
 // (il rilievo del deltoide, che altrimenti si perde in una manica tutta uguale).
-export function texturaManica(contrada) {
+export function texturaManica(contrada, lato = 1) {
+  // lato: -1 = manica sinistra, +1 = destra. Nelle divise a metà e a quarti le due
+  // maniche hanno colori diversi (Drago: verde/rosso; Lupa: nero/bianco).
   const W = 64, H = 128;
   const { cv, g } = tela(W, H);
-  const [c0, , c2] = contrada.colors;
-  g.fillStyle = c0; g.fillRect(0, 0, W, H);
-  if (contrada.fasce) {
+  const D = divisaDi(contrada);
+  const col = D.maniche[lato < 0 ? 0 : 1];
+  g.fillStyle = col; g.fillRect(0, 0, W, H);
+  if (D.taglio === "righe" && D.righe) {
     const spW = Math.round(W * 0.045);
     let k = 0;
     for (let x = W * 0.06; x < W * 0.96; x += W * 0.16, k += 1) {
-      g.fillStyle = contrada.fasce[k % contrada.fasce.length];
+      g.fillStyle = D.righe[k % D.righe.length];
       g.fillRect(Math.round(x), 0, spW, H);
     }
   }
-  g.fillStyle = c2; g.fillRect(0, vY(0.98, H), W, Math.round(H * 0.075));  // polsino (v alto)
+  g.fillStyle = D.liste; g.fillRect(0, vY(0.98, H), W, Math.round(H * 0.075));  // polsino
   return texDa(cv);
 }
 
@@ -375,25 +438,25 @@ export function texturaManica(contrada) {
 export function texturaPantalone(contrada) {
   const W = 128, H = 128;
   const { cv, g } = tela(W, H);
-  const [c0, c1, c2] = contrada.colors;
-  if (contrada.fasce) {
-    // Fasce (Istrice): pantalone bianco, tripla riga colorata sul lato esterno.
-    g.fillStyle = c0; g.fillRect(0, 0, W, H);
+  const D = divisaDi(contrada);
+  g.fillStyle = D.pantaloni; g.fillRect(0, 0, W, H);
+  if (D.taglio === "righe" && D.righe) {
+    // tripla riga laterale nei colori delle righe (Istrice)
     const rw = Math.round(W * 0.045);
-    contrada.fasce.forEach((cf, k) => {
+    D.righe.forEach((cf, k) => {
       g.fillStyle = cf;
       g.fillRect(Math.round(k * rw * 1.7), 0, rw, H);
       g.fillRect(W - Math.round(k * rw * 1.7) - rw, 0, rw, H);
     });
   } else {
-    g.fillStyle = c1; g.fillRect(0, 0, W, H);
+    // banda laterale (u=0 è il lato esterno della gamba) filettata di liste
     const banda = Math.round(W * 0.13);
-    g.fillStyle = c0;
+    g.fillStyle = D.banda;
     g.fillRect(0, 0, banda, H); g.fillRect(W - banda, 0, banda, H);
-    g.fillStyle = c2;
+    g.fillStyle = D.liste;
     g.fillRect(banda, 0, 3, H); g.fillRect(W - banda - 3, 0, 3, H);
   }
-  g.fillStyle = c2; g.fillRect(0, vY(0.98, H), W, Math.round(H * 0.055));  // risvolto (caviglia)
+  g.fillStyle = D.liste; g.fillRect(0, vY(0.98, H), W, Math.round(H * 0.055));  // risvolto
   return texDa(cv);
 }
 
@@ -401,13 +464,12 @@ export function texturaPantalone(contrada) {
 export function texturaZucchino(contrada) {
   const W = 256, H = 128, SPICCHI = 6;
   const { cv, g } = tela(W, H);
-  const [c0, c1, c2] = contrada.colors;
+  const D = divisaDi(contrada);
   for (let i = 0; i < SPICCHI; i += 1) {
-    if (contrada.fasce) g.fillStyle = i % 2 === 0 ? c0 : contrada.fasce[(i >> 1) % contrada.fasce.length];
-    else g.fillStyle = i % 2 === 0 ? c0 : c1;
+    g.fillStyle = D.zucchino[i % D.zucchino.length];
     g.fillRect(Math.round((i / SPICCHI) * W), 0, Math.ceil(W / SPICCHI) + 1, H);
   }
-  g.fillStyle = c2;
+  g.fillStyle = D.fascia;
   for (let i = 0; i < SPICCHI; i += 1) g.fillRect(Math.round((i / SPICCHI) * W) - 1, 0, 3, H);
   g.fillRect(0, Math.round(H * 0.88), W, Math.round(H * 0.12));            // fascia
   return texDa(cv);
@@ -707,7 +769,8 @@ export function buildFantino(contrada, opts = {}) {
     return m;
   };
   const matGiubbetto = stoffa(texturaGiubbetto(contrada), seedStoffa, 2);
-  const matManica = stoffa(texturaManica(contrada), seedStoffa + 1, 1.5);
+  const matManicaSx = stoffa(texturaManica(contrada, -1), seedStoffa + 1, 1.5);
+  const matManicaDx = stoffa(texturaManica(contrada, +1), seedStoffa + 1, 1.5);
   const matPantalone = stoffa(texturaPantalone(contrada), seedStoffa + 2, 1.5);
   const matZucchino = opaco(new THREE.MeshStandardMaterial({ map: texturaZucchino(contrada), roughness: 0.55, metalness: 0.0 }));
   const DIETRO = new THREE.Vector3(0, 0, -1);
@@ -819,7 +882,7 @@ export function buildFantino(contrada, opts = {}) {
     };
     const manica = new THREE.Mesh(loftLimb({
       path, profile, steps: 24, radial: 18, align: DIETRO, capDepth: 0.12, rilievo: piegheManica,
-    }), matManica);
+    }), sign < 0 ? matManicaSx : matManicaDx);
     manica.castShadow = true;
     arm.add(manica);
     // MANO che stringe le redini: palmo, quattro dita che si arricciano attorno
