@@ -1640,7 +1640,8 @@ function buildStartLine() {
   const groundCanapo = new THREE.Group();
   groundCanapo.add(makeCylinderBetween(a.clone().setY(0.095), b.clone().setY(0.095), 0.025, materials.rope));
   addAllestimento(groundCanapo);
-  [a, b, c, d].forEach((point) => {
+  // Due pali soli: reggono il canape unico (prima erano quattro, per due funi).
+  [a, b].forEach((point) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 1.15, 8), materials.wood);
     post.position.set(point.x, 0.58, point.z);
     post.castShadow = true;
