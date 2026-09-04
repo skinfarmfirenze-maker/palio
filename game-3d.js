@@ -5664,7 +5664,17 @@ function ensureCampaignStyle() {
     .cmp-row-flag{width:20px !important;height:20px !important}
     /* Accordi su telefono: le due colonne si IMPILANO e i controlli vanno a tutta
        larghezza, con checkbox grandi da toccare (prima erano microscopiche e affiancate). */
-    .cmp-cols{flex-direction:column !important;gap:12px !important;align-items:stretch !important}
+    .cmp-cols{flex-direction:column !important;gap:8px !important;align-items:stretch !important;margin-top:6px !important}
+    .cmp-cols > div{width:100% !important;flex:none !important}
+    /* Gli elenchi non si mangiano tutta l'altezza: prima le proposte RICEVUTE,
+       poi quelle da mandare, ognuna col suo scorrimento corto. */
+    .cmp-cols > div > div:last-child{max-height:32vh !important}
+    /* Via il superfluo: il budget in testa, le voci di piazza e la parte lunga
+       della spiegazione. Resta la sola regola che conta: quando si paga. */
+    .acc-kicker{display:none !important}
+    .acc-voci{display:none !important}
+    .acc-lungo{display:none !important}
+    .acc-sub{font-size:12px !important;margin:2px 0 4px !important}
     .cmp-ctrl{min-width:0 !important;width:100% !important;align-items:stretch !important}
     .cmp-ctrl label{font-size:13px !important;line-height:1.3 !important;gap:10px !important;padding:5px 2px}
     .cmp-ctrl input[type=checkbox]{width:20px !important;height:20px !important;flex:0 0 auto;margin-top:0}
@@ -7050,16 +7060,18 @@ function campaignAccordiScreen(spectate) {
     // di una che hai già accettato.
     const accepted = (cmp.incomingAccordi || []).filter((x) => x.decided === "yes");
     const acceptedFroms = accepted.map((x) => x.from);
-    const k = document.createElement("p"); k.className = "cmp-kicker";
+    const k = document.createElement("p"); k.className = "cmp-kicker acc-kicker";
     k.textContent = `Contrada ${cmp.contrada.name} · Budget ${budget} denari`
       + (accepted.length ? ` · accordi ${accepted.length}/3` : "");
     const t = document.createElement("div"); t.className = "cmp-title"; t.textContent = "Gli accordi";
     const sub = document.createElement("div"); sub.className = "cmp-text"; sub.style.fontSize = "14px";
+    sub.className += " acc-sub";
     sub.innerHTML = spectate
-      ? `La tua Contrada non corre: paga una Contrada in gara per "parare" la rivale <b>${cmp.rival.name}</b>. <b>Si paga solo se la rivale NON vince.</b>`
-      : `Paga una Contrada: <b>clicca la cifra</b>, poi scegli <b>per cosa</b> — ogni finalità in più costa +50% del base. <b>Si paga solo a palio vinto.</b>`;
+      ? `<span class="acc-lungo">La tua Contrada non corre: paga una Contrada in gara per "parare" la rivale <b>${cmp.rival.name}</b>. </span><b>Si paga solo se la rivale NON vince.</b>`
+      : `<span class="acc-lungo">Paga una Contrada: <b>clicca la cifra</b>, poi scegli <b>per cosa</b> — ogni finalità in più costa +50% del base. </span><b>Si paga solo a palio vinto.</b>`;
     // Voci di piazza (3 patti fra le altre Contrade, stile mormorii).
     const voci = document.createElement("div");
+    voci.className = "acc-voci";
     voci.style.cssText = "margin-top:8px;text-align:left;font-size:12.5px;opacity:.75;font-style:italic;line-height:1.55;border-left:3px solid rgba(240,203,53,.35);padding:2px 0 2px 10px";
     voci.innerHTML = "<div style='font-style:normal;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#b7ad96;margin-bottom:3px'>Voci di piazza</div>"
       + (cmp.mormorii || []).map((m) => `• ${m}`).join("<br>");
