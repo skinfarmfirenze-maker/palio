@@ -4268,6 +4268,12 @@ const FRENI_END = {
   istriceStamina: 720,    // Istrice guidata da AI: +10 stamina al 3° giro, fino al palio 720
   dragoSelvaFall: 1396,   // Drago e Selva guidate da AI: i cavalli cadono (San Martino), fino al palio 1396
   istriceNoFall: 1696,    // Istrice guidata da AI NON cade (immune), fino al palio 1696
+  // ── SOLO I FANTINI CADONO ──────────────────────────────────────────────
+  // Per MILLE palii da adesso il cavallo non va mai a terra: cade il fantino e
+  // il cavallo prosegue scosso. Il contatore globale era a 9374 quando la regola
+  // e' stata messa, quindi si spegne da sola al palio 10374 e le cadute tornano
+  // com'erano — cavalli a terra e maxi-cadute comprese. Nessuno deve fare niente.
+  soloFantiniCadono: 10374,
 };
 function palliGlobali() {
   try { return Number((loadVictoryAlbo() || {}).totalePalii) || 0; } catch (e) { return 0; }
@@ -13028,6 +13034,10 @@ function triggerHorseFall(horse) {
   if (horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
   if (fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella
   triggerFall(horse);                          // il fantino è già per terra (no-op se scosso)
+  // Finche' dura il freno cade SOLO il fantino: il cavallo resta in piedi e
+  // continua scosso. Tutto il resto (chi cade, quando, per quale urto) non
+  // cambia — cambia solo che il cavallo non finisce sul tufo.
+  if (frenoAttivo("soloFantiniCadono")) return;
   horse.caduto = true;
   horse.cadutoTimer = HORSE_DOWN_TIME + Math.random() * 1.6;
   horse.cadutoDir = Math.random() < 0.5 ? -1 : 1;
@@ -13050,7 +13060,9 @@ function triggerHorseFall(horse) {
 function maxiCaduta(a, b) {
   triggerHorseFall(a);
   triggerHorseFall(b);
-  showMessage(`MAXI CADUTA in curva: ${a.name} e ${b.name} a terra!`, 3.0, "danger");
+  showMessage(frenoAttivo("soloFantiniCadono")
+    ? `Ammucchiata in curva: ${a.name} e ${b.name} perdono il fantino!`
+    : `MAXI CADUTA in curva: ${a.name} e ${b.name} a terra!`, 3.0, "danger");
   state.cameraShake = Math.max(state.cameraShake || 0, 0.7);
   const extLane = Math.min(a.lane, b.lane);            // il bordo esterno della coppia
   const prog = (a.progress + b.progress) / 2;
