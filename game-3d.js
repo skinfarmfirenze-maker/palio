@@ -12196,7 +12196,7 @@ function updatePlayer(dt, time) {
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
     // rischi la caduta (impatto dalla velocità laterale al momento del contatto).
-    riskFall(player, fallImpactFromLaneVel(player.laneVelocity), "steccato");
+    riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
     registraPuntoTraccia(player);   // la linea che tiene finisce nella traccia di questo palio
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
@@ -12637,7 +12637,7 @@ function updateAiHorse(horse, dt, time) {
   // caduta. Il muro esterno è quello EFFETTIVO degli imbuti: è proprio lì
   // (San Martino coi materassi) che si picchia di più.
   if ((horse.lane >= AI_LANE_LIMIT - 0.06 || horse.lane <= -(aiOuterLim - 0.06)) && Math.abs(horse.laneVelocity) > RAIL_HIT_MIN) {
-    riskFall(horse, fallImpactFromLaneVel(horse.laneVelocity), "steccato");
+    riskFall(horse, fallImpactBordo(horse.laneVelocity, horse.lane >= AI_LANE_LIMIT - 0.06), "steccato");
   }
 
   // Nessun freno di curva nemmeno per le AI: il giocatore non ce l'ha piu', e
@@ -12990,6 +12990,18 @@ const SCOSSO_MULT = 0.97;         // velocità del cavallo scosso vs col fantino
 const RAIL_HIT_MIN = 2.6;         // velocità laterale minima perché sia un "urto"
 const RAIL_HIT_RANGE = 4.2;       // oltre MIN+RANGE l'impatto è massimo (1)
 function fallImpactFromLaneVel(v) { return clamp((Math.abs(v) - RAIL_HIT_MIN) / RAIL_HIT_RANGE, 0, 1); }
+// ── TENERE LA CORDA NON DEVE FAR CADERE ─────────────────────────────────────
+// Il colonnino, all'interno, ora si tocca APPOSTA: e' li' che passa la linea buona
+// e i consigli del gioco dicono di andarci. Con la vecchia soglia (2.6, la stessa
+// dei materassi) chi stringeva a ogni curva si giocava il Palio ai dadi sei volte:
+// a velocita' laterale 4.5 cadeva almeno una volta nell'79% dei casi. Adesso di
+// striscio non succede niente, e si rischia solo arrivandoci DI TRAVERSO e forte.
+// Sui materassi esterni invece la soglia resta bassa: li' sbatterci e' un errore.
+const RAIL_HIT_MIN_CORDA = 5.5;
+function fallImpactBordo(v, controColonnino) {
+  const min = controColonnino ? RAIL_HIT_MIN_CORDA : RAIL_HIT_MIN;
+  return clamp((Math.abs(v) - min) / RAIL_HIT_RANGE, 0, 1);
+}
 function riskFall(horse, impact, cause, other) {
   if (!horse || horse.scosso || state.mode !== "race") return;   // solo IN CORSA, non già scossi
   if ((state.raceClock || 0) < 3) return;                         // NON nei primi 3 secondi
