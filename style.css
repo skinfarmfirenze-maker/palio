@@ -1054,6 +1054,34 @@ textarea {
    ══════════════════════════════════════════════════════════════════════════ */
 @media (max-height: 520px) and (orientation: landscape) {
 
+  /* ── SCEGLI LA TUA CONTRADA: 6 per riga, tre righe (17 contrade).
+     Da telefono le colonne da 140px ne facevano stare due o tre: il pannello
+     diventava una colonna lunghissima da scorrere. Adesso il pannello si allarga
+     su tutto lo schermo e le card si stringono: bandiera piccola, nome sotto,
+     motto nascosto (a quella dimensione non si leggerebbe comunque). */
+  #screenSelect .panel { max-width: 98vw !important; width: 98vw !important; padding: 10px 12px !important; }
+  #screenSelect h2 { font-size: 17px !important; margin-bottom: 4px !important; }
+  .contrada-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 5px !important;
+    margin-top: 6px !important;
+  }
+  .contrada-card {
+    padding: 5px 4px !important;
+    border-radius: 8px !important;
+    gap: 2px !important;
+    text-align: center !important;
+    align-items: center !important;
+  }
+  .contrada-flag {
+    width: 38px !important;
+    height: 38px !important;
+    margin: 0 auto 2px !important;
+    border-radius: 6px !important;
+  }
+  .contrada-card strong { font-size: 10px !important; line-height: 1.15 !important; }
+  .contrada-card span { display: none !important; }   /* il motto: illeggibile a questa misura */
+
   /* ── I FANTINI: 5 per riga e card compatte (prima 743px di contenuto su 375
      di schermo: si vedevano 6 fantini su 14). */
   #sfGrid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 6px !important; width: 98vw !important; }
