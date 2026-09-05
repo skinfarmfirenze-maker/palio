@@ -4269,6 +4269,12 @@ const FRENI_END = {
   // e' stata messa, quindi si spegne da sola al palio 10374 e le cadute tornano
   // com'erano — cavalli a terra e maxi-cadute comprese. Nessuno deve fare niente.
   soloFantiniCadono: 15374,
+  // ── PANTERA E AQUILA DA BOMBOLONE ──────────────────────────────────
+  // Per i PROSSIMI 5 palii Pantera e Aquila, quando escono nel lotto,
+  // corrono da bomboloni. Il contatore globale era a 9734 quando la regola
+  // e' stata messa, quindi si spegne da sola al palio 9739. ATTENZIONE: il
+  // contatore e' GLOBALE, conta i palii di tutti — non solo i tuoi.
+  panteraAquilaBomboloni: 9739,
 };
 function palliGlobali() {
   try { return Number((loadVictoryAlbo() || {}).totalePalii) || 0; } catch (e) { return 0; }
@@ -7996,6 +8002,12 @@ function beginTratta() {
       entrant.horseTier = "bombolone";
       if (entrant.staminaMax < 92) { entrant.staminaMax = 92 + Math.floor(Math.random() * 9); entrant.stamina = entrant.staminaMax; }
     }
+    // FINESTRA 5 palii: Pantera e Aquila corrono da bomboloni (col fiato che
+    // serve, se il cavallo pescato ne aveva poco).
+    if ((entrant.id === "pantera" || entrant.id === "aquila") && frenoAttivo("panteraAquilaBomboloni")) {
+      entrant.horseTier = "bombolone";
+      if (entrant.staminaMax < 92) { entrant.staminaMax = 92 + Math.floor(Math.random() * 9); entrant.stamina = entrant.staminaMax; }
+    }
     // Statistiche FISSE del barbero (dal roster).
     entrant.nervousnessBase = undefined;  // ricattura la base sotto (dalla calma)
     entrant.turnsStat = drawn.turns || 3;             // 1 = si gira subito · 5 = regge
@@ -11456,7 +11468,17 @@ function updateRincorsa(rincorsa, dt) {
             showMessage("Parti a 5 · ti do la mossa!", 1.0, "good");          // spingi a 5 per partire
           }
         }
-        rincorsa.wantsToEnter = rincorsa.wantsToEnter || ((goodEntry || fiancata) && !rivalBloccaVia) || mistake || chiamataA5;
+        // ── SE LA RINCORSA E' IL TUO CAVALLO, FIANCHI TU ────────────────────
+        // Questo ramo e' quello dell'AI, e ci si finisce anche col cavallo del
+        // giocatore quando il controllo passa temporaneamente alla macchina —
+        // succede col FANTINO COMPRATO, che ai canapi ti toglie le redini per
+        // qualche secondo. Li' l'AI applicava la sua decisione di entrata e la
+        // rincorsa fiancava da sola, senza che il giocatore avesse deciso niente.
+        // Ora nessun automatismo lancia la TUA rincorsa: la sola eccezione e' lo
+        // scadere del tempo, che apre la finestra di partenza forzata.
+        const decidiTu = !!rincorsa.player && !(state.forcedStartWindow > 0);
+        rincorsa.wantsToEnter = rincorsa.wantsToEnter
+          || (!decidiTu && (((goodEntry || fiancata) && !rivalBloccaVia) || mistake || chiamataA5));
       }
     }
     // CORRIDOIO OCCUPATO: la rincorsa trattiene la carica (il blocco fisico è
