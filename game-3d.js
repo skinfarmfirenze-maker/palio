@@ -2811,8 +2811,11 @@ const PALIO_SOUND_FILES = [
 // scaricavano tutti e 33 a ogni visita: da soli erano un terzo delle richieste.
 const PALIO_SOUND_CORE = [
   "start.m4a", "corsa.m4a", "galoppo.m4a", "ingresso.m4a",
-  "intro.m4a", "busta.m4a", "tamburi.m4a", "finale.m4a",
+  "intro.m4a", "busta.m4a", "finale.m4a",
 ];
+// tamburi.m4a e appalusi.m4a NON si suonano piu' da nessuna parte (la marcia della
+// preparazione e' MARCIADELPALIOCONTAMBURI.mp3): tamburi.m4a stava ancora qui e si
+// scaricava 140 KB a ogni visita per niente.
 let __soundsPreloaded = false;
 function preloadPalioSounds() {
   if (__soundsPreloaded) return;
