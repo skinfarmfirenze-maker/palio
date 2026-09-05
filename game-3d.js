@@ -4268,7 +4268,7 @@ const FRENI_END = {
   // il cavallo prosegue scosso. Il contatore globale era a 9374 quando la regola
   // e' stata messa, quindi si spegne da sola al palio 10374 e le cadute tornano
   // com'erano — cavalli a terra e maxi-cadute comprese. Nessuno deve fare niente.
-  soloFantiniCadono: 10374,
+  soloFantiniCadono: 15374,
 };
 function palliGlobali() {
   try { return Number((loadVictoryAlbo() || {}).totalePalii) || 0; } catch (e) { return 0; }
@@ -15257,7 +15257,12 @@ function statsForAcceptedJockey(name) {
 // DOPPIONI da fondere: "Michel putzu" È il soprannome Spago · "Andrea sanna" È Virgola
 // · "Bruschelli" È Trecciolino (Gigi/Luigi Bruschelli). Si scartano: resta un solo
 // fantino per persona (si tiene Spago, Virgola, trecciolino).
-const JOCKEY_DUP_SKIP = new Set(["Michel putzu", "Andrea sanna", "Bruschelli"]);
+// "cianchino" e' un fantino VECCHIO: arrivava dalla lista degli accettati, che non
+// ha epoca, e finiva quindi fra i MODERNI. Fra i vecchi c'e' gia' come "Il Pesse"
+// (sono tutti e due Salvatore Ladu), quindi qui si scarta e basta.
+// Il confronto e' minuscolo: dalla lista degli accettati il nome puo' arrivare
+// scritto in qualunque modo, e "Cianchino" sarebbe passato accanto a "cianchino".
+const JOCKEY_DUP_SKIP = new Set(["michel putzu", "andrea sanna", "bruschelli", "cianchino"]);
 function applyAcceptedJockeys(map, storica) {
   if (!map) return;
   propostiFantini = map;   // idem
@@ -15267,8 +15272,8 @@ function applyAcceptedJockeys(map, storica) {
   const canonici = new Set([...JOCKEYS_STORICI, ...JOCKEYS_MODERNI].map((j) => j.nick.toLowerCase()));
   Object.keys(map).forEach((name) => {
     const nm = String(name || "").trim().slice(0, 24);
-    if (!nm || JOCKEY_DUP_SKIP.has(nm)) return;
     const key = nm.toLowerCase();
+    if (!nm || JOCKEY_DUP_SKIP.has(key)) return;
     // Fantino VERO di una delle due liste: ci pensa applicaEpoca a metterlo se e'
     // dell'epoca giusta. Qui non si tocca — se no rientra quello sbagliato.
     if (canonici.has(key)) return;
