@@ -9249,6 +9249,7 @@ function startMossa(fromTratta = false) {
   if (!fromTratta) createEntrants();
   // Alla mossa i fantini SONO in sella (dopo la tratta erano nascosti).
   clearFallenRiders();   // via eventuali fantini caduti del palio precedente
+  tiraMinACavallo();     // quanti fantini restano in sella: si tira a ogni palio
   state.horses.forEach((h) => {
     if (h.group.userData.jockey) h.group.userData.jockey.visible = true;   // fantino di nuovo in sella
     h.scosso = false; h.fallCd = 0;                                        // azzera lo stato "scosso" del palio prima
@@ -13113,7 +13114,16 @@ const HORSE_DOWN_TIME = 4.6;      // secondi a terra prima di rialzarsi
 // GARANZIA anti-ecatombe: per quanto grossa sia una caduta a catena, almeno
 // MIN_A_CAVALLO fantini restano SEMPRE in sella (prima capitava che cadessero
 // tutti e 10). Un fantino "a cavallo" = né scosso (disarcionato) né a terra.
-const MIN_A_CAVALLO = 4;
+// Non e' piu' un numero fisso: si TIRA A SORTE a ogni palio, cosi' non sono
+// tutti uguali. Su quattro palii: uno puo' diventare un'ecatombe (minimo 4 in
+// sella, cioe' fino a sei per terra), due restano normali (6), uno e' pulito
+// (7, al massimo tre cadute).
+const MIN_A_CAVALLO_SORTE = [4, 6, 6, 7];
+let MIN_A_CAVALLO = 6;
+function tiraMinACavallo() {
+  MIN_A_CAVALLO = MIN_A_CAVALLO_SORTE[Math.floor(Math.random() * MIN_A_CAVALLO_SORTE.length)];
+  return MIN_A_CAVALLO;
+}
 function fantiniACavallo() {
   return state.horses.filter((h) => !h.scosso && !h.caduto).length;
 }
