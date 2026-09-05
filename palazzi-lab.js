@@ -147,7 +147,7 @@ function finestraVera(x, X, Y, W, H, pietra, r) {
   x.fillStyle = "rgba(58,54,48,0.9)";                     // traversa
   x.fillRect(X, Y + H * 0.48, W, Math.max(1, H * 0.035));
   const grigio = r() < 0.5 ? "#a8adb0" : "#9aa4ad";       // persiane chiare
-  const chiuse = r() < 0.3;
+  const chiuse = false;   // il giorno del Palio nessuna finestra è chiusa (Simone)
   const anta = (ax, aw) => {
     x.fillStyle = grigio;
     x.fillRect(ax, Y - H * 0.02, aw, H * 1.04);
@@ -447,6 +447,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
   const merli = [];
   const finestreVive = [];
   const drappi = [];
+  const balconi = [];
   const colore = new THREE.Color();
 
   const quad = (acc, p1, p2, p3, p4, uv) => {
@@ -572,7 +573,13 @@ export function costruisciPalazzi(ctx, opz = {}) {
         const y = base + 1.2 + MISP.piano * (p + 0.62);
         const punto = A.clone().lerp(B, t).setY(y);
         if (semeGen() < 0.5) finestreVive.push({ p: punto.clone().addScaledVector(n, -0.16), yaw: Math.atan2(-n.x, -n.z) });
-        if (p < 2 && semeGen() < 0.22) drappi.push({ p: punto.clone().addScaledVector(n, -0.24).setY(y - 1.15), yaw: Math.atan2(-n.x, -n.z), tinta: semeGen() });
+        const conBalcone = b.stile !== "gotico" && p < 2 && semeGen() < 0.28;
+        if (conBalcone) {
+          // Balcone: soletta sotto la finestra, parapetto coperto dal drappo.
+          balconi.push({ p: punto.clone().setY(y - 0.78), n: n.clone(), yaw: Math.atan2(-n.x, -n.z) });
+        } else if (p < 2 && semeGen() < 0.22) {
+          drappi.push({ p: punto.clone().addScaledVector(n, -0.24).setY(y - 1.15), yaw: Math.atan2(-n.x, -n.z), tinta: semeGen() });
+        }
       }
     }
   });
@@ -636,6 +643,39 @@ export function costruisciPalazzi(ctx, opz = {}) {
     im.instanceMatrix.needsUpdate = true;
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     g.add(im);
+  }
+
+  if (balconi.length) {
+    const soletta = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.15, 0.1, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xe0d8c4, roughness: 0.85 }),
+      balconi.length
+    );
+    const parapetto = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.05, 0.58, 0.07),
+      new THREE.MeshStandardMaterial({ roughness: 0.9 }),
+      balconi.length
+    );
+    const tinteDrappo = [0x8e1f26, 0x7e1a20, 0x9c2a2f];
+    const d = new THREE.Object3D();
+    balconi.forEach((s0, i) => {
+      d.position.copy(s0.p).addScaledVector(s0.n, -0.32);
+      d.rotation.set(0, s0.yaw, 0);
+      d.updateMatrix();
+      soletta.setMatrixAt(i, d.matrix);
+      d.position.copy(s0.p).addScaledVector(s0.n, -0.6);
+      d.position.y = s0.p.y + 0.33;
+      d.updateMatrix();
+      parapetto.setMatrixAt(i, d.matrix);
+      colore.setHex(tinteDrappo[i % tinteDrappo.length]);
+      colore.multiplyScalar(0.88 + ((i * 37) % 10) * 0.02);
+      parapetto.setColorAt(i, colore);
+    });
+    soletta.instanceMatrix.needsUpdate = true;
+    parapetto.instanceMatrix.needsUpdate = true;
+    if (parapetto.instanceColor) parapetto.instanceColor.needsUpdate = true;
+    soletta.castShadow = true;
+    g.add(soletta, parapetto);
   }
 
   if (drappi.length) {
