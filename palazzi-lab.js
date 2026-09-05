@@ -565,20 +565,30 @@ export function costruisciPalazzi(ctx, opz = {}) {
       }
     }
 
-    // Gente alle finestre e drappi ai davanzali: d'agosto la piazza è vestita.
+    // Gente alle finestre, drappi e balconi: TUTTO ancorato alla griglia VERA
+    // delle finestre dipinte in texture. Prima la quota era una formula a sé
+    // (base + piano*0.62) che cadeva fra un piano e l'altro: figure e drappi
+    // fluttuavano a mezz'aria sulla facciata («persone che volano», Simone).
+    // La texture impagina: fascia terreno = 19% dell'altezza, poi i piani in
+    // parti uguali; la finestra sta a ~53% della fascia del suo piano, il
+    // davanzale a ~22%.
+    const hPF = 0.81 / b.piani;
+    const yFinestra = (p) => base + (0.19 + hPF * (p + 0.53)) * H;
+    const yDavanzale = (p) => base + (0.19 + hPF * (p + 0.22)) * H;
     const pianiVivi = Math.min(3, b.piani);
     for (let p = 0; p < pianiVivi; p += 1) {
       for (let cq = 0; cq < b.campate; cq += 1) {
         const t = (cq + 0.5) / b.campate;
-        const y = base + 1.2 + MISP.piano * (p + 0.62);
-        const punto = A.clone().lerp(B, t).setY(y);
-        if (semeGen() < 0.5) finestreVive.push({ p: punto.clone().addScaledVector(n, -0.16), yaw: Math.atan2(-n.x, -n.z) });
+        const punto = A.clone().lerp(B, t);
+        if (semeGen() < 0.55) {
+          // Busto affacciato: mezza figura dietro il davanzale, dentro il vano.
+          finestreVive.push({ p: punto.clone().addScaledVector(n, -0.1).setY(yDavanzale(p) + 0.18), yaw: Math.atan2(-n.x, -n.z) });
+        }
         const conBalcone = b.stile !== "gotico" && p < 2 && semeGen() < 0.28;
         if (conBalcone) {
-          // Balcone: soletta sotto la finestra, parapetto coperto dal drappo.
-          balconi.push({ p: punto.clone().setY(y - 0.78), n: n.clone(), yaw: Math.atan2(-n.x, -n.z) });
+          balconi.push({ p: punto.clone().setY(yDavanzale(p)), n: n.clone(), yaw: Math.atan2(-n.x, -n.z) });
         } else if (p < 2 && semeGen() < 0.22) {
-          drappi.push({ p: punto.clone().addScaledVector(n, -0.24).setY(y - 1.15), yaw: Math.atan2(-n.x, -n.z), tinta: semeGen() });
+          drappi.push({ p: punto.clone().addScaledVector(n, -0.24).setY(yDavanzale(p) - 0.85), yaw: Math.atan2(-n.x, -n.z), tinta: semeGen() });
         }
       }
     }
@@ -627,7 +637,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
 
   if (finestreVive.length) {
     const im = new THREE.InstancedMesh(
-      new THREE.CapsuleGeometry(0.13, 0.3, 2, 6),
+      new THREE.CapsuleGeometry(0.115, 0.2, 2, 6),
       new THREE.MeshStandardMaterial({ roughness: 0.95 }),
       finestreVive.length
     );
@@ -671,11 +681,24 @@ export function costruisciPalazzi(ctx, opz = {}) {
       colore.multiplyScalar(0.88 + ((i * 37) % 10) * 0.02);
       parapetto.setColorAt(i, colore);
     });
+    const corrimano = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.08, 0.055, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0x2e2a26, roughness: 0.7 }),
+      balconi.length
+    );
+    balconi.forEach((s0, i) => {
+      d.position.copy(s0.p).addScaledVector(s0.n, -0.6);
+      d.position.y = s0.p.y + 0.64;
+      d.rotation.set(0, s0.yaw, 0);
+      d.updateMatrix();
+      corrimano.setMatrixAt(i, d.matrix);
+    });
+    corrimano.instanceMatrix.needsUpdate = true;
     soletta.instanceMatrix.needsUpdate = true;
     parapetto.instanceMatrix.needsUpdate = true;
     if (parapetto.instanceColor) parapetto.instanceColor.needsUpdate = true;
     soletta.castShadow = true;
-    g.add(soletta, parapetto);
+    g.add(soletta, parapetto, corrimano);
   }
 
   if (drappi.length) {
