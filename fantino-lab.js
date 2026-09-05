@@ -71,7 +71,8 @@ export const CONTRADE = [
 //   meta     = diviso a metà in verticale, le maniche seguono il lato (Drago)
 //   quarti   = quarti alternati, maniche opposte al petto (Lupa, Onda)
 //   righe    = righe verticali sottili (Istrice, Civetta)
-//   davanti  = pettorina di un colore sul corpo dell'altro (Valdimontone)
+//   davanti  = pettorina di un colore sul corpo dell'altro, larga `larghezza`
+//              (Valdimontone mezza, Aquila una banda stretta sul petto)
 //   bande    = bande verticali larghe (Oca)
 // NON esiste il carrè orizzontale sulle spalle: nelle foto dei fantini i colori
 // del giubbetto corrono SEMPRE per il lungo (quarti, metà, bande, righe) e la
@@ -80,7 +81,9 @@ export const CONTRADE = [
 // Campi: corpo [A,B] · maniche [sinistra, destra] · liste · pantaloni ·
 //        banda (laterale) · zucchino [spicchi…] · fascia (bordo casco)
 export const DIVISE = {
-  aquila:       { taglio: "pieno",    corpo: [LIV.gialloOro],            maniche: [LIV.gialloOro, LIV.gialloOro], liste: LIV.nero,     filetto: LIV.turchino, pantaloni: LIV.gialloOro, banda: LIV.nero,     zucchino: [LIV.gialloOro, LIV.gialloOro], fascia: LIV.nero },
+  // Aquila: giallo "attraversato da liste nere e turchine" — nelle foto la turchina
+  // è una BANDA STRETTA sul petto, filettata di nero, non una riga sul fianco.
+  aquila:       { taglio: "davanti",  corpo: [LIV.turchino, LIV.gialloOro], larghezza: 0.12, maniche: [LIV.gialloOro, LIV.gialloOro], liste: LIV.nero, pantaloni: LIV.gialloOro, banda: LIV.gialloOro, zucchino: [LIV.gialloOro, LIV.gialloOro], fascia: LIV.nero },
   // Bruco: giallo e verde a QUARTI listati di turchino (foto di Simone, fantino in
   // Piazza): davanti il quarto destro giallo e il sinistro verde, pantaloni gialli
   // con banda verde, zucchino a spicchi gialli e verdi bordato di turchino.
@@ -97,7 +100,7 @@ export const DIVISE = {
   istrice:      { taglio: "righe",    corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco],       liste: LIV.blu,      righe: [LIV.rosso, LIV.blu, LIV.nero], pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso, LIV.bianco, LIV.blu, LIV.bianco, LIV.nero], fascia: LIV.blu },
   leocorno:     { taglio: "quarti",   corpo: [LIV.bianco, LIV.arancio],  maniche: [LIV.arancio, LIV.bianco],      liste: LIV.azzurro,  pantaloni: LIV.bianco,    banda: LIV.arancio,  zucchino: [LIV.arancio, LIV.bianco],      fascia: LIV.azzurro },
   lupa:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.nero],     maniche: [LIV.nero, LIV.bianco],         liste: LIV.arancio,  pantaloni: LIV.bianco,    banda: LIV.nero,     zucchino: [LIV.bianco, LIV.nero],         fascia: LIV.arancio },
-  nicchio:      { taglio: "pieno",    corpo: [LIV.blu],                  maniche: [LIV.blu, LIV.blu],             liste: LIV.giallo,   collo: LIV.rosso, filetto: LIV.rosso, pantaloni: LIV.blu, banda: LIV.giallo, zucchino: [LIV.blu, LIV.blu], fascia: LIV.giallo },
+  nicchio:      { taglio: "pieno",    corpo: [LIV.blu],                  maniche: [LIV.blu, LIV.blu],             liste: LIV.giallo,   collo: LIV.rosso, filetto: LIV.rosso, pantaloni: LIV.blu, banda: LIV.blu,    zucchino: [LIV.blu, LIV.blu], fascia: LIV.giallo },
   oca:          { taglio: "bande",    corpo: [LIV.bianco, LIV.verde],    maniche: [LIV.bianco, LIV.bianco],       liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.bianco],        fascia: LIV.rosso },
   onda:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.celeste],  maniche: [LIV.celeste, LIV.bianco],      liste: LIV.celeste,  pantaloni: LIV.bianco,    banda: LIV.celeste,  zucchino: [LIV.bianco, LIV.celeste],      fascia: LIV.celeste },
   // Pantera: rosso e azzurro a QUARTI INCROCIATI listati di bianco (foto Velluto
@@ -374,10 +377,12 @@ export function texturaGiubbetto(contrada) {
     case "quarti":      // quarti alternati (Lupa, Onda, Chiocciola)
       [cB, cA, cB, cA].forEach((c, i) => { g.fillStyle = c; g.fillRect(uX(i / 4, W), 0, Math.ceil(W / 4) + 1, H); });
       break;
-    case "davanti":     // pettorina davanti nel colore A, corpo nel colore B (Valdimontone)
+    case "davanti": {   // pettorina davanti nel colore A, corpo nel colore B
+      const larg = D.larghezza || 0.5;   // Valdimontone 0.5 (default), Aquila 0.12
       g.fillStyle = cB; g.fillRect(0, 0, W, H);
-      g.fillStyle = cA; g.fillRect(uX(0.25, W), 0, Math.round(W * 0.5), H);
+      g.fillStyle = cA; g.fillRect(uX(0.5 - larg / 2, W), 0, Math.round(W * larg), H);
       break;
+    }
     case "bande":       // bande verticali larghe alternate (Oca)
       for (let i = 0; i < 8; i += 1) { g.fillStyle = i % 2 ? cB : cA; g.fillRect(Math.round(i * W / 8), 0, Math.ceil(W / 8) + 1, H); }
       break;
@@ -399,8 +404,10 @@ export function texturaGiubbetto(contrada) {
   // corre anche sui fianchi, dove i due colori si incontrano (è la "listatura"
   // bianca che si vede nelle foto di Pantera, Selva, Leocorno).
   g.fillStyle = L;
+  const largPett = D.larghezza || 0.5;
   const cuciture = (D.taglio === "quarti") ? [0, 0.25, 0.5, 0.75]
-                 : (D.taglio === "davanti") ? [0, 0.25, 0.5, 0.75] : [0, 0.5];
+                 : (D.taglio === "davanti") ? [0, 0.5 - largPett / 2, 0.5, 0.5 + largPett / 2]
+                 : [0, 0.5];
   cuciture.forEach((u) => g.fillRect(uX(u, W) - (u ? 2 : 0), 0, u ? 4 : 2, H));
   g.fillRect(W - 2, 0, 2, H);
   // filetto del secondo colore di lista sui fianchi (Aquila, Bruco, Nicchio, Torre, Valdimontone)
