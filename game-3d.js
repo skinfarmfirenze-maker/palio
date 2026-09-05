@@ -12110,12 +12110,60 @@ function loadBuckets(key) {
   return new Array(IDEAL_LINE_BUCKETS).fill(null);
 }
 
+// ── LINEA DI CORSA DI PARTENZA ──────────────────────────────────────────────
+// Le AI copiano la linea registrata, che pero' vive nel localStorage: sul PC dove
+// e' stata registrata c'e', su OGNI ALTRO dispositivo (telefono, un altro
+// computer, un altro browser) NO. Li' cadevano sul ripiego, dove le spinte verso
+// l'esterno — uscita larga dopo l'apice, Casato largo — non hanno piu' una linea
+// buona da correggere e restano da sole: risultato, tutti esterni per mezzo giro.
+// E siccome la registrazione e' congelata, non si sarebbe mai sistemata da sola.
+// Qui la linea si CALCOLA dalla forma della pista: largo prima della curva,
+// stretto all'apice, uscita controllata. Dove esiste la registrazione vera del
+// giocatore, vince quella — questa riempie solo i tratti mai registrati.
+function lineaDiDefault() {
+  const out = new Array(IDEAL_LINE_BUCKETS).fill(null);
+  if (!track || !track.samples || !track.samples.length) return out;
+  for (let b = 0; b < IDEAL_LINE_BUCKETS; b += 1) {
+    const prog = ((b + 0.5) / IDEAL_LINE_BUCKETS) * track.length;
+    const s = sampleAt(prog);
+    const innerSign = -Math.sign(s.normal.dot(campoOutward(s.point)) || 1);
+    const cur = s.curve || 0;
+    let lane;
+    if (cur > 0.18) {
+      // Curvatura che CRESCE = entrata (si sta larghi), che CALA = uscita.
+      // La pendenza va rapportata a QUANTO si sta girando: il Casato ha raggio 13
+      // contro i 16 di San Martino, quindi la sua curvatura cambia molto piu' in
+      // fretta. Con un fattore fisso la fase restava incollata a "entrata/uscita"
+      // e l'apice del Casato non arrivava mai sulla corda.
+      const pend = (sampleAt(prog + 7).curve || 0) - (sampleAt(prog - 7).curve || 0);
+      const cp = clamp((pend / Math.max(cur, 0.15)) * 1.15, -1, 1);
+      const alCasato = NARROW_READY && prog > CAS_IN - 18 && prog < CAS_OUT + 12;
+      const uscita = alCasato ? CURVA_USCITA_CASATO : CURVA_USCITA_SM;
+      const inner = cp >= 0 ? lerp(CURVA_APICE, CURVA_INGRESSO, cp) : lerp(CURVA_APICE, uscita, -cp);
+      lane = innerSign * TRACK_HALF_WIDTH * inner;
+    } else {
+      lane = innerSign * AI_LANE_LIMIT * 0.55;                 // dritto: mezza pista, verso la corda
+      const avanti = sampleAt(prog + 14).curve || 0;
+      if (avanti > 0.42) lane += -innerSign * INGRESSO_LARGO_TAGLIO * clamp((avanti - 0.42) / 0.15, 0, 1);
+    }
+    out[b] = clamp(lane, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+  }
+  return out;
+}
+
 function loadIdealLine() {
   // Rimuove le vecchie traiettorie registrate (versioni precedenti): si riparte da zero.
   try { IDEAL_LINE_LEGACY_KEYS.forEach((k) => localStorage.removeItem(k)); } catch (e) { /* ignora */ }
   state.idealLine = loadBuckets(IDEAL_LINE_KEY);
   state.idealAndatura = loadBuckets(IDEAL_ANDATURA_KEY); // log andatura (1..5)
   state.idealSpeed = loadBuckets(IDEAL_SPEED_KEY);       // log velocità (u/sec)
+  // Tratti senza registrazione: ci va la linea calcolata dalla pista. Solo la
+  // TRAIETTORIA — andatura e velocita' restano vuote apposta, che le AI non
+  // devono copiare la velocita' del giocatore.
+  const base = lineaDiDefault();
+  for (let b = 0; b < IDEAL_LINE_BUCKETS; b += 1) {
+    if (state.idealLine[b] == null) state.idealLine[b] = base[b];
+  }
 }
 
 function saveIdealLine() {
