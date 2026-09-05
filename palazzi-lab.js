@@ -289,6 +289,32 @@ export function texturaCoppi({ larghezza = 512 } = {}) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// LA CORTINA REALE — i palazzi veri di Piazza del Campo, in ordine di corsa
+// ──────────────────────────────────────────────────────────────────────────────
+// Documentata su fonti (Wikipedia it/en, guide senesi) e sulle foto di Simone:
+// dalla mossa verso San Martino corre il lato alto con le case della Costarella,
+// la MOLE ROSSA del Sansedoni (gotico, trifore bianche, torre mozza — di fronte
+// al Palazzo Pubblico) e il Chigi-Zondadari rifatto nel 1724 (intonaco chiaro,
+// all'angolo di via Rinaldini); alla curva di San Martino il palazzetto BASSO;
+// oltre il varco del Palazzo Pubblico il d'Elci coi MERLI (fu la prima sede del
+// governo) e le case del Casato; poi il lato corto verso la mossa. Le frazioni
+// di giro sono TARATE sull'anello del gioco attuale e restano override-abili
+// (opz.cortinaReale) se il tracciato cambia. Vie e varchi tagliano comunque.
+export const CORTINA_REALE = [
+  { nome: "Case della Costarella",   da: 0.005, a: 0.095, stile: "intonaco", tinta: "#e9ddc2", piani: 6 },
+  { nome: "Palazzo Vincenti",        da: 0.095, a: 0.165, stile: "intonaco", tinta: "#e3c1a8", piani: 6 },
+  { nome: "Palazzo Sansedoni",       da: 0.165, a: 0.285, stile: "gotico",   tinta: "#b06a45", piani: 6, torre: true },
+  { nome: "Palazzo Chigi-Zondadari", da: 0.285, a: 0.355, stile: "intonaco", tinta: "#e8d3a4", piani: 5 },
+  { nome: "Case di via Rinaldini",   da: 0.355, a: 0.427, stile: "gotico",   tinta: "#a55c39", piani: 6 },
+  { nome: "Palazzetto di S.Martino", da: 0.427, a: 0.496, stile: "intonaco", tinta: "#ece4d2", piani: 3 },
+  { nome: "Case verso il Palazzo",   da: 0.496, a: 0.565, stile: "gotico",   tinta: "#9c5334", piani: 6 },
+  { nome: "Palazzo d'Elci",          da: 0.635, a: 0.735, stile: "gotico",   tinta: "#b87350", piani: 6 },
+  { nome: "Case del Casato",         da: 0.735, a: 0.813, stile: "intonaco", tinta: "#dfc9a6", piani: 6 },
+  { nome: "Palazzo Saracini-Alessi", da: 0.813, a: 0.915, stile: "intonaco", tinta: "#e3c1a8", piani: 7 },
+  { nome: "Palazzo Scotti",          da: 0.915, a: 0.998, stile: "intonaco", tinta: "#e9ddc2", piani: 6 }
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
 // LA CORTINA
 // ──────────────────────────────────────────────────────────────────────────────
 // ctx = lo stesso contratto di piazza-lab.js.
@@ -338,6 +364,40 @@ export function costruisciPalazzi(ctx, opz = {}) {
 
   // 2) Spezzo l'anello in palazzi.
   const blocchi = [];
+  if (opz.reale !== false) {
+    // CORTINA REALE (default): un blocco per palazzo vero, spezzato solo dai
+    // varchi delle vie. Il caso resta con opz.reale = false.
+    const tab = opz.cortinaReale || CORTINA_REALE;
+    tab.forEach((e, ti) => {
+      let iA = staz.findIndex((st) => st.giro >= e.da);
+      if (iA < 0) iA = 0;
+      while (iA < staz.length - 1 && staz[iA].giro < e.a) {
+        while (iA < staz.length - 1 && staz[iA].giro < e.a && dentroVarco(staz[iA].giro)) iA += 1;
+        if (iA >= staz.length - 1 || staz[iA].giro >= e.a) break;
+        let iB = iA + 1;
+        while (iB < staz.length - 1 && staz[iB].giro < e.a && !dentroVarco(staz[iB].giro)) iB += 1;
+        const a = staz[iA], b = staz[iB];
+        const larghezza = b.s - a.s;
+        if (larghezza >= 4) {
+          let piani = e.piani;
+          if ((opz.bassi || []).some((v) => {
+            const gg = v.giro >= a.giro ? v.giro : v.giro + 1;
+            const g1 = b.giro >= a.giro ? b.giro : b.giro + 1;
+            return gg >= a.giro && gg <= g1;
+          })) piani = 3;
+          blocchi.push({
+            a, b, stile: e.stile, piani, larghezza,
+            tinta: 0.5, tintaHex: e.tinta,
+            tintaIdx: e.tinta,                       // chiave texture per-palazzo
+            campate: Math.max(2, Math.round(larghezza / 3.0)),
+            torre: !!e.torre && blocchi.every((q) => q.tintaIdx !== e.tinta || !q.torre),
+            sporgi: (ti % 3) * 0.7                   // arretramenti fissi, non casuali
+          });
+        }
+        iA = iB;
+      }
+    });
+  } else {
   let i0 = 0;
   // Se il punto di partenza cade in un varco, si esce dal varco prima di
   // aprire il blocco; se il blocco INCONTRA un varco, si CHIUDE lì (spezzato
@@ -376,6 +436,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
     }
     i0 = i1;
   }
+  }
 
   // 3) Geometrie: le facciate si accorpano per CLASSE (stessa texture = stessa
   //    mesh), il resto in poche mesh condivise.
@@ -395,7 +456,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
     acc.idx.push(k, k + 1, k + 2, k, k + 2, k + 3);
     return k;
   };
-  const tinteMuro = (b) => (b.stile === "gotico" ? TINTE.gotico[b.tintaIdx % TINTE.gotico.length] : TINTE.intonaco[b.tintaIdx % TINTE.intonaco.length]);
+  const tinteMuro = (b) => b.tintaHex || (b.stile === "gotico" ? TINTE.gotico[b.tintaIdx % TINTE.gotico.length] : TINTE.intonaco[b.tintaIdx % TINTE.intonaco.length]);
 
   blocchi.forEach((b, bi) => {
     const A = b.a.p.clone().addScaledVector(b.a.f, b.sporgi);
@@ -415,7 +476,8 @@ export function costruisciPalazzi(ctx, opz = {}) {
     if (!perTex.has(chiave)) {
       perTex.set(chiave, {
         tex: texturaFacciata({
-          stile: b.stile, piani: b.piani, seme: b.tintaIdx + b.piani * 7 + (b.stile === "gotico" ? 31 : 0),
+          stile: b.stile, piani: b.piani,
+          seme: (typeof b.tintaIdx === "number" ? b.tintaIdx : b.tintaIdx.length + bi) + b.piani * 7 + (b.stile === "gotico" ? 31 : 0),
           tinta: tinteMuro(b), larghezza: opz.risoluzione || 256
         }),
         acc: { pos: [], uv: [], idx: [] }
@@ -477,7 +539,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
       const centro = A.clone().lerp(B, 0.32 + b.tinta * 0.36).addScaledVector(n, D * 0.3);
       const torre = new THREE.Mesh(
         new THREE.BoxGeometry(larg, cima - piede, larg),
-        new THREE.MeshStandardMaterial({ color: TINTE.gotico[b.tintaIdx % TINTE.gotico.length], roughness: 0.96 })
+        new THREE.MeshStandardMaterial({ color: b.tintaHex || TINTE.gotico[b.tintaIdx % TINTE.gotico.length], roughness: 0.96 })
       );
       torre.position.set(centro.x, base + piede + (cima - piede) * 0.5, centro.z);
       torre.rotation.y = Math.atan2(n.x, n.z);
@@ -496,7 +558,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
           merli.push({
             p: new THREE.Vector3(centro.x + off.x, base + cima + 0.4, centro.z + off.z),
             yaw: torre.rotation.y,
-            tinta: TINTE.gotico[b.tintaIdx % TINTE.gotico.length]
+            tinta: b.tintaHex || TINTE.gotico[b.tintaIdx % TINTE.gotico.length]
           });
         }
       }
