@@ -80,7 +80,10 @@ export const CONTRADE = [
 //        banda (laterale) · zucchino [spicchi…] · fascia (bordo casco)
 export const DIVISE = {
   aquila:       { taglio: "pieno",    corpo: [LIV.gialloOro],            maniche: [LIV.gialloOro, LIV.gialloOro], liste: LIV.nero,     filetto: LIV.turchino, pantaloni: LIV.gialloOro, banda: LIV.nero,     zucchino: [LIV.gialloOro, LIV.gialloOro], fascia: LIV.nero },
-  bruco:        { taglio: "pieno",    corpo: [LIV.verde],                maniche: [LIV.verde, LIV.verde],         liste: LIV.giallo,   filetto: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.verde,    zucchino: [LIV.verde, LIV.giallo],        fascia: LIV.turchino },
+  // Bruco: giallo e verde a QUARTI listati di turchino (foto di Simone, fantino in
+  // Piazza): davanti il quarto destro giallo e il sinistro verde, pantaloni gialli
+  // con banda verde, zucchino a spicchi gialli e verdi bordato di turchino.
+  bruco:        { taglio: "quarti",   corpo: [LIV.giallo, LIV.verde],    maniche: [LIV.verde, LIV.giallo],        liste: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.verde,    zucchino: [LIV.giallo, LIV.verde],        fascia: LIV.turchino },
   chiocciola:   { taglio: "quarti",   corpo: [LIV.rossoAcceso, LIV.giallo], maniche: [LIV.giallo, LIV.rossoAcceso], liste: LIV.turchino, pantaloni: LIV.rossoAcceso, banda: LIV.giallo, zucchino: [LIV.rossoAcceso, LIV.giallo], fascia: LIV.turchino },
   civetta:      { taglio: "righe",    corpo: [LIV.rosso, LIV.nero],      maniche: [LIV.nero, LIV.rosso],          liste: LIV.bianco,   pantaloni: LIV.nero,      banda: LIV.rosso,    zucchino: [LIV.rosso, LIV.nero],          fascia: LIV.bianco },
   drago:        { taglio: "meta",     corpo: [LIV.verde, LIV.rosso],     maniche: [LIV.verde, LIV.rosso],         liste: LIV.giallo,   pantaloni: LIV.rosso,     banda: LIV.verde,    zucchino: [LIV.verde, LIV.rosso],         fascia: LIV.giallo },
