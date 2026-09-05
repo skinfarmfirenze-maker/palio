@@ -128,6 +128,7 @@ module.exports = async (req, res) => {
     if (action === "proposalsList") return await proposalsList(body, res);
     if (action === "proposalDecide") return await proposalDecide(body, res);
     if (action === "setHorseTier") return await setHorseTier(body, res);
+    if (action === "palii24") return await palii24(body, res);
     if (action === "adminList") return await adminList(body.adminKey, res);
     res.status(400).json({ error: "bad-action" });
   } catch (e) {
@@ -229,6 +230,14 @@ async function deleteAccount(body, res) {
   res.status(200).json({ ok: true });
 }
 
+// Contatore dei palii per FASCIA ORARIA (UTC), per sapere quanti se ne corrono
+// nelle ultime 24 ore. Ogni casella scade da sola dopo 26 ore: nessuno storico
+// da tenere pulito, e il conto costa due comandi in piu' su una chiamata che il
+// client manda gia' a gruppi.
+const P2 = (n) => String(n).padStart(2, "0");
+const oraKey = (d) => `palio:h24:${d.getUTCFullYear()}${P2(d.getUTCMonth() + 1)}${P2(d.getUTCDate())}${P2(d.getUTCHours())}`;
+const ORA_TTL = 26 * 3600;
+
 // +1 al conteggio palii dell'utente (chiamato all'inizio di ogni palio).
 async function bumpPalio(body, res) {
   const email = normEmail(body.email);
@@ -237,8 +246,27 @@ async function bumpPalio(body, res) {
   let n = parseInt(body.n, 10); if (!(n >= 1)) n = 1; if (n > 100) n = 100;
   const [{ result: exists }] = await redisPipeline([["SISMEMBER", ACCOUNTS_SET, email]]);
   if (Number(exists) !== 1) { res.status(404).json({ error: "no-account" }); return; }
-  const [{ result: palii }] = await redisPipeline([["HINCRBY", acctKey(email), "palii", n]]);
+  const ok = oraKey(new Date());
+  const [{ result: palii }] = await redisPipeline([
+    ["HINCRBY", acctKey(email), "palii", n],
+    ["INCRBY", ok, n],
+    ["EXPIRE", ok, ORA_TTL],
+  ]);
   res.status(200).json({ ok: true, palii: Number(palii) || 0 });
+}
+
+// Quanti palii sono stati corsi nelle ultime 24 ore (solo admin). Somma le 24
+// caselle orarie; perOra[0] e' l'ora in corso, perOra[23] quella di 23 ore fa.
+async function palii24(body, res) {
+  const secret = process.env.PALIO_ADMIN_KEY;
+  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
+  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  const adesso = Date.now();
+  const chiavi = [];
+  for (let i = 0; i < 24; i++) chiavi.push(oraKey(new Date(adesso - i * 3600000)));
+  const [{ result }] = await redisPipeline([["MGET", ...chiavi]]);
+  const perOra = (result || []).map((x) => Number(x) || 0);
+  res.status(200).json({ ok: true, totale: perOra.reduce((a, b) => a + b, 0), perOra });
 }
 
 // +1 al conteggio palii VINTI dell'utente (chiamato quando il giocatore vince).

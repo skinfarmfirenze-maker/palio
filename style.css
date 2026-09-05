@@ -601,12 +601,12 @@ kbd {
    Rispettano la safe-area (notch/bordo arrotondato in landscape). */
 .touch-lat-right {
   right: calc(env(safe-area-inset-right, 0px) + 22px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
 }
 
 .touch-lat-left {
   right: calc(env(safe-area-inset-right, 0px) + 84px);
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
 }
 
 /* Tasto NERBO: sopra le due frecce, largo quanto la coppia. Sferra una nerbata
@@ -644,10 +644,10 @@ kbd {
   justify-content: center;
 }
 .touch-gait-up {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
 }
 .touch-gait-down {
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
 }
 .touch-gait:active {
   background: rgba(216, 169, 58, 0.85);
@@ -767,7 +767,7 @@ body:not(.touch-device) .touch-controls {
      freccia, ed e' piu' compatto — cosi' la sua cima scende parecchio e non
      va piu' a ridosso del Menu. */
   .hud-bottom-left {
-    bottom: 160px;
+    bottom: 150px;
     left: calc(env(safe-area-inset-left, 0px) + 12px);
     min-width: 0;
     transform: scale(0.78);

@@ -16438,6 +16438,7 @@ function maybeOpenAdmin() {
       `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 16px;font-size:14px;margin:4px 2px 8px;opacity:.95">`
       + `<span>Account: <b style="color:#f0cb35">${accounts.length}</b></span>`
       + `<span>Palii corsi (somma): <b style="color:#7fd98c">${totPalii}</b></span>`
+      + `<span>Ultime 24h: <b id="adminPalii24" style="color:#7fd98c">…</b></span>`
       + `<span>Palii vinti (somma): <b style="color:#f0cb35">${totVinti}</b></span>`
       + `<button type="button" id="adminRefresh" style="font:inherit;font-size:13px;font-weight:700;padding:6px 16px;border-radius:8px;border:1px solid rgba(240,203,53,.5);background:rgba(240,203,53,.12);color:#f3e7cf;cursor:pointer">🔄 Aggiorna</button></div>`
       + metrics
@@ -16477,6 +16478,10 @@ function maybeOpenAdmin() {
       + '<div id="secHorses" class="admSec" style="display:none">'
       + '<div style="font-size:12px;opacity:.6;margin:0 2px 8px">Media dei giocatori (Potenza · Turn). Scrivi un valore e premi Salva per applicare (vuoto = togli l\'override).</div>'
       + '<div id="adminHorseStats" style="font-size:13px;opacity:.7">Caricamento voti…</div>'
+      // I cavalli PROPOSTI dai giocatori col modulo in home: finivano nel
+      // database ma qui non c'era niente che li mostrasse.
+      + '<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;margin:16px 2px 6px;text-align:left">Proposte dei giocatori</div>'
+      + '<div id="adminHorseProps" style="font-size:13px;opacity:.7">Caricamento proposte…</div>'
       + '</div>'
       // Gestione fantini (voti stat)
       + '<div id="secJockeys" class="admSec" style="display:none">'
@@ -16500,12 +16505,22 @@ function maybeOpenAdmin() {
         const apri = sec && sec.style.display === "none";
         $("adminOut").querySelectorAll(".admSec").forEach((s) => { s.style.display = "none"; });
         $("adminOut").querySelectorAll(".admTab").forEach((b) => { b.style.background = "rgba(240,203,53,.12)"; });
-        if (apri && sec) { sec.style.display = ""; btn.style.background = "rgba(240,203,53,.34)"; }
+        if (apri && sec) {
+          sec.style.display = ""; btn.style.background = "rgba(240,203,53,.34)";
+          // Ogni volta che si apre una scheda i suoi dati si RICARICANO: prima
+          // restavano quelli del momento del login, quindi una proposta arrivata
+          // nel frattempo non compariva mai.
+          if (sec.id === "secHorses") { loadHorseStats(); loadProposals("horse", "adminHorseProps"); }
+          if (sec.id === "secJockeys") { loadJockeyStats(); }
+          if (sec.id === "secDeals") { loadProposals("deal", "adminDealProps"); }
+        }
       });
     });
     loadHorseStats();
     loadJockeyStats();
     loadProposals("deal", "adminDealProps");
+    loadProposals("horse", "adminHorseProps");
+    loadPalii24();
   };
 
   // Accetta/rifiuta una proposta di un dato kind (cavallo → col tier).
@@ -16515,6 +16530,22 @@ function maybeOpenAdmin() {
       .then((r) => r.json())
       .then((d) => { if (d && d.ok) { bustAcceptedCache(); loadProposals(kind, boxId); } })
       .catch(() => { /* niente */ });
+  };
+  // Quanti palii si sono corsi nelle ultime 24 ore. Il titolo mostra anche la
+  // ripartizione ora per ora, cosi' si vede SUBITO se c'e' stata un'ondata.
+  const loadPalii24 = () => {
+    const el = $("adminPalii24");
+    if (!el) return;
+    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "palii24", adminKey }) })
+      .then((r) => r.json())
+      .then((j) => {
+        if (!j || !j.ok) { el.textContent = "—"; return; }
+        el.textContent = j.totale;
+        const ore = (j.perOra || []).map((n, i) => (i === 0 ? "ora in corso" : i + "h fa") + ": " + n);
+        el.title = ore.join("\n");
+      })
+      .catch(() => { el.textContent = "—"; });
   };
   const loadProposals = (kind, boxId) => {
     const box = $(boxId);
