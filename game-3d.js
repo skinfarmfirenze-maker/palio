@@ -16755,7 +16755,13 @@ function init() {
   // già a schermo NON ricarica (altrimenti sarebbe un loop di reload).
   setInterval(() => {
     try {
-      if (!demoBloccaQuesto()) return;
+      if (!demoBloccaQuesto()) {
+        // APERTURA: chi stava fermo sulla schermata di chiuso ci resterebbe anche
+        // dopo che la finestra si e' aperta, perche' il gate era gia' disegnato.
+        // Se il blocco non c'e' piu' e il gate e' ancora a schermo, ricarico io.
+        if (document.getElementById("demoGate")) location.reload();
+        return;
+      }
       if (document.getElementById("demoGate")) return;
       // Fra le 15:00 e le 15:05 chi e' in mezzo a un Palio lo finisce: non gli si
       // ricarica la pagina sotto i piedi. Dalle 15:05 in poi si ricarica comunque,
