@@ -1092,9 +1092,35 @@ textarea {
 
   /* ── I FANTINI: 5 per riga e card compatte (prima 743px di contenuto su 375
      di schermo: si vedevano 6 fantini su 14). */
-  #sfGrid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; gap: 5px !important; width: 99vw !important; }
-  .sf-card { padding: 4px 6px !important; border-radius: 8px !important; }
-  .sf-nick { font-size: 11.5px !important; margin-bottom: 1px !important; }
+  /* #sfOverlay e' un flex in colonna, e la griglia era un suo elemento: veniva
+     SCHIACCIATA sotto la sua altezza naturale (card da 51px per un contenuto da
+     79px), cosi' le statistiche uscivano dal riquadro e l'ultima riga finiva
+     tagliata. flex:0 0 auto le ridà la sua altezza vera; a scorrere ci pensa
+     l'overlay, che ha gia' overflow:auto. */
+  /* Stessa causa per il TITOLO: era un elemento flex e si schiacciava fino a
+     zero, cosi' le card gli finivano sopra. Nessun figlio dell'overlay si
+     comprime piu': quello che avanza lo si raggiunge scorrendo. */
+  #sfOverlay > * { flex: 0 0 auto !important; }
+  #sfGrid {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    gap: 10px !important;                 /* piu' aria fra una card e l'altra */
+    width: 99vw !important;
+    flex: 0 0 auto !important;
+    padding-bottom: 14px !important;      /* l'ultima riga non tocca il bordo */
+  }
+  .sf-card { padding: 6px 8px !important; border-radius: 8px !important; }
+  /* Il prezzo era in float e finiva SOPRA la fine del nome ("Trecciolino 105"):
+     qui nome e prezzo stanno sulla stessa riga, ognuno al suo posto. */
+  .sf-nick {
+    font-size: 11.5px !important;
+    margin-bottom: 3px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 4px !important;
+    overflow: hidden !important;
+  }
+  .sf-price { float: none !important; flex: 0 0 auto !important; font-size: 10.5px !important; padding: 1px 5px !important; }
   .sf-stat { font-size: 10px !important; margin: 0 !important; gap: 3px !important; }
   .sf-stat span { flex: 0 0 48px !important; }
   /* NIENTE PALLINI da telefono: al loro posto il valore scritto, "3/5".

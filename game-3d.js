@@ -5661,9 +5661,12 @@ function ensureCampaignStyle() {
        larghezza, con checkbox grandi da toccare (prima erano microscopiche e affiancate). */
     .cmp-cols{flex-direction:column !important;gap:8px !important;align-items:stretch !important;margin-top:6px !important}
     .cmp-cols > div{width:100% !important;flex:none !important}
-    /* Gli elenchi non si mangiano tutta l'altezza: prima le proposte RICEVUTE,
-       poi quelle da mandare, ognuna col suo scorrimento corto. */
-    .cmp-cols > div > div:last-child{max-height:32vh !important}
+    /* UNO SOLO scorrimento, quello del pannello. Prima ogni elenco aveva il suo
+       (32vh = due righe scarse su un telefono): tre aree che scorrevano una
+       dentro l'altra, impossibili da usare col dito. Ora gli elenchi si aprono
+       per intero, uno sotto l'altro, e si scorre tutta la schermata. */
+    .cmp-cols > div > div:last-child{max-height:none !important;overflow:visible !important;gap:9px !important}
+    .cmp-panel{overscroll-behavior:contain}
     /* Via il superfluo: il budget in testa, le voci di piazza e la parte lunga
        della spiegazione. Resta la sola regola che conta: quando si paga. */
     .acc-kicker{display:none !important}
@@ -5675,7 +5678,14 @@ function ensureCampaignStyle() {
     .acc-fantini{gap:4px !important;margin:6px 0 !important;max-height:56vh !important}
     .acc-fantini > div{padding:4px 8px !important;font-size:11.5px !important;gap:6px !important;flex-wrap:nowrap !important}
     .acc-fantini .cmp-btn{font-size:11.5px !important;padding:4px 9px !important;flex:0 0 auto !important}
-    .cmp-ctrl{min-width:0 !important;width:100% !important;align-items:stretch !important}
+    /* Il tasto "Proponi" era STIRATO a tutta la riga da align-items:stretch: un
+       bottone rosso enorme per ogni Contrada. Ora sta alla sua misura, come
+       quelli dei fantini, appoggiato a destra. */
+    .cmp-ctrl{min-width:0 !important;width:auto !important;align-items:flex-end !important}
+    .cmp-cols .cmp-btn{font-size:11.5px !important;padding:4px 10px !important;margin:0 !important;
+      flex:0 0 auto !important;align-self:flex-end !important;border-radius:8px !important}
+    /* Piu' aria dentro la riga della Contrada, e il bottone non la comprime. */
+    .cmp-cols > div > div:last-child > div{padding:7px 10px !important;gap:8px !important}
     .cmp-ctrl label{font-size:13px !important;line-height:1.3 !important;gap:10px !important;padding:5px 2px}
     .cmp-ctrl input[type=checkbox]{width:20px !important;height:20px !important;flex:0 0 auto;margin-top:0}
   }
