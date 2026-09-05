@@ -1176,14 +1176,17 @@ textarea {
    il fondo scuro del pannello che l'aiutava a staccare. */
 .firma-autore {
   margin: 16px 0 0;
-  font-size: 11.6px;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: .05em;
-  color: rgba(243, 231, 207, .62);
+  color: rgba(246, 236, 214, .95);
   text-align: center;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .7);
+  /* Doppia ombra: la firma sta sul tufo della Piazza, che e' chiaro e
+     screziato. Con una sola ombra morbida si perdeva nello sfondo. */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .95), 0 2px 12px rgba(0, 0, 0, .8);
 }
 @media (max-width: 640px) {
-  .firma-autore { font-size: 10.5px; margin-top: 12px; }
+  .firma-autore { font-size: 12px; margin-top: 12px; }
 }
 
 /* ═══ HOME DA TELEFONO ═══════════════════════════════════════════════════════
@@ -1247,26 +1250,38 @@ body.con-controller .controls-pad {
   body.con-controller .controls-pad { margin-top: 6px; font-size: 11px; line-height: 1.65; }
   body.con-controller .controls-touch { margin-top: 9px; line-height: 1.7; }
 
-  /* I due bottoni non stanno piu' SOPRA il pannello: si affiancano in una
-     riga sola lungo il bordo basso, dentro l'area sicura dell'iPhone. */
+  /* Il pannello si alza, lasciando libera una striscia in fondo: cosi' i due
+     bottoni stanno SOTTO di esso su qualunque telefono, anche i piu' stretti,
+     dove di fianco al pannello non ci sarebbe spazio. */
+  #screenMenu { padding-bottom: 96px; box-sizing: border-box; }
+  .solo-largo { display: none; }          /* "per migliorare il gioco": qui non ci sta */
+
+  /* I due bottoni non stanno piu' SOPRA il pannello: vanno a SINISTRA, uno
+     sopra l'altro, nella striscia libera in fondo. */
   .home-support {
     right: auto;
-    left: 50%;
-    transform: translateX(-50%);
+    left: max(10px, env(safe-area-inset-left));
     bottom: max(8px, env(safe-area-inset-bottom));
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    max-width: calc(100vw - 120px);
+    transform: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    max-width: min(200px, 32vw);
   }
   .home-support .support-btn {
     font-size: 11px;
-    padding: 6px 10px;
-    max-width: none;
-    white-space: nowrap;
+    padding: 6px 9px;
+    max-width: 100%;
+    white-space: normal;     /* puo' andare a capo: sta in colonna, non in riga */
+    text-align: left;
+    line-height: 1.3;
   }
+  /* La rotella lascia l'angolo ai due bottoni e passa a destra. */
   .home-settings {
-    left: max(10px, env(safe-area-inset-left));
+    left: auto;
+    right: max(10px, env(safe-area-inset-right));
     bottom: max(8px, env(safe-area-inset-bottom));
   }
+  /* La firma resta la riga piu' in basso al centro, ben staccata dal tufo. */
+  .firma-autore { font-size: 12px; }
 }
