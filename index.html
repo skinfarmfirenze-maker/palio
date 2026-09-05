@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Palio Game</title>
+    <!-- Web-app: aggiunta alla schermata Home, il gioco parte a tutto schermo e
+         orizzontale, senza le barre del browser che rubano spazio alla Piazza. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#17110a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Palio" />
+    <link rel="apple-touch-icon" href="/assets/app/apple-touch-icon.png" />
+    <link rel="icon" href="/assets/app/icona-192.png" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -19,6 +29,12 @@
         <div class="menu-actions">
           <button id="playButton" class="btn btn-primary" type="button">Gioca</button>
           <button id="alboButton" class="btn btn-ghost" type="button">🏆 Albo delle Vittorie</button>
+        </div>
+        <!-- Sul telefono la tastiera non c'e': al posto dei tasti si mostrano i
+             comandi che si toccano davvero (vedi .controls-touch nel CSS). -->
+        <div class="controls-touch">
+          <div class="ctrl-row"><strong>Guida:</strong> <span class="tk">◀</span> <span class="tk">▶</span> sterza &nbsp; <span class="tk">▲</span> <span class="tk">▼</span> andatura</div>
+          <div class="ctrl-row"><strong>Nerbo:</strong> <span class="tk">NERBO</span> &nbsp; alla mossa <span class="tk">◀</span> <span class="tk">▶</span> ti sposti di lato</div>
         </div>
         <div class="controls-hint">
           <div class="ctrl-row"><strong>Mossa:</strong> <kbd>A</kbd>/<kbd>L</kbd> gira &nbsp; <kbd>M</kbd>/<kbd>Spazio</kbd> velocità (1=indietro · 2=fermo · 3-5 avanti)</div>

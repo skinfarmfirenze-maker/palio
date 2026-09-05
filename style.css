@@ -1185,3 +1185,74 @@ textarea {
 @media (max-width: 640px) {
   .firma-autore { font-size: 10.5px; margin-top: 12px; }
 }
+
+/* ═══ HOME DA TELEFONO ═══════════════════════════════════════════════════════
+   Sullo schermo basso e largo del telefono in orizzontale la home aveva tre
+   problemi: le quattro righe di tasti della TASTIERA (che sul telefono non
+   esiste) si mangiavano meta' pannello, i due bottoni in basso a destra
+   finivano SOPRA il pannello, e la firma restava tagliata dal bordo. */
+
+/* I comandi da toccare si vedono solo sul telefono; i tasti solo altrove. */
+.controls-touch { display: none; }
+.controls-touch .tk {
+  display: inline-block;
+  min-width: 26px;
+  padding: 1px 7px;
+  border: 1px solid rgba(216, 169, 58, 0.45);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* Lo SCAMBIO fra tasti e comandi da toccare va deciso dal DITO, non dalla
+   finestra: una finestra bassa su PC ha comunque la tastiera, e mostrarle i
+   comandi touch sarebbe un peggioramento. Quindi qui solo (pointer: coarse). */
+@media (pointer: coarse) and (max-width: 1024px) {
+  .controls-hint { display: none; }          /* via i tasti: qui si gioca col dito */
+  .controls-touch {
+    display: block;
+    margin-top: 12px;
+    font-size: 12px;
+    opacity: 0.78;
+    line-height: 1.9;
+  }
+}
+
+/* L'IMPAGINAZIONE invece dipende dallo spazio: vale su ogni schermo basso. */
+@media (max-height: 520px) and (orientation: landscape), (pointer: coarse) and (max-width: 900px) {
+  /* Pannello piu' compatto: ci sta tutto senza tagliare la firma. */
+  #screenMenu .panel {
+    width: min(460px, 88vw);
+    padding: 14px 20px;
+    border-radius: 14px;
+  }
+  #screenMenu .kicker { font-size: 10px; margin-bottom: 2px; }
+  #screenMenu .menu-panel h1 { font-size: 26px; margin-bottom: 6px; }
+  #screenMenu .lede { font-size: 13px; margin-bottom: 14px; }
+  #screenMenu .btn-primary { padding: 10px 34px; font-size: 15px; }
+  .firma-autore { margin-top: 9px; }
+
+  /* I due bottoni non stanno piu' SOPRA il pannello: si affiancano in una
+     riga sola lungo il bordo basso, dentro l'area sicura dell'iPhone. */
+  .home-support {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: max(8px, env(safe-area-inset-bottom));
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    max-width: calc(100vw - 120px);
+  }
+  .home-support .support-btn {
+    font-size: 11px;
+    padding: 6px 10px;
+    max-width: none;
+    white-space: nowrap;
+  }
+  .home-settings {
+    left: max(10px, env(safe-area-inset-left));
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}

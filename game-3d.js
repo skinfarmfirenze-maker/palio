@@ -14702,10 +14702,87 @@ function resize() {
   renderer.setSize(width, height, false);
 }
 
+// ── WEB-APP: invito a installarla, prima di giocare ─────────────────────────
+// Dal browser il telefono tiene barra indirizzi e barra dei gesti: rubano una
+// striscia di schermo alla Piazza e su iPhone la pagina puo' scrollare mentre
+// si sterza. Aggiunta alla schermata Home parte a tutto schermo e orizzontale.
+// L'invito compare SOLO da telefono, SOLO se non e' gia' installata e UNA volta
+// per visita: chi gioca dieci Palii di fila non se lo ritrova ogni volta.
+let __promptInstalla = null;   // Android/Chrome: l'invito vero del sistema
+try {
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); __promptInstalla = e; });
+} catch (e) { /* niente */ }
+function appGiaInstallata() {
+  try {
+    if (window.matchMedia && window.matchMedia("(display-mode: fullscreen), (display-mode: standalone)").matches) return true;
+    if (navigator.standalone) return true;   // iOS
+  } catch (e) { /* niente */ }
+  return false;
+}
+function suTelefono() {
+  try { return window.matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) <= 900; }
+  catch (e) { return false; }
+}
+function suIOS() {
+  try {
+    const ua = navigator.userAgent || "";
+    return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  } catch (e) { return false; }
+}
+// Mostra l'invito e chiama `poi()` quando l'utente ha deciso. Se non c'e' niente
+// da proporre (PC, o app gia' installata, o gia' visto) parte subito il gioco.
+function invitaWebApp(poi) {
+  let visto = false;
+  try { visto = sessionStorage.getItem("palioWebAppVista") === "1"; } catch (e) { /* niente */ }
+  if (visto || !suTelefono() || appGiaInstallata() || document.getElementById("webAppInvito")) { poi(); return; }
+  try { sessionStorage.setItem("palioWebAppVista", "1"); } catch (e) { /* niente */ }
+
+  const ios = suIOS();
+  const istruzioni = __promptInstalla
+    ? "Tocca <b>Installa</b> qui sotto: il Palio si aggiunge alla schermata Home come un'app."
+    : ios
+      ? 'In basso tocca <b>Condividi</b> <span style="font-size:1.1em">&#x2934;</span> e poi <b>Aggiungi a Home</b>.'
+      : 'Apri il menu <b>&#8942;</b> del browser e tocca <b>Installa app</b> (o <b>Aggiungi a schermata Home</b>).';
+
+  const ov = document.createElement("div");
+  ov.id = "webAppInvito";
+  ov.style.cssText = "position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;"
+    + "background:rgba(9,6,4,.82);backdrop-filter:blur(3px);padding:16px;"
+    + "padding-bottom:max(16px,env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));"
+    + "padding-right:max(16px,env(safe-area-inset-right))";
+  ov.innerHTML =
+    '<div style="width:min(430px,94vw);max-height:92vh;overflow-y:auto;background:linear-gradient(180deg,#3a2a17 0%,#17110a 78%);'
+    + 'border:1px solid rgba(240,203,53,.45);border-radius:16px;padding:18px 20px;text-align:center;color:#f3e7cf;'
+    + 'font-family:inherit;box-shadow:0 18px 50px rgba(0,0,0,.6)">'
+    + '<img src="/assets/app/icona-192.png" alt="" style="width:52px;height:52px;border-radius:12px;display:block;margin:0 auto 10px">'
+    + '<div style="font-size:17px;font-weight:800;color:#f0cb35;line-height:1.35;margin-bottom:8px">Scarica la web-app<br>per giocare meglio da telefono</div>'
+    + '<div style="font-size:13px;line-height:1.55;opacity:.9;margin-bottom:14px">Il Palio parte <b>a tutto schermo</b>, senza le barre del browser che rubano spazio alla Piazza.<br><span style="opacity:.85">' + istruzioni + '</span></div>'
+    + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+    + (__promptInstalla ? '<button id="webAppInstalla" style="font:inherit;font-size:14px;font-weight:800;padding:10px 22px;border:none;border-radius:10px;background:#f0cb35;color:#2a1d0c;cursor:pointer">Installa</button>' : '')
+    + '<button id="webAppContinua" style="font:inherit;font-size:14px;font-weight:700;padding:10px 22px;border:1px solid rgba(240,203,53,.5);border-radius:10px;background:rgba(20,14,8,.7);color:#f3e7cf;cursor:pointer">Continua nel browser</button>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+
+  let fatto = false;
+  const chiudi = () => { if (fatto) return; fatto = true; ov.remove(); poi(); };
+  const bC = document.getElementById("webAppContinua");
+  if (bC) bC.addEventListener("click", chiudi);
+  const bI = document.getElementById("webAppInstalla");
+  if (bI) bI.addEventListener("click", async () => {
+    try { if (__promptInstalla) { __promptInstalla.prompt(); await __promptInstalla.userChoice; __promptInstalla = null; } }
+    catch (e) { /* niente */ }
+    chiudi();
+  });
+  // Toccare il fondo scuro equivale a "continua": non si resta intrappolati.
+  ov.addEventListener("click", (e) => { if (e.target === ov) chiudi(); });
+}
+
 function bindEvents() {
   ui.playButton.addEventListener("click", () => {
-    try { playPalioSound("intro.m4a", { volume: 0.5 }); } catch (e) { /* niente */ }   // musica dei titoli, si ferma all'estrazione
-    openModeChooser();
+    invitaWebApp(() => {
+      try { playPalioSound("intro.m4a", { volume: 0.5 }); } catch (e) { /* niente */ }   // musica dei titoli, si ferma all'estrazione
+      openModeChooser();
+    });
   });
   const alboBtn = document.getElementById("alboButton");
   if (alboBtn) alboBtn.addEventListener("click", () => {
