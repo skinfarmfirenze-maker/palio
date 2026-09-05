@@ -71,6 +71,7 @@ export const CONTRADE = [
 //   meta     = diviso a metà in verticale, le maniche seguono il lato (Drago)
 //   quarti   = quarti alternati, maniche opposte al petto (Lupa, Onda)
 //   righe    = righe verticali sottili (Istrice, Civetta)
+//   davanti  = pettorina di un colore sul corpo dell'altro (Valdimontone)
 //   bande    = bande verticali larghe (Oca)
 // NON esiste il carrè orizzontale sulle spalle: nelle foto dei fantini i colori
 // del giubbetto corrono SEMPRE per il lungo (quarti, metà, bande, righe) e la
@@ -85,9 +86,14 @@ export const DIVISE = {
   // con banda verde, zucchino a spicchi gialli e verdi bordato di turchino.
   bruco:        { taglio: "quarti",   corpo: [LIV.giallo, LIV.verde],    maniche: [LIV.verde, LIV.giallo],        liste: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.verde,    zucchino: [LIV.giallo, LIV.verde],        fascia: LIV.turchino },
   chiocciola:   { taglio: "quarti",   corpo: [LIV.rossoAcceso, LIV.giallo], maniche: [LIV.giallo, LIV.rossoAcceso], liste: LIV.turchino, pantaloni: LIV.rossoAcceso, banda: LIV.giallo, zucchino: [LIV.rossoAcceso, LIV.giallo], fascia: LIV.turchino },
-  civetta:      { taglio: "righe",    corpo: [LIV.rosso, LIV.nero],      maniche: [LIV.nero, LIV.rosso],          liste: LIV.bianco,   pantaloni: LIV.nero,      banda: LIV.rosso,    zucchino: [LIV.rosso, LIV.nero],          fascia: LIV.bianco },
+  // Civetta: rosso e NERO a quarti listati di bianco (foto Civetta Provenzano 2011:
+  // manica nera con banda rossa, busto rosso, polsino e liste bianchi, calzoni rossi).
+  civetta:      { taglio: "quarti",   corpo: [LIV.rosso, LIV.nero],      maniche: [LIV.nero, LIV.rosso],          liste: LIV.bianco,   pantaloni: LIV.rosso,     banda: LIV.nero,     zucchino: [LIV.rosso, LIV.bianco, LIV.nero], fascia: LIV.bianco },
   drago:        { taglio: "meta",     corpo: [LIV.verde, LIV.rosso],     maniche: [LIV.verde, LIV.rosso],         liste: LIV.giallo,   pantaloni: LIV.rosso,     banda: LIV.verde,    zucchino: [LIV.verde, LIV.rosso],         fascia: LIV.giallo },
-  giraffa:      { taglio: "quarti",   corpo: [LIV.bianco, LIV.rosso],    maniche: [LIV.rosso, LIV.bianco],        liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.rosso,    zucchino: [LIV.bianco, LIV.rosso],        fascia: LIV.rosso },
+  // Giraffa: divisa a METÀ in verticale — lato destro rosso, sinistro bianco — e la
+  // divisione continua nei PANTALONI, una gamba per colore (foto "Aquila Giraffa
+  // Chiocciola Leocorno", quattro Contrade nella stessa inquadratura).
+  giraffa:      { taglio: "meta",     corpo: [LIV.bianco, LIV.rosso],    maniche: [LIV.bianco, LIV.rosso],        liste: LIV.rosso,    pantaloni: LIV.bianco,    banda: LIV.rosso,    gambeDivise: true, zucchino: [LIV.bianco, LIV.rosso], fascia: LIV.rosso },
   istrice:      { taglio: "righe",    corpo: [LIV.bianco],               maniche: [LIV.bianco, LIV.bianco],       liste: LIV.blu,      righe: [LIV.rosso, LIV.blu, LIV.nero], pantaloni: LIV.bianco, banda: LIV.rosso, zucchino: [LIV.bianco, LIV.rosso, LIV.bianco, LIV.blu, LIV.bianco, LIV.nero], fascia: LIV.blu },
   leocorno:     { taglio: "quarti",   corpo: [LIV.bianco, LIV.arancio],  maniche: [LIV.arancio, LIV.bianco],      liste: LIV.azzurro,  pantaloni: LIV.bianco,    banda: LIV.arancio,  zucchino: [LIV.arancio, LIV.bianco],      fascia: LIV.azzurro },
   lupa:         { taglio: "quarti",   corpo: [LIV.bianco, LIV.nero],     maniche: [LIV.nero, LIV.bianco],         liste: LIV.arancio,  pantaloni: LIV.bianco,    banda: LIV.nero,     zucchino: [LIV.bianco, LIV.nero],         fascia: LIV.arancio },
@@ -100,10 +106,11 @@ export const DIVISE = {
   pantera:      { taglio: "quarti",   corpo: [LIV.azzurro, LIV.rosso],   maniche: [LIV.rosso, LIV.azzurro],       liste: LIV.bianco,   pantaloni: LIV.rosso,     banda: LIV.azzurro,  zucchino: [LIV.rosso, LIV.azzurro],       fascia: LIV.bianco },
   selva:        { taglio: "quarti",   corpo: [LIV.arancio, LIV.verde],   maniche: [LIV.verde, LIV.arancio],       liste: LIV.bianco,   pantaloni: LIV.arancio,   banda: LIV.verde,    zucchino: [LIV.verde, LIV.arancio],       fascia: LIV.bianco },
   tartuca:      { taglio: "quarti",   corpo: [LIV.giallo, LIV.turchino], maniche: [LIV.turchino, LIV.giallo],     liste: LIV.turchino, pantaloni: LIV.giallo,    banda: LIV.turchino, zucchino: [LIV.giallo, LIV.turchino],     fascia: LIV.turchino },
-  torre:        { taglio: "pieno",    corpo: [LIV.scarlatto],            maniche: [LIV.scarlatto, LIV.scarlatto], liste: LIV.azzurro,  filetto: LIV.bianco, pantaloni: LIV.scarlatto, banda: LIV.bianco, zucchino: [LIV.scarlatto, LIV.scarlatto], fascia: LIV.azzurro },
-  // Valdimontone: "giubbetto e pantaloni rosa pesco con mostre rosse bianche e
-  // gialle" (sito ufficiale) — tinta unita, nessun carrè sulle spalle.
-  valdimontone: { taglio: "pieno",    corpo: [LIV.pesco],                maniche: [LIV.pesco, LIV.pesco],         liste: LIV.rosso,    filetto: LIV.bianco, pantaloni: LIV.pesco, banda: LIV.giallo, zucchino: [LIV.rosso, LIV.giallo, LIV.bianco], fascia: LIV.bianco },
+  torre:        { taglio: "pieno",    corpo: [LIV.cremisi],              maniche: [LIV.cremisi, LIV.cremisi],     liste: LIV.azzurro,  filetto: LIV.bianco, pantaloni: LIV.cremisi,   banda: LIV.bianco, zucchino: [LIV.cremisi, LIV.cremisi],     fascia: LIV.azzurro },
+  // Valdimontone: corpo e maniche rosa pesco con la PETTORINA GIALLA sul davanti
+  // (foto Valdimontone Provenzano 2011) e le mostre rosse, bianche e gialle del
+  // sito ufficiale. Zucchino a sei spicchi, due rossi due gialli due bianchi.
+  valdimontone: { taglio: "davanti",  corpo: [LIV.giallo, LIV.pesco],    maniche: [LIV.pesco, LIV.pesco],         liste: LIV.bianco,   collo: LIV.rosso, pantaloni: LIV.pesco, banda: LIV.giallo, zucchino: [LIV.rosso, LIV.giallo, LIV.bianco], fascia: LIV.rosso },
 };
 
 // Divisa di una Contrada; se non è definita, ricade sui quarti coi tre colori.
@@ -367,6 +374,10 @@ export function texturaGiubbetto(contrada) {
     case "quarti":      // quarti alternati (Lupa, Onda, Chiocciola)
       [cB, cA, cB, cA].forEach((c, i) => { g.fillStyle = c; g.fillRect(uX(i / 4, W), 0, Math.ceil(W / 4) + 1, H); });
       break;
+    case "davanti":     // pettorina davanti nel colore A, corpo nel colore B (Valdimontone)
+      g.fillStyle = cB; g.fillRect(0, 0, W, H);
+      g.fillStyle = cA; g.fillRect(uX(0.25, W), 0, Math.round(W * 0.5), H);
+      break;
     case "bande":       // bande verticali larghe alternate (Oca)
       for (let i = 0; i < 8; i += 1) { g.fillStyle = i % 2 ? cB : cA; g.fillRect(Math.round(i * W / 8), 0, Math.ceil(W / 8) + 1, H); }
       break;
@@ -388,7 +399,8 @@ export function texturaGiubbetto(contrada) {
   // corre anche sui fianchi, dove i due colori si incontrano (è la "listatura"
   // bianca che si vede nelle foto di Pantera, Selva, Leocorno).
   g.fillStyle = L;
-  const cuciture = (D.taglio === "quarti") ? [0, 0.25, 0.5, 0.75] : [0, 0.5];
+  const cuciture = (D.taglio === "quarti") ? [0, 0.25, 0.5, 0.75]
+                 : (D.taglio === "davanti") ? [0, 0.25, 0.5, 0.75] : [0, 0.5];
   cuciture.forEach((u) => g.fillRect(uX(u, W) - (u ? 2 : 0), 0, u ? 4 : 2, H));
   g.fillRect(W - 2, 0, 2, H);
   // filetto del secondo colore di lista sui fianchi (Aquila, Bruco, Nicchio, Torre, Valdimontone)
@@ -456,11 +468,14 @@ export function texturaManica(contrada, lato = 1) {
 // PANTALONE: fondo nel colore secondario con la banda verticale del principale sul
 // lato ESTERNO della gamba (u=0, ancorato in fuori), filettata di liste, e risvolto
 // alla caviglia.
-export function texturaPantalone(contrada) {
+export function texturaPantalone(contrada, lato = 1) {
   const W = 128, H = 128;
   const { cv, g } = tela(W, H);
   const D = divisaDi(contrada);
-  g.fillStyle = D.pantaloni; g.fillRect(0, 0, W, H);
+  // Nelle divise a metà con `gambeDivise` la divisione del giubbetto continua nei
+  // calzoni: una gamba per colore (Giraffa, foto delle quattro Contrade).
+  const base = (D.gambeDivise && D.corpo[1]) ? (lato < 0 ? D.corpo[0] : D.corpo[1]) : D.pantaloni;
+  g.fillStyle = base; g.fillRect(0, 0, W, H);
   if (D.taglio === "righe" && D.righe) {
     // tripla riga laterale nei colori delle righe (Istrice)
     const rw = Math.round(W * 0.045);
@@ -472,7 +487,7 @@ export function texturaPantalone(contrada) {
   } else {
     // banda laterale (u=0 è il lato esterno della gamba) filettata di liste
     const banda = Math.round(W * 0.13);
-    g.fillStyle = D.banda;
+    g.fillStyle = (D.gambeDivise && D.corpo[1]) ? ((base === D.corpo[0]) ? D.corpo[1] : D.corpo[0]) : D.banda;
     g.fillRect(0, 0, banda, H); g.fillRect(W - banda, 0, banda, H);
     g.fillStyle = D.liste;
     g.fillRect(banda, 0, 3, H); g.fillRect(W - banda - 3, 0, 3, H);
@@ -792,7 +807,8 @@ export function buildFantino(contrada, opts = {}) {
   const matGiubbetto = stoffa(texturaGiubbetto(contrada), seedStoffa, 2);
   const matManicaSx = stoffa(texturaManica(contrada, -1), seedStoffa + 1, 1.5);
   const matManicaDx = stoffa(texturaManica(contrada, +1), seedStoffa + 1, 1.5);
-  const matPantalone = stoffa(texturaPantalone(contrada), seedStoffa + 2, 1.5);
+  const matPantaloneSx = stoffa(texturaPantalone(contrada, -1), seedStoffa + 2, 1.5);
+  const matPantaloneDx = stoffa(texturaPantalone(contrada, +1), seedStoffa + 2, 1.5);
   const matZucchino = opaco(new THREE.MeshStandardMaterial({ map: texturaZucchino(contrada), roughness: 0.55, metalness: 0.0 }));
   const DIETRO = new THREE.Vector3(0, 0, -1);
   const add = (geo, material) => {
@@ -1000,7 +1016,7 @@ export function buildFantino(contrada, opts = {}) {
       return 0.035 * ginocchio * Math.sin(ang * 4 + t * 21 + seedPieghe)
            + 0.030 * fondo * Math.sin(ang * 6 + seedPieghe * 2.3);
     };
-    const gamba = new THREE.Mesh(loftLimb({ path, profile, steps: 26, radial: 18, align: fuori, capDepth: 0.12, rilievo: piegheGamba }), matPantalone);
+    const gamba = new THREE.Mesh(loftLimb({ path, profile, steps: 26, radial: 18, align: fuori, capDepth: 0.12, rilievo: piegheGamba }), sign < 0 ? matPantaloneSx : matPantaloneDx);
     gamba.castShadow = true;
     rider.add(gamba);
 
@@ -1021,7 +1037,7 @@ export function buildFantino(contrada, opts = {}) {
   // nascevano staccate, con buchi visibili all'anca. Due glutei + bacino nel
   // tessuto del pantalone chiudono il fondoschiena appoggiandolo al cavallo, e
   // un raccordo per lato salda la coscia al tronco.
-  const colSedere = L.fasceAttive ? L.c0 : L.c1;
+  const colSedere = divisaDi(contrada).pantaloni;   // il sedere è nel tessuto dei calzoni
   const matSedere = opaco(new THREE.MeshStandardMaterial({ color: colSedere, roughness: 0.68, metalness: 0.0 }));
   matSedere.normalMap = normalMapTessuto(96, 96, 5, contrada.id.length * 1.9);
   matSedere.normalMap.wrapS = matSedere.normalMap.wrapT = THREE.RepeatWrapping;
