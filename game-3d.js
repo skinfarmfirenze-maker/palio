@@ -14919,9 +14919,22 @@ function bindEvents() {
   });
   window.addEventListener("resize", resize);
   // Controller PlayStation: X marcia su, O marcia giù, levetta sinistra sterza.
+  // La riga dei comandi del controller compare sulla home SOLO se ne colleghi
+  // uno davvero: prima stava sempre lì, anche a chi un controller non ce l'ha.
   window.addEventListener("gamepadconnected", () => {
+    segnaController();
     showMessage("Controller collegato — X: marcia su · O: marcia giù · levetta sx: sterza", 3.0, "good");
   });
+  window.addEventListener("gamepaddisconnected", segnaController);
+  segnaController();   // gia' collegato prima di aprire la pagina
+}
+// Accende/spegne la riga del controller sulla home.
+function segnaController() {
+  try {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    const c = Array.prototype.some.call(pads || [], (p) => p && p.connected);
+    document.body.classList.toggle("con-controller", !!c);
+  } catch (e) { /* niente */ }
 }
 
 function update(dt, time) {

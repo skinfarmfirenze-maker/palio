@@ -1192,8 +1192,17 @@ textarea {
    esiste) si mangiavano meta' pannello, i due bottoni in basso a destra
    finivano SOPRA il pannello, e la firma restava tagliata dal bordo. */
 
-/* I comandi da toccare si vedono solo sul telefono; i tasti solo altrove. */
+/* Ogni dispositivo mostra i SUOI comandi: i tasti sul PC, le frecce da toccare
+   sul telefono, il controller solo quando ne colleghi uno davvero. */
 .controls-touch { display: none; }
+.controls-pad { display: none; }
+body.con-controller .controls-pad {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.7;
+  line-height: 1.9;
+}
 .controls-touch .tk {
   display: inline-block;
   min-width: 26px;
@@ -1232,6 +1241,11 @@ textarea {
   #screenMenu .lede { font-size: 13px; margin-bottom: 14px; }
   #screenMenu .btn-primary { padding: 10px 34px; font-size: 15px; }
   .firma-autore { margin-top: 9px; }
+  /* Col controller collegato le righe diventano tre: il pannello non deve
+     crescere fin sopra la firma, quindi qui si stringe e semmai scorre. */
+  #screenMenu .panel { max-height: calc(100vh - 62px); }
+  body.con-controller .controls-pad { margin-top: 6px; font-size: 11px; line-height: 1.65; }
+  body.con-controller .controls-touch { margin-top: 9px; line-height: 1.7; }
 
   /* I due bottoni non stanno piu' SOPRA il pannello: si affiancano in una
      riga sola lungo il bordo basso, dentro l'area sicura dell'iPhone. */
