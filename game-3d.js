@@ -15494,16 +15494,16 @@ const CYCLE_MS = 48 * 3600 * 1000;                               // durata di og
 // sviluppatori (Mario Rossi), SENZA timer/countdown.
 const DEMO_CLOSE_AT = new Date(2026, 7, 21, 21, 0, 0).getTime();
 // ── FINESTRA DI APERTURA ────────────────────────────────────────────────────
-// Mezz'ora in cui il gioco e' aperto a TUTTI GLI ISCRITTI, non solo ai tre
+// Le due ore in cui il gioco e' aperto a TUTTI GLI ISCRITTI, non solo ai tre
 // abilitati. Comincia e finisce da sola, senza che nessuno debba fare niente:
-// alle 23:00 il gioco torna chiuso esattamente com'era prima.
+// alle 15:00 il gioco torna chiuso esattamente com'era prima.
 // (I mesi in JavaScript partono da zero: 8 = settembre.)
-const APERTURA_DA = new Date(2026, 8, 1, 22, 30, 0).getTime();   // 1 settembre 2026, 22:30
-const APERTURA_A  = new Date(2026, 8, 1, 23, 0, 0).getTime();    // 1 settembre 2026, 23:00
-// Alle 23:05 si chiude per davvero: chi e' rimasto dentro si vede ricaricare la
-// pagina e trova il gate, anche se sta correndo. I cinque minuti fra le 23:00 e le
-// 23:05 servono a far finire il Palio a chi lo aveva gia' cominciato.
-const CHIUSURA_FORZATA = new Date(2026, 8, 1, 23, 5, 0).getTime();
+const APERTURA_DA = new Date(2026, 8, 5, 13, 0, 0).getTime();    // 5 settembre 2026, 13:00
+const APERTURA_A  = new Date(2026, 8, 5, 15, 0, 0).getTime();    // 5 settembre 2026, 15:00
+// Alle 15:05 si chiude per davvero: chi e' rimasto dentro si vede ricaricare la
+// pagina e trova il gate, anche se sta correndo. I cinque minuti fra le 15:00 e le
+// 15:05 servono a far finire il Palio a chi lo aveva gia' cominciato.
+const CHIUSURA_FORZATA = new Date(2026, 8, 5, 15, 5, 0).getTime();
 function aperturaInCorso() {
   const ora = Date.now();
   return ora >= APERTURA_DA && ora < APERTURA_A;
@@ -16680,8 +16680,8 @@ function init() {
     try {
       if (!demoBloccaQuesto()) return;
       if (document.getElementById("demoGate")) return;
-      // Fra le 23:00 e le 23:05 chi e' in mezzo a un Palio lo finisce: non gli si
-      // ricarica la pagina sotto i piedi. Dalle 23:05 in poi si ricarica comunque,
+      // Fra le 15:00 e le 15:05 chi e' in mezzo a un Palio lo finisce: non gli si
+      // ricarica la pagina sotto i piedi. Dalle 15:05 in poi si ricarica comunque,
       // corsa o non corsa: il gioco e' chiuso e restano dentro solo i tre abilitati.
       const inPartita = state.mode === "mossa" || state.mode === "race" || state.mode === "replayWin";
       if (inPartita && Date.now() < CHIUSURA_FORZATA) return;
