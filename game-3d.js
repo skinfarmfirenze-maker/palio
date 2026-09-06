@@ -15705,6 +15705,7 @@ function isAdminUrl() {
 const GIOCATORI_ABILITATI = new Set([
   "papeusleonardus10@gmail.com",   // Leonardo Papei
   "fili.toscano5@gmail.com",       // Filippo Toscano
+  "pietromartini821@gmail.com",    // Pietro Martini
 ]);
 function accountAbilitato(acc) {
   if (isMarioRossi(acc)) return true;                       // lo sviluppatore
