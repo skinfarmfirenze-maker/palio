@@ -237,6 +237,9 @@ const NERV_HIT_COOLDOWN = 0.70;     // max UNA botta ogni 0.7s
 // Contrade venga colpito insieme: più di così non può salire, punto. È una rete di
 // sicurezza voluta: inseguire le singole sorgenti si è già rivelato inaffidabile.
 const NERV_MAX_RISE = 0.04;         // al secondo
+// Oltre questo nervosismo (0..1, cioe' il 70%) il cavallo brucia fiato alla
+// mossa invece di recuperarlo.
+const NERVO_BRUCIA_FIATO = 0.70;
 // Cosa conta come BOTTA: SOLO qualcuno che ti preme addosso deliberatamente —
 // il giocatore con Q/P (di lato) o A/L (girandoti contro), l'AI con la sua spinta.
 // Ogni pressione conteggiata vale una botta (+NERV_HIT_GAIN). Gli urti di
@@ -9263,6 +9266,7 @@ function startMossa(fromTratta = false) {
   clearFallenRiders();   // via eventuali fantini caduti del palio precedente
   tiraMinACavallo();     // quanti fantini restano in sella: si tira a ogni palio
   state.staminaRecCd = 0;   // il recupero del fiato alla mossa riparte da zero
+  state.staminaNervCd = 0;  // …e cosi' il consumo di chi si agita
   state.horses.forEach((h) => {
     if (h.group.userData.jockey) h.group.userData.jockey.visible = true;   // fantino di nuovo in sella
     h.scosso = false; h.fallCd = 0;                                        // azzera lo stato "scosso" del palio prima
@@ -10330,12 +10334,25 @@ function updateMossa(dt, time) {
   // corsa vera pagati da tutte e dieci — e con una mossa lunga e due o tre
   // false si partiva stanchi senza aver corso. Ora, in attesa alla mossa, TUTTE
   // E DIECI recuperano 1 di stamina ogni 3 secondi, fino al loro massimo.
+  // ...ma solo chi sta CALMO. Oltre il 70% di nervosismo il cavallo si consuma da
+  // solo fra i canapi — scalpita, si gira, non sta fermo — e invece di recuperare
+  // PERDE 1 di stamina ogni 2 secondi. E' il prezzo di una mossa lunga passata ad
+  // agitarsi: chi resta tranquillo arriva al via col fiato, chi no lo brucia li'.
   state.staminaRecCd = (state.staminaRecCd || 0) + dt;
   while (state.staminaRecCd >= 3) {
     state.staminaRecCd -= 3;
     state.horses.forEach((h) => {
+      if ((h.nervousnessCurrent || 0) > NERVO_BRUCIA_FIATO) return;   // agitato: non recupera
       const max = h.staminaMax || STAMINA_MIN_ROLL;
       if ((h.stamina || 0) < max) h.stamina = Math.min(max, (h.stamina || 0) + 1);
+    });
+  }
+  state.staminaNervCd = (state.staminaNervCd || 0) + dt;
+  while (state.staminaNervCd >= 2) {
+    state.staminaNervCd -= 2;
+    state.horses.forEach((h) => {
+      if ((h.nervousnessCurrent || 0) <= NERVO_BRUCIA_FIATO) return;
+      h.stamina = Math.max(0, (h.stamina || 0) - 1);
     });
   }
   state.forcedCanapeCd = Math.max(0, (state.forcedCanapeCd || 0) - dt);   // cooldown "forza il canape"
