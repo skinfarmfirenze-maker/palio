@@ -9262,6 +9262,7 @@ function startMossa(fromTratta = false) {
   // Alla mossa i fantini SONO in sella (dopo la tratta erano nascosti).
   clearFallenRiders();   // via eventuali fantini caduti del palio precedente
   tiraMinACavallo();     // quanti fantini restano in sella: si tira a ogni palio
+  state.staminaRecCd = 0;   // il recupero del fiato alla mossa riparte da zero
   state.horses.forEach((h) => {
     if (h.group.userData.jockey) h.group.userData.jockey.visible = true;   // fantino di nuovo in sella
     h.scosso = false; h.fallCd = 0;                                        // azzera lo stato "scosso" del palio prima
@@ -10323,6 +10324,20 @@ function isHuman(horse) { return !!(horse && horse.player && !horse.autopilot); 
 function updateMossa(dt, time) {
   state.mossaTimer += dt;
   state.mossaSubTimer += dt;
+  // ── FRA I CANAPI IL FIATO SI RIPRENDE ─────────────────────────────────────
+  // Alla mossa la stamina non si consuma gia' adesso: qui non gira il codice
+  // della corsa. La consuma pero' la MOSSA FALSA, che sono quattro secondi di
+  // corsa vera pagati da tutte e dieci — e con una mossa lunga e due o tre
+  // false si partiva stanchi senza aver corso. Ora, in attesa alla mossa, TUTTE
+  // E DIECI recuperano 1 di stamina ogni 3 secondi, fino al loro massimo.
+  state.staminaRecCd = (state.staminaRecCd || 0) + dt;
+  while (state.staminaRecCd >= 3) {
+    state.staminaRecCd -= 3;
+    state.horses.forEach((h) => {
+      const max = h.staminaMax || STAMINA_MIN_ROLL;
+      if ((h.stamina || 0) < max) h.stamina = Math.min(max, (h.stamina || 0) + 1);
+    });
+  }
   state.forcedCanapeCd = Math.max(0, (state.forcedCanapeCd || 0) - dt);   // cooldown "forza il canape"
   // FALSO AVVIO in corso: galoppo breve → mortaretto → ritorno al tondino. Blocca
   // ogni altra logica di mossa finché la sequenza dei 4s non è finita.
