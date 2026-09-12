@@ -5475,7 +5475,11 @@ function ensureEstrazioneCrowd() {
   // una piazza spoglia e' meglio di una schermata nera.
   if (scenaCtxRef) {
     try {
-      const folla = costruisciFollaCentro(scenaCtxRef, { quanti: 9000, anchePista: true });
+      // `concentra`: il grosso della gente si ammassa sotto il Palazzo Comunale,
+      // dove si fa l'estrazione; il resto dell'anello resta popolato ma rado.
+      const folla = costruisciFollaCentro(scenaCtxRef, {
+        quanti: 12000, anchePista: true, concentra: { cum: getStraightCenterP() },
+      });
       // Le novemila persone stanno in DUE soli InstancedMesh, e three.js decide se
       // disegnarli guardando la sfera di ingombro — che senza questa chiamata e'
       // quella della singola capsula all'origine, non quella di tutte le istanze.
