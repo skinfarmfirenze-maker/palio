@@ -1510,6 +1510,9 @@ export function costruisciFollaCentro(ctx, opz = {}) {
   g.name = "FollaCentro";
   const quanti = opz.quanti ?? 6000;
   const margine = opz.margine ?? 1.6;          // dal bordo pista (staccionata a 0.35)
+  // ESTRAZIONE delle Contrade: la piazza è ancora nuda (niente tufo né palchi)
+  // e il popolo riempie TUTTO, tracciato compreso — come nelle foto vere.
+  const anchePista = !!opz.anchePista;
   const camp = ctx.campioni;
 
   // Bounding box dell'anello, per campionare i punti candidati.
@@ -1551,12 +1554,17 @@ export function costruisciFollaCentro(ctx, opz = {}) {
     }
     const dist = Math.sqrt(d2min);
     const dal = dist - (ctx.largoInterno ? ctx.largoInterno(migliore) : 11.5);
-    if (dal < margine) continue;                                  // troppo vicino: tufo/staccionata
     const vx = qx - migliore.point.x, vz = qz - migliore.point.z;
     const f = ctx.fuori(migliore.point);
-    if (vx * f.x + vz * f.z >= 0) continue;                       // lato esterno: scarta
-    // Più fitta vicino alla pista: oltre i 9 dal bordo la densità cala.
-    if (dal > 9 && rnd() < (dal - 9) / 18) continue;
+    const sulTracciato = anchePista
+      && dist < (ctx.largoEsterno ? ctx.largoEsterno(migliore) : 11.5) - 0.8;
+    if (!sulTracciato) {
+      if (dal < margine) continue;                                // troppo vicino: tufo/staccionata
+      if (vx * f.x + vz * f.z >= 0) continue;                     // lato esterno: scarta
+      // Più fitta vicino alla pista: oltre i 9 dal bordo la densità cala
+      // (ma all'estrazione la piazza è gremita uniforme, niente diradamento).
+      if (!anchePista && dal > 9 && rnd() < (dal - 9) / 18) continue;
+    }
     const alt = 0.86 + rnd() * 0.3;
     d.position.set(qx, 0.62 * alt, qz);
     d.rotation.set(0, rnd() * TAU, 0);

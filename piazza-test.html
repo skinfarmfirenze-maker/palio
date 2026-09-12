@@ -119,7 +119,10 @@ scene.add(costruisciPalizzata(ctx, { da: 292.5, a: 323.5 }));
 // Materassi di San Martino: stesso intervallo del gioco (SM_IN−1 .. SM_OUT+17).
 scene.add(costruisciMaterassi(ctx, { da: 155.5, a: 198.5 }));
 // Folla del centro: ?folla=N (0 per spegnerla). Default: piazza dell'assegnazione, piena.
-if (qp.get("folla") !== "0") scene.add(costruisciFollaCentro(ctx, { quanti: parseInt(qp.get("folla") || "6000", 10) }));
+if (qp.get("folla") !== "0") scene.add(costruisciFollaCentro(ctx, {
+  quanti: parseInt(qp.get("folla") || "6000", 10),
+  anchePista: qp.get("estrazione") === "1"   // piazza nuda: gente anche sul tracciato
+}));
 // Facciata segnaposto del Palazzo nel banco: un muro a bordo+3.2 largo 34, per
 // vedere cappella/entrone/palchi delle comparse contro qualcosa.
 if (qp.get("palazzo") !== "0") {
