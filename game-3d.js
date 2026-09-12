@@ -2928,6 +2928,10 @@ function stopSuoniCorsa() {
   try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* niente */ }
 }
 // Sottofondo del TONDINO (la "busta"): gira mentre il mossiere chiama le Contrade
+// Musica di sottofondo del REPLAY. Metti qui il nome del file (dentro suoni/) e
+// parte da sola sotto il brusio della corsa; null = nessuna musica, come prima.
+const REPLAY_MUSICA = null;
+const REPLAY_MUSICA_VOL = 0.22;   // basso: sotto il Palio, non sopra
 const BUSTA_FILE = "busta.m4a";
 function startBusta(volume = 0.4) { playPalioSound(BUSTA_FILE, { volume, loop: true }); }
 function fadeBusta(seconds = 1.2) { fadePalioSound(BUSTA_FILE, seconds); }
@@ -14278,6 +14282,12 @@ function startWinnerReplay() {
   try { fadePalioSound("PASSOAVITTORIA.mp3", 0.6); } catch (e) { /* niente */ }
   try { startCrowdBed(0.3); } catch (e) { /* niente */ }
   try { startGaloppo(0.34); } catch (e) { /* niente */ }
+  // MUSICA SOTTO IL REPLAY: parte insieme al brusio, a volume basso perche' il
+  // Palio si deve sentire sopra. Il file va messo in suoni/ e il suo nome qui:
+  // finche' REPLAY_MUSICA resta null non si tenta nemmeno di caricarlo.
+  if (REPLAY_MUSICA) {
+    try { playPalioSound(REPLAY_MUSICA, { volume: REPLAY_MUSICA_VOL, loop: true }); } catch (e) { /* niente */ }
+  }
   // Si parte dalla regia (i tagli scelti dal gioco); con C si gira fra tutte le
   // altre inquadrature. La vista che avevi in corsa si ritrova alla fine.
   state.cameraModePrimaDelReplay = state.cameraMode;
@@ -14405,6 +14415,7 @@ function endWinnerReplay() {
   // Passo alla Vittoria — che e' la musica di quel momento.
   try { fadeCrowdBed(1.2); } catch (e) { /* niente */ }
   try { fadeGaloppo(1.2); } catch (e) { /* niente */ }
+  if (REPLAY_MUSICA) { try { fadePalioSound(REPLAY_MUSICA, 1.2); } catch (e) { /* niente */ } }
   try { playPalioSound("PASSOAVITTORIA.mp3", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
   // Torna la vista che avevi in corsa: il replay non te la cambia.
   if (state.cameraModePrimaDelReplay) {
