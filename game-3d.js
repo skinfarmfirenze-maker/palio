@@ -5470,7 +5470,7 @@ function ensureEstrazioneCrowd() {
   // POPOLO dell'ESTRAZIONE: la piazza e' ancora nuda — niente tufo, niente
   // palchi — e la gente riempie TUTTO, tracciato compreso, come nelle foto vere.
   // Il modulo della scenografia lo fa con DUE sole chiamate di disegno per
-  // novemila persone; qui prima se ne mettevano 380, una per una: poca gente e
+  // dodicimila persone; qui prima se ne mettevano 380, una per una: poca gente e
   // 380 disegni. Se il modulo non risponde si ricade sul vecchio metodo, che
   // una piazza spoglia e' meglio di una schermata nera.
   if (scenaCtxRef) {
@@ -5479,17 +5479,6 @@ function ensureEstrazioneCrowd() {
       // dove si fa l'estrazione; il resto dell'anello resta popolato ma rado.
       const folla = costruisciFollaCentro(scenaCtxRef, {
         quanti: 12000, anchePista: true, concentra: { cum: getStraightCenterP() },
-      });
-      // Le novemila persone stanno in DUE soli InstancedMesh, e three.js decide se
-      // disegnarli guardando la sfera di ingombro — che senza questa chiamata e'
-      // quella della singola capsula all'origine, non quella di tutte le istanze.
-      // Risultato: appena la camera dell'estrazione guardava il Palazzo, l'origine
-      // usciva dall'inquadratura e la piazza si svuotava di colpo. Qui l'ingombro
-      // si ricalcola sulle istanze vere, cosi' il taglio fuori campo torna giusto.
-      folla.traverse((o) => {
-        if (o.isInstancedMesh) {
-          try { o.computeBoundingSphere(); } catch (e) { o.frustumCulled = false; }
-        }
       });
       folla.visible = false;
       scene.add(folla);
