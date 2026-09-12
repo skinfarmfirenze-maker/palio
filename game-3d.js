@@ -8,7 +8,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
-import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -5467,6 +5467,32 @@ function endEstrazione() {
 // bandiere (niente cavalli: la corsa non è ancora iniziata). Creato una volta.
 function ensureEstrazioneCrowd() {
   if (state.estrazioneCrowd) return state.estrazioneCrowd;
+  // POPOLO dell'ESTRAZIONE: la piazza e' ancora nuda — niente tufo, niente
+  // palchi — e la gente riempie TUTTO, tracciato compreso, come nelle foto vere.
+  // Il modulo della scenografia lo fa con DUE sole chiamate di disegno per
+  // novemila persone; qui prima se ne mettevano 380, una per una: poca gente e
+  // 380 disegni. Se il modulo non risponde si ricade sul vecchio metodo, che
+  // una piazza spoglia e' meglio di una schermata nera.
+  if (scenaCtxRef) {
+    try {
+      const folla = costruisciFollaCentro(scenaCtxRef, { quanti: 9000, anchePista: true });
+      // Le novemila persone stanno in DUE soli InstancedMesh, e three.js decide se
+      // disegnarli guardando la sfera di ingombro — che senza questa chiamata e'
+      // quella della singola capsula all'origine, non quella di tutte le istanze.
+      // Risultato: appena la camera dell'estrazione guardava il Palazzo, l'origine
+      // usciva dall'inquadratura e la piazza si svuotava di colpo. Qui l'ingombro
+      // si ricalcola sulle istanze vere, cosi' il taglio fuori campo torna giusto.
+      folla.traverse((o) => {
+        if (o.isInstancedMesh) {
+          try { o.computeBoundingSphere(); } catch (e) { o.frustumCulled = false; }
+        }
+      });
+      folla.visible = false;
+      scene.add(folla);
+      state.estrazioneCrowd = folla;
+      return folla;
+    } catch (e) { /* si continua col metodo di prima */ }
+  }
   const cols = [0x7a6a58, 0x55606b, 0x8a8478, 0x6b4a3a, 0x9a9488, 0x40484f,
     0xb8a890, 0xcfc8ba, 0x736d63, 0x84725c, 0xa89a86, 0xc44135, 0x2e689b, 0x287b55, 0xe0b84a];
   const mats = cols.map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 }));
