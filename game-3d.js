@@ -2868,6 +2868,7 @@ function stopPalioSounds() {
     try {
       if (a.__fadeTimer) { clearInterval(a.__fadeTimer); a.__fadeTimer = null; }
       if (a.__stopTimer) { clearTimeout(a.__stopTimer); a.__stopTimer = null; }
+      if (a.__calaTimer) { clearTimeout(a.__calaTimer); a.__calaTimer = null; }   // rialzo di volume programmato
       a.pause(); a.currentTime = 0;
     } catch (e) { /* niente */ }
   });
@@ -2905,6 +2906,28 @@ function startGaloppo(volume = 0.34) { playPalioSound(GALOPPO_FILE, { volume, lo
 function fadeGaloppo(seconds = 2.4) { fadePalioSound(GALOPPO_FILE, seconds); }
 // Sottofondo del TONDINO (la "busta"): gira mentre il mossiere chiama le Contrade
 // e sfuma appena si parte.
+// Spegne DI COLPO i suoni della corsa, senza toccare quelli del tondino. Serve
+// al rientro dalla mossa falsa: li' la corsa non c'e' stata, e il sottofondo non
+// deve sopravviverle nemmeno mezzo secondo sopra i canapi. Rispetto a una
+// dissolvenza qui si azzerano anche i timer in sospeso — __calaTimer e
+// __stopTimer, che scattano DOPO e possono rialzare il volume o riavviare una
+// dissolvenza su un suono che credevamo spento.
+function stopSuoniCorsa() {
+  [CROWD_BED_FILE, GALOPPO_FILE, "start.m4a"].forEach((file) => {
+    const a = __palioAudio[file];
+    if (!a) return;
+    try {
+      if (a.__fadeTimer) { clearInterval(a.__fadeTimer); a.__fadeTimer = null; }
+      if (a.__stopTimer) { clearTimeout(a.__stopTimer); a.__stopTimer = null; }
+      if (a.__calaTimer) { clearTimeout(a.__calaTimer); a.__calaTimer = null; }
+      a.pause(); a.currentTime = 0; a.loop = false;
+    } catch (e) { /* niente */ }
+  });
+  // E la voce del Mossiere: se la falsa e' scattata mentre era a meta' frase,
+  // finirebbe di parlare sopra il tondino.
+  try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { /* niente */ }
+}
+// Sottofondo del TONDINO (la "busta"): gira mentre il mossiere chiama le Contrade
 const BUSTA_FILE = "busta.m4a";
 function startBusta(volume = 0.4) { playPalioSound(BUSTA_FILE, { volume, loop: true }); }
 function fadeBusta(seconds = 1.2) { fadePalioSound(BUSTA_FILE, seconds); }
@@ -10229,9 +10252,7 @@ function updateFalseStartRunout(dt, time) {
     // gruppo erano partiti col via — vanno spenti, o resterebbero accesi sopra il
     // tondino mentre il Mossiere richiama le Contrade. La busta del tondino
     // rientra da sola in resetMossaAfterFalsa.
-    try { fadeCrowdBed(0.6); } catch (e) { /* niente */ }
-    try { fadeGaloppo(0.6); } catch (e) { /* niente */ }
-    try { fadePalioSound("start.m4a", 0.3); } catch (e) { /* niente */ }
+    try { stopSuoniCorsa(); } catch (e) { /* niente */ }
     // Replay e traiettorie tornano quelli veri: la partenza annullata non lascia traccia.
     state.replay = state.falsaBackupReplay || null;
     state.tracciaCorsa = state.falsaBackupTraccia || null;
