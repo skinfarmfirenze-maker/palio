@@ -630,6 +630,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
       im.setColorAt(i, colore.set(m.tinta));
     });
     im.instanceMatrix.needsUpdate = true;
+    if (im.computeBoundingSphere) im.computeBoundingSphere();
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     im.castShadow = true;
     g.add(im);
@@ -651,6 +652,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
       im.setColorAt(i, colore.setHex(tinte[i % tinte.length]));
     });
     im.instanceMatrix.needsUpdate = true;
+    if (im.computeBoundingSphere) im.computeBoundingSphere();
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     g.add(im);
   }
@@ -694,8 +696,11 @@ export function costruisciPalazzi(ctx, opz = {}) {
       corrimano.setMatrixAt(i, d.matrix);
     });
     corrimano.instanceMatrix.needsUpdate = true;
+    if (corrimano.computeBoundingSphere) corrimano.computeBoundingSphere();
     soletta.instanceMatrix.needsUpdate = true;
+    if (soletta.computeBoundingSphere) soletta.computeBoundingSphere();
     parapetto.instanceMatrix.needsUpdate = true;
+    if (parapetto.computeBoundingSphere) parapetto.computeBoundingSphere();
     if (parapetto.instanceColor) parapetto.instanceColor.needsUpdate = true;
     soletta.castShadow = true;
     g.add(soletta, parapetto, corrimano);
@@ -717,6 +722,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
       im.setColorAt(i, colore.setHex(tinte[Math.floor(s.tinta * tinte.length) % tinte.length]));
     });
     im.instanceMatrix.needsUpdate = true;
+    if (im.computeBoundingSphere) im.computeBoundingSphere();
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     g.add(im);
   }

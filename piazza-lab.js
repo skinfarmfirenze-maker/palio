@@ -589,6 +589,7 @@ export function costruisciSteccatoInterno(ctx, opz = {}) {
   });
   imS.count = n;
   imS.instanceMatrix.needsUpdate = true;
+  if (imS.computeBoundingSphere) imS.computeBoundingSphere();
   g.add(imS);
 
   // Pilastrini di travertino: fusto + cappello leggermente aggettante.
@@ -609,7 +610,9 @@ export function costruisciSteccatoInterno(ctx, opz = {}) {
   });
   imP.count = m; imC.count = m;
   imP.instanceMatrix.needsUpdate = true;
+  if (imP.computeBoundingSphere) imP.computeBoundingSphere();
   imC.instanceMatrix.needsUpdate = true;
+  if (imC.computeBoundingSphere) imC.computeBoundingSphere();
   g.add(imP, imC);
 
   return g;
@@ -689,7 +692,9 @@ export function costruisciPalchi(ctx, opz = {}) {
   });
   imRail.count = a; imRung.count = b;
   imRail.instanceMatrix.needsUpdate = true;
+  if (imRail.computeBoundingSphere) imRail.computeBoundingSphere();
   imRung.instanceMatrix.needsUpdate = true;
+  if (imRung.computeBoundingSphere) imRung.computeBoundingSphere();
   g.add(imRail, imRung);
 
   // Ringhiera sul fronte della gradinata: nelle foto spunta sopra la palancata
@@ -717,6 +722,7 @@ export function costruisciPalchi(ctx, opz = {}) {
     });
     imM.count = k2;
     imM.instanceMatrix.needsUpdate = true;
+    if (imM.computeBoundingSphere) imM.computeBoundingSphere();
     g.add(imM);
   }
 
@@ -802,6 +808,7 @@ export function costruisciPubblicoPalchi(posti, opz = {}) {
   });
   [busto, testa].forEach((im) => {
     im.instanceMatrix.needsUpdate = true;
+    if (im.computeBoundingSphere) im.computeBoundingSphere();
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     im.castShadow = false;
     im.receiveShadow = false;
@@ -1218,6 +1225,7 @@ export function costruisciPalizzata(ctx, opz = {}) {
   });
   imP.count = n;
   imP.instanceMatrix.needsUpdate = true;
+  if (imP.computeBoundingSphere) imP.computeBoundingSphere();
   g.add(imP);
   return g;
 }
@@ -1278,6 +1286,7 @@ export function costruisciVerrocchio(ctx, opz = {}) {
   }
   imB.count = nB;
   imB.instanceMatrix.needsUpdate = true;
+  if (imB.computeBoundingSphere) imB.computeBoundingSphere();
   g.add(imB);
   // Pedana interna e il MOSSIERE in piedi, dal busto in su sopra la cimasa.
   const mossiere = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.66, 3, 8), opaco({ color: 0x494540, roughness: 0.9 }));
@@ -1426,7 +1435,9 @@ export function costruisciFollaInPiedi(ctx, opz = {}) {
   });
   im.count = n; teste.count = n;
   im.instanceMatrix.needsUpdate = true;
+  if (im.computeBoundingSphere) im.computeBoundingSphere();
   teste.instanceMatrix.needsUpdate = true;
+  if (teste.computeBoundingSphere) teste.computeBoundingSphere();
   if (im.instanceColor) im.instanceColor.needsUpdate = true;
   if (teste.instanceColor) teste.instanceColor.needsUpdate = true;
   g.add(im, teste);
@@ -1579,8 +1590,12 @@ export function costruisciFollaCentro(ctx, opz = {}) {
       if (!anchePista && dal > 9 && rnd() < (dal - 9) / 18) continue;
     }
     if (conc && rnd() > pesoConcentra(migliore.cum)) continue;   // ammassa sotto il Palazzo
+    // Appoggio sul terreno VERO: l'altimetria non è piatta (davanti al Palazzo
+    // il fondo sta a −1.2) e con la y fissa le 9000 persone finivano dentro il
+    // selciato — misurato dalla chat gioco: +2.5 in y e spuntavano le teste.
+    const qy = ctx.quota ? ctx.quota(migliore) : 0;
     const alt = 0.86 + rnd() * 0.3;
-    d.position.set(qx, 0.62 * alt, qz);
+    d.position.set(qx, qy + 0.62 * alt, qz);
     d.rotation.set(0, rnd() * TAU, 0);
     d.scale.set(1, alt, 1);
     d.updateMatrix();
@@ -1588,7 +1603,7 @@ export function costruisciFollaCentro(ctx, opz = {}) {
     col.setHex(tinte[Math.floor(rnd() * tinte.length) % tinte.length]);
     col.multiplyScalar(0.75 + rnd() * 0.45);
     corpi.setColorAt(n, col);
-    d.position.y = 1.24 * alt + 0.28;
+    d.position.y = qy + 1.24 * alt + 0.28;
     d.scale.set(1, 1, 1);
     d.updateMatrix();
     teste.setMatrixAt(n, d.matrix);
@@ -1598,7 +1613,9 @@ export function costruisciFollaCentro(ctx, opz = {}) {
   }
   corpi.count = n; teste.count = n;
   corpi.instanceMatrix.needsUpdate = true;
+  if (corpi.computeBoundingSphere) corpi.computeBoundingSphere();
   teste.instanceMatrix.needsUpdate = true;
+  if (teste.computeBoundingSphere) teste.computeBoundingSphere();
   if (corpi.instanceColor) corpi.instanceColor.needsUpdate = true;
   if (teste.instanceColor) teste.instanceColor.needsUpdate = true;
   corpi.castShadow = false; teste.castShadow = false;
