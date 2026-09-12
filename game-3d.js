@@ -12218,7 +12218,12 @@ function lineaDiDefault() {
       const cp = clamp((pend / Math.max(cur, 0.15)) * 1.15, -1, 1);
       const alCasato = NARROW_READY && prog > CAS_IN - 18 && prog < CAS_OUT + 12;
       const uscita = alCasato ? CURVA_USCITA_CASATO : CURVA_USCITA_SM;
-      const inner = cp >= 0 ? lerp(CURVA_APICE, CURVA_INGRESSO, cp) : lerp(CURVA_APICE, uscita, -cp);
+      // L'ingresso qui e' PIU' STRETTO di CURVA_INGRESSO (che vale per chi guida
+      // davvero): allargarsi fino a -5.2 e poi rientrare a +10.9 sono 16 unita'
+      // di corsia che nessun cavallo riesce a coprire nello spazio di una curva,
+      // e il prezzo lo pagherebbe l'apice — che e' la parte che conta.
+      const INGRESSO_DEFAULT = -0.12;
+      const inner = cp >= 0 ? lerp(CURVA_APICE, INGRESSO_DEFAULT, cp) : lerp(CURVA_APICE, uscita, -cp);
       lane = innerSign * TRACK_HALF_WIDTH * inner;
     } else {
       lane = innerSign * AI_LANE_LIMIT * 0.55;                 // dritto: mezza pista, verso la corda
@@ -12226,6 +12231,32 @@ function lineaDiDefault() {
       if (avanti > 0.42) lane += -innerSign * INGRESSO_LARGO_TAGLIO * clamp((avanti - 0.42) / 0.15, 0, 1);
     }
     out[b] = clamp(lane, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+  }
+  // ── E ORA RENDIAMOLA SEGUIBILE ────────────────────────────────────────────
+  // Cosi' com'e' la linea e' geometricamente giusta ma NON la si puo' tenere:
+  // fra il punto largo e l'apice ci sono ~16 unita' di corsia in 6 di pista, e
+  // un cavallo si sposta di lato al massimo di AI_VELOCITA_LATERALE (12 u/s)
+  // mentre in avanti va a ~17. Il bersaglio scappa, il cavallo resta indietro e
+  // quando finalmente arriva la curva e' gia' finita: si ritrova largo, a bordo
+  // pista. Era questo che si vedeva dal telefono anche dopo aver messo la linea.
+  // Qui la pendenza viene limitata a quella che riescono davvero a tenere: la
+  // stessa linea, ma cominciata per tempo — che e' poi come la prende un fantino.
+  {
+    const passoPista = track.length / IDEAL_LINE_BUCKETS;
+    // In curva non si va a 17 come sul dritto ma sui 14: e' li' che serve
+    // spostarsi, quindi il margine vero e' piu' largo di quanto sembri.
+    const maxDelta = (AI_VELOCITA_LATERALE / 14) * passoPista * 0.9;   // corsia per casella
+    const N = IDEAL_LINE_BUCKETS;
+    for (let giro = 0; giro < 6; giro += 1) {
+      for (let i = 0; i < N; i += 1) {                 // in avanti
+        const prec = (i - 1 + N) % N;
+        out[i] = clamp(out[i], out[prec] - maxDelta, out[prec] + maxDelta);
+      }
+      for (let i = N - 1; i >= 0; i -= 1) {            // e all'indietro: si parte prima
+        const succ = (i + 1) % N;
+        out[i] = clamp(out[i], out[succ] - maxDelta, out[succ] + maxDelta);
+      }
+    }
   }
   return out;
 }
