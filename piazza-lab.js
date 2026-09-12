@@ -1513,6 +1513,19 @@ export function costruisciFollaCentro(ctx, opz = {}) {
   // ESTRAZIONE delle Contrade: la piazza è ancora nuda (niente tufo né palchi)
   // e il popolo riempie TUTTO, tracciato compreso — come nelle foto vere.
   const anchePista = !!opz.anchePista;
+  // opz.concentra = { cum, raggio, fondo }: il popolo si AMMASSA lì (sotto il
+  // Palazzo Comunale, dove escono le bandiere) e dirada allontanandosi lungo
+  // l'anello: densità piena entro ~raggio, mai sotto `fondo` altrove.
+  const conc = opz.concentra;
+  const giroTot = ctx.campioni[ctx.campioni.length - 1].cum + (ctx.campioni[1].cum - ctx.campioni[0].cum);
+  const pesoConcentra = (cum) => {
+    if (!conc) return 1;
+    let d = Math.abs(cum - ((conc.cum % giroTot) + giroTot) % giroTot);
+    if (d > giroTot / 2) d = giroTot - d;
+    const raggio = conc.raggio ?? 45;
+    const fondo = conc.fondo ?? 0.2;
+    return fondo + (1 - fondo) * Math.exp(-(d / raggio) * (d / raggio));
+  };
   const camp = ctx.campioni;
 
   // Bounding box dell'anello, per campionare i punti candidati.
@@ -1565,6 +1578,7 @@ export function costruisciFollaCentro(ctx, opz = {}) {
       // (ma all'estrazione la piazza è gremita uniforme, niente diradamento).
       if (!anchePista && dal > 9 && rnd() < (dal - 9) / 18) continue;
     }
+    if (conc && rnd() > pesoConcentra(migliore.cum)) continue;   // ammassa sotto il Palazzo
     const alt = 0.86 + rnd() * 0.3;
     d.position.set(qx, 0.62 * alt, qz);
     d.rotation.set(0, rnd() * TAU, 0);

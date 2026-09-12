@@ -121,7 +121,9 @@ scene.add(costruisciMaterassi(ctx, { da: 155.5, a: 198.5 }));
 // Folla del centro: ?folla=N (0 per spegnerla). Default: piazza dell'assegnazione, piena.
 if (qp.get("folla") !== "0") scene.add(costruisciFollaCentro(ctx, {
   quanti: parseInt(qp.get("folla") || "6000", 10),
-  anchePista: qp.get("estrazione") === "1"   // piazza nuda: gente anche sul tracciato
+  anchePista: qp.get("estrazione") === "1",  // piazza nuda: gente anche sul tracciato
+  // All'estrazione il popolo si ammassa sotto il Palazzo, dove escono le bandiere.
+  concentra: qp.get("estrazione") === "1" ? { cum: centroRettilineo() } : null
 }));
 // Facciata segnaposto del Palazzo nel banco: un muro a bordo+3.2 largo 34, per
 // vedere cappella/entrone/palchi delle comparse contro qualcosa.
