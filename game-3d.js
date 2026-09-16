@@ -2814,11 +2814,12 @@ const PALIO_SOUND_FILES = [
 // scaricavano tutti e 33 a ogni visita: da soli erano un terzo delle richieste.
 const PALIO_SOUND_CORE = [
   "start.m4a", "corsa.m4a", "galoppo.m4a", "ingresso.m4a",
-  "intro.m4a", "busta.m4a", "finale.m4a",
+  "intro.m4a", "busta.m4a", "finale.m4a", "appalusi.m4a",
 ];
-// tamburi.m4a e appalusi.m4a NON si suonano piu' da nessuna parte (la marcia della
-// preparazione e' MARCIADELPALIOCONTAMBURI.mp3): tamburi.m4a stava ancora qui e si
-// scaricava 140 KB a ogni visita per niente.
+// tamburi.m4a NON si suona piu' da nessuna parte (la marcia della preparazione e'
+// MARCIADELPALIOCONTAMBURI.mp3): stava qui e si scaricava 140 KB a ogni visita per
+// niente. appalusi.m4a invece e' l'esultanza dei bomboloni alla Tratta: 57 KB,
+// precaricati perche' l'applauso deve partire nell'istante della chiamata.
 let __soundsPreloaded = false;
 function preloadPalioSounds() {
   if (__soundsPreloaded) return;
@@ -3030,14 +3031,31 @@ function playCrowd(kind = "cheer") {
   src.start();
 }
 
+// ESULTANZA per un BOMBOLONE alla Tratta: un applauso VERO del pubblico, non il
+// rumore sintetico. Parte pieno e poi si DISPERDE piano, come una piazza che si
+// quieta: il file dura 4,6s, lo si lascia scoppiare per 1,8 e poi lo si sfuma in
+// 2,6 — cosi' la coda si perde invece di troncarsi. Due bomboloni di fila: il
+// secondo riparte da capo e il vecchio sfumare programmato si annulla.
+function esultanzaBombolone() {
+  try {
+    const a = playPalioSound("appalusi.m4a", { volume: 0.55 });
+    if (!a) return;
+    if (a.__disperdiTimer) clearTimeout(a.__disperdiTimer);
+    a.__disperdiTimer = setTimeout(() => {
+      a.__disperdiTimer = null;
+      fadePalioSound("appalusi.m4a", 2.6);
+    }, 1800);
+  } catch (e) { /* niente */ }
+}
+
 // ── REAZIONE DEL POPOLO all'estrazione / assegnazione del cavallo. Tre livelli:
 //  "cheer" (cavallo forte)  → esultanza: la folla SALTA, boato, camera che vibra;
 //  "mild"  (cavallo medio)  → applauso contenuto, atmosfera d'attesa;
 //  "cold"  (cavallo debole) → freddezza e tensione: la folla si BLOCCA, brusio cupo.
 // L'animazione della folla la legge updateAtmosphere da state.crowdReaction.
-function triggerCrowdReaction(kind, message) {
+function triggerCrowdReaction(kind, message, { senzaRumore = false } = {}) {
   state.crowdReaction = { kind, t: 0, dur: kind === "cheer" ? 2.8 : kind === "cold" ? 2.0 : 1.4 };
-  playCrowd(kind);
+  if (!senzaRumore) playCrowd(kind);   // il rumore sintetico; chi ha un suono vero lo salta
   if (kind === "cheer") state.cameraShake = Math.max(state.cameraShake || 0, 0.14);
   if (message) showMessage(message, 1.9, kind === "cheer" ? "good" : kind === "cold" ? "danger" : "");
 }
@@ -4128,6 +4146,54 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
   __mossiereVoice = pickMossiereVoice();
   // Le voci arrivano in modo asincrono: aggiorna la scelta quando sono pronte.
   try { window.speechSynthesis.addEventListener("voiceschanged", () => { __mossiereVoice = pickMossiereVoice(); }); } catch (e) {}
+}
+
+// ── VOCE DELLA TRATTA: FEMMINILE ─────────────────────────────────────────────
+// Alla Tratta i cavalli e le Contrade li chiama una voce di DONNA. Il Mossiere
+// ai canapi resta com'e' (e li' parlano soprattutto i canti delle Contrade).
+// Stessa logica della scelta maschile, a pesi rovesciati: vincono i nomi
+// femminili naturali — Alice, Federica ed Emma su Mac e iPhone, Elsa e Isabella
+// su Windows — e "Google italiano", che su Chrome e' femminile. I nomi maschili
+// finiscono in fondo alla lista (attenzione: Paola si', Paolo no).
+let __voceTratta = null;
+function pickVoceTratta() {
+  const synth = window.speechSynthesis;
+  if (!synth || !synth.getVoices) return null;
+  const voices = synth.getVoices() || [];
+  if (!voices.length) return null;
+  const italian = voices.filter((v) => /^it/i.test(v.lang));
+  const pool = italian.length ? italian : voices;
+  const score = (v) => {
+    const n = (v.name || "").toLowerCase();
+    let s = 0;
+    if (/\balice\b|federica|\belsa\b|isabella|\bemma\b|\bpaola\b|silvia|chiara|giulia|elena/.test(n)) s += 150;
+    if (/premium|enhanced|potenziat|neural|natural/.test(n)) s += 100;
+    if (/google/.test(n)) s += 90;
+    if (/\bluca\b|cosimo|diego|\bpaolo\b|roberto|giorgio|riccardo|adamo|grandpa|\breed\b|rocko|\beddy\b/.test(n)) s -= 200;
+    if (/bad news|whisper|organ|bells|bubbles|jester|trinoids|zarvox|boing|wobble|cellos|superstar|good news|\bflo\b|sandy|shelley|grandma/.test(n)) s -= 120;
+    if (v.localService === false) s += 20;
+    return s;
+  };
+  return pool.slice().sort((a, b) => score(b) - score(a))[0];
+}
+if (typeof window !== "undefined" && window.speechSynthesis) {
+  __voceTratta = pickVoceTratta();
+  try { window.speechSynthesis.addEventListener("voiceschanged", () => { __voceTratta = pickVoceTratta(); }); } catch (e) {}
+}
+function speakTratta(name) {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    const voice = __voceTratta || (__voceTratta = pickVoceTratta());
+    const u = new SpeechSynthesisUtterance(name);
+    u.lang = (voice && voice.lang) || "it-IT";
+    u.rate = 0.92;   // scandita, da banditrice
+    u.pitch = 1;     // timbro naturale: niente alterazioni
+    u.volume = 1;
+    if (voice) u.voice = voice;
+    synth.cancel();
+    synth.speak(u);
+  } catch (e) { /* sintesi vocale non disponibile: si prosegue in silenzio */ }
 }
 
 // Voce del mossiere: pronuncia il nome della Contrada chiamata con una voce
@@ -8411,7 +8477,7 @@ function announceTrattaHorse(p) {
   // Il canto della Contrada assegnata prima sfuma quando si chiama il cavallo dopo.
   if (state.tratta && state.tratta.lastJingle) { fadePalioSound(state.tratta.lastJingle, 0.5); state.tratta.lastJingle = null; }
   playNitrito(0.55);                             // il barbero nitrisce alla chiamata
-  speakContrada(p.horseName);                    // voce del mossiere: il cavallo
+  speakTratta(p.horseName);                      // voce della Tratta: il cavallo
   const line = document.getElementById("trattaLine");
   if (line) {
     const meta = TRATTA_TIERS[p.tier] || TRATTA_TIERS.bono;
@@ -8437,14 +8503,15 @@ function announceTrattaContrada(p) {
   p.entrant.attendeSpenn = false;
   mostraSpennacchiera(p.entrant.group.userData && p.entrant.group.userData.spennObj);
   if (state.trattaObjects) state.trattaObjects.popTimer = 0.4;
-  speakContrada(p.entrant.name);                 // voce del mossiere: la contrada
+  speakTratta(p.entrant.name);                   // voce della Tratta: la contrada
   // Canto/grido della Contrada appena assegnata (sfuma alla chiamata successiva).
   if (p.entrant && p.entrant.id) { state.tratta.lastJingle = p.entrant.id + ".m4a"; try { playPalioSound(state.tratta.lastJingle, { volume: 0.62 }); } catch (e) { /* niente */ } }
   // REAZIONE DEL POPOLO in base al cavallo toccato: bombolone → esultanza
   // piena; bono → applauso contenuto e attesa; brenna → freddezza e delusione.
   const you = p.entrant.player;
   if (p.tier === "bombolone") {
-    triggerCrowdReaction("cheer", you ? `${p.horseName}: un bombolone! La tua Contrada esulta` : `${p.entrant.name}: gran cavallo! Il popolo esulta`);
+    triggerCrowdReaction("cheer", you ? `${p.horseName}: un bombolone! La tua Contrada esulta` : `${p.entrant.name}: gran cavallo! Il popolo esulta`, { senzaRumore: true });
+    esultanzaBombolone();   // il boato vero, che poi si disperde
   } else if (p.tier === "bono") {
     triggerCrowdReaction("mild", `${p.entrant.name}: cavallo discreto, applausi e attesa`);
   } else {
