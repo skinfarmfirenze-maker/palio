@@ -1311,3 +1311,43 @@ body.con-controller .controls-pad {
   /* La firma resta la riga piu' in basso al centro, ben staccata dal tufo. */
   .firma-autore { font-size: 12px; }
 }
+
+/* ── SELETTORE DELLA LINGUA, accanto alla rotellina ─────────────────────────
+   Due pastiglie IT / EN: quella attiva e' piena, l'altra solo contornata. Sta
+   nella stessa riga della rotellina, cosi' su telefono segue lei quando passa
+   a destra. */
+.home-settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lang-switch {
+  display: flex;
+  border: 1px solid rgba(240, 203, 53, 0.45);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(26, 18, 6, 0.55);
+  backdrop-filter: blur(4px);
+}
+.lang-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: rgba(243, 231, 207, .72);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.lang-btn:hover { color: #f3e7cf; background: rgba(240, 203, 53, .14); }
+.lang-btn.attiva { background: #f0cb35; color: #2a1d0c; }
+.lang-btn:focus-visible { outline: 2px solid #f0cb35; outline-offset: -2px; }
+@media (max-width: 640px) {
+  .lang-btn { font-size: 11px; padding: 6px 10px; }
+}
+@media (max-height: 520px) and (orientation: landscape), (pointer: coarse) and (max-width: 900px) {
+  .lang-btn { font-size: 10.5px; padding: 5px 9px; }
+  .home-settings { gap: 6px; }
+}

@@ -9,6 +9,9 @@ import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+// `tr` e non `T`: nel file ci sono gia' variabili locali chiamate T (le timeline
+// di estrazione e tratta) che la coprirebbero dentro quelle funzioni.
+import { T as tr, linguaAttiva, impostaLingua, avviaTraduzione, traduciAlbero } from "./lingua.js";
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -4103,6 +4106,10 @@ function showMessage(text, seconds, tone = "") {
   ui.message.classList.remove("danger", "good");
   if (tone) ui.message.classList.add(tone);
   ui.message.classList.add("visible");
+  // In inglese la scritta si traduce qui: e' l'imbuto da cui passano tutti i
+  // messaggi di gioco, e cambiano testo senza aggiungere nodi alla pagina —
+  // quindi l'osservatore della traduzione non li vedrebbe.
+  try { if (linguaAttiva() === "en") ui.message.textContent = tr(ui.message.textContent); } catch (e) { /* niente */ }
 }
 
 function updateMessage(dt) {
@@ -5480,7 +5487,7 @@ function beginEstrazione(tipoId, precomputed) {
 
 function setEstrazioneLine(text, color) {
   const line = document.getElementById("estrLine");
-  if (line) { line.textContent = text; line.style.color = color || "#f3e7cf"; }
+  if (line) { line.textContent = tr(text); line.style.color = color || "#f3e7cf"; }
 }
 
 function estrazioneSkip() {
@@ -11819,7 +11826,7 @@ function mostraCartello(testo, secondi = 2) {
   if (vecchio) vecchio.remove();
   const el = document.createElement("div");
   el.id = "cartelloMossa";
-  el.textContent = testo;
+  el.textContent = tr(testo);
   el.style.cssText = "position:fixed;left:50%;top:44%;transform:translate(-50%,-50%);z-index:70;"
     + "background:rgba(18,13,8,.92);border:2px solid #f0cb35;border-radius:14px;"
     + "padding:16px 26px;max-width:min(560px,88vw);text-align:center;font-family:inherit;"
@@ -15095,6 +15102,19 @@ function bindEvents() {
   if (propBtn) propBtn.addEventListener("click", openProponiCavallo);
   ui.backToMenuButton.addEventListener("click", openMenuScreen);
   { const sb = document.getElementById("settingsBtn"); if (sb) sb.addEventListener("click", openSettingsScreen); }
+  // ── LINGUA: italiano o inglese ────────────────────────────────────────────
+  // Cambiandola si ricarica la pagina: e' il modo piu' sicuro di applicarla a
+  // TUTTO, comprese le schermate gia' costruite, senza doverle ridisegnare a
+  // mano una per una.
+  document.querySelectorAll(".lang-btn").forEach((b) => {
+    const l = b.getAttribute("data-lang");
+    if (l === linguaAttiva()) b.classList.add("attiva");
+    b.addEventListener("click", () => {
+      if (l === linguaAttiva()) return;
+      impostaLingua(l);
+      location.reload();
+    });
+  });
   // "Vai alla Mossa" / "Corri di nuovo": prima si sceglie il Palio (luglio /
   // agosto / straordinario) → ESTRAZIONE delle Contrade (bandiere al Palazzo)
   // → TRATTA (sorteggio dei cavalli) → mossa/tondino.
@@ -17095,6 +17115,7 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
 }
 
 function init() {
+  try { avviaTraduzione(); } catch (e) { /* la lingua non deve mai fermare il gioco */ }
   applicaImpostazioni();  // epoca (cavalli+fantini) e durata massima della mossa
   maybeOpenAdmin();       // ?admin → pannello amministratore (sopra tutto)
   ensurePasswordGate();   // gate password: copre tutto finché non entri
