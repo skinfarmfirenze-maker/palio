@@ -12357,8 +12357,11 @@ function loadIdealLine() {
   // TRAIETTORIA — andatura e velocita' restano vuote apposta, che le AI non
   // devono copiare la velocita' del giocatore.
   const base = lineaDiDefault();
+  // Si tiene conto di QUALI caselle vengono dalla linea calcolata: le AI devono
+  // sparpagliarsi di piu' su quelle, vedi la variazione personale piu' avanti.
+  state.idealLineDaDefault = new Array(IDEAL_LINE_BUCKETS).fill(false);
   for (let b = 0; b < IDEAL_LINE_BUCKETS; b += 1) {
-    if (state.idealLine[b] == null) state.idealLine[b] = base[b];
+    if (state.idealLine[b] == null) { state.idealLine[b] = base[b]; state.idealLineDaDefault[b] = true; }
   }
 }
 
@@ -12663,7 +12666,13 @@ function updateAiHorse(horse, dt, time) {
     if (rec != null) {
       // Copia la TUA linea (anche in curva) con una PICCOLA variazione personale:
       // offset fisso del cavallo + un lieve ondeggio, così non sono tutti uguali.
-      const lineVar = horse.lineBias * 0.9 + Math.sin(time * 0.55 + horse.phase) * 0.3;
+      // Sulla linea REGISTRATA da un umano la copia e' stretta: e' il senso della
+      // cosa. Su quella CALCOLATA no: li' e' una sola riga per tutte e dieci, e
+      // copiandola stretta si incolonnavano e si schiacciavano di fianco, una
+      // dentro l'altra. Su quella ognuna tiene la SUA linea, larga come in Piazza.
+      const daCalcolo = state.idealLineDaDefault && state.idealLineDaDefault[idealLineBucket(horse.progress)];
+      const ampiezza = daCalcolo ? 3.0 : 0.9;
+      const lineVar = horse.lineBias * ampiezza + Math.sin(time * 0.55 + horse.phase) * 0.3;
       lineGoal = rec + lineVar;
     } else if (inCurve) {
       // ── ALL'APICE SI PASSA DENTRO ─────────────────────────────────────────
@@ -12912,6 +12921,29 @@ function updateAiHorse(horse, dt, time) {
   // Il limite ESTERNO segue gli imbuti (San Martino/cappella/Casato): dove i
   // palchi entrano, le AI vengono strizzate verso l'interno come il giocatore.
   const aiOuterLim = outerLimitAt(horse.progress);
+  // ── GOMITO A GOMITO ───────────────────────────────────────────────────────
+  // Fra due Contrade affiancate non c'era NIENTE che le tenesse separate: il
+  // codice dei sorpassi guarda solo chi sta DAVANTI, quindi due che puntavano
+  // alla stessa corsia ci restavano sopra, una dentro l'altra. Qui chi e' troppo
+  // vicino di fianco, alla stessa altezza, si scosta di quel tanto che basta —
+  // come si fa in Piazza, a spallate piccole, non a strattoni.
+  {
+    const MIN_FIANCO = 1.7;
+    let spinta = 0;
+    state.horses.forEach((o) => {
+      if (o === horse || o.caduto || o.isRincorsa) return;
+      if (Math.abs(o.progress - horse.progress) > HORSE_BLOCK_LENGTH * 0.8) return;
+      const d = horse.lane - o.lane;
+      const ad = Math.abs(d);
+      if (ad >= MIN_FIANCO) return;
+      // Esattamente sovrapposti: il verso lo decide un valore stabile del
+      // cavallo, se no si spostano tutti e due dalla stessa parte e restano
+      // incollati.
+      const verso = ad > 0.05 ? Math.sign(d) : (Math.sign(horse.lineBias - o.lineBias) || 1);
+      spinta += verso * (MIN_FIANCO - ad);
+    });
+    if (spinta) horse.targetLane += clamp(spinta, -2.4, 2.4) * dt * 2.2;
+  }
   horse.targetLane = clamp(horse.targetLane, -aiOuterLim, AI_LANE_LIMIT);
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
