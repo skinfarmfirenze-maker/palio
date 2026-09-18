@@ -12,6 +12,7 @@ import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciF
 // `tr` e non `T`: nel file ci sono gia' variabili locali chiamate T (le timeline
 // di estrazione e tratta) che la coprirebbero dentro quelle funzioni.
 import { T as tr, linguaAttiva, impostaLingua, avviaTraduzione, traduciAlbero } from "./lingua.js";
+import { PUBBLICITA, offriSpot, spotDisponibile, azzeraSpotDelPalio, tastoSpot } from "./pubblicita.js";   // spot facoltativi
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -6158,6 +6159,20 @@ function budgetsRef() {
   return state.quickBudgets;
 }
 function contradaBudget(id) { return budgetsRef()[id] || 0; }
+// ── DENARI DA UNO SPOT ──────────────────────────────────────────────────────
+// Il premio e' sempre e solo DENARI, cioe' la preparazione del palio: niente
+// che renda un cavallo piu' veloce in corsa. Si accredita ESATTAMENTE quello che
+// manca per la cosa che il giocatore stava guardando (con un tetto), cosi' la
+// promessa del tasto e' vera: guardi lo spot e te la puoi permettere.
+const SPOT_TETTO_DENARI = 250;
+function spotPerDenari(id, quantoManca, titolo, dopo) {
+  const premio = Math.max(50, Math.min(SPOT_TETTO_DENARI, Math.ceil(quantoManca)));
+  offriSpot({
+    titolo,
+    premio: `Ottieni <b>${premio} denari</b> per la tua Contrada`,
+    onPremio: () => { earnBudget(id, premio); if (dopo) dopo(premio); },
+  });
+}
 // Ogni spesa/guadagno salva SUBITO: qualunque variazione (chiunque la faccia,
 // giocatore o AI) è già persistita quando il palio finisce, comunque finisca.
 function spendBudget(id, amount) {
@@ -6610,7 +6625,13 @@ function campaignCorruptionScreen() {
       if (mine) btn = simpleBtn("D'accordo ✓", { bg: "#2e6b46" });
       else if (taken) btn = simpleBtn("Fuori portata");
       else if (h._corRefused) btn = simpleBtn("Ha rifiutato");
-      else if (cost > budget) btn = simpleBtn(`${cost} · no fondi`);
+      else if (cost > budget) {
+        if (spotDisponibile()) {
+          btn = tastoSpot(`${cost} · trova i denari`);
+          btn.addEventListener("click", () => spotPerDenari(cmp.contrada.id, cost - budget,
+            `Ti mancano ${cost - budget} denari per il fantino della ${h.name}`, () => render()));
+        } else btn = simpleBtn(`${cost} · no fondi`);
+      }
       else {
         // PRIMA la cifra, POI le finalità (cosa deve fare il fantino corrotto).
         const ctrl = document.createElement("div");
@@ -6994,6 +7015,19 @@ function refreshAstaUI() {
       showMessage(`Hai offerto ${base + inc} alla rincorsa`, 1.2, "good");
       return;
     }
+    // Denari insufficienti all'asta: invece del solo "non puoi", si offre lo spot
+    // e SI RILANCIA DAVVERO appena i denari arrivano — se nel frattempo la base
+    // non e' salita ancora.
+    if (state.asta && state.asta.rifiuto === "denari" && spotDisponibile()) {
+      const manca = (base + inc) - (contradaBudget(mioId) + (state.asta.paid[mioId] || 0));
+      spotPerDenari(mioId, manca, `Ti mancano ${manca} denari per rilanciare`, () => {
+        const A3 = state.asta;
+        if (!A3 || A3.chiusa) return;
+        if (astaBid(mioId, base + inc)) showMessage(`Hai offerto ${base + inc} alla rincorsa`, 1.2, "good");
+        else showMessage(`Hanno rilanciato: ora l'ultima offerta e' ${A3.best}`, 1.6, "danger");
+      });
+      return;
+    }
     const perche = {
       denari: "Non hai abbastanza denari",
       bassa: `Offerta troppo bassa: serve piu' di ${A2.sogliaRifiuto || A2.best}`,
@@ -7285,7 +7319,15 @@ function campaignAccordiScreen(spectate) {
         let btn;
         if (allied) btn = disabledBtn(spectate ? "Ingaggiata ✓" : "Alleata ✓", "#2e6b46");
         else if (h._accRefused) btn = disabledBtn("Ha rifiutato");
-        else if (cost > budget) btn = disabledBtn(`${cost} · no fondi`);   // non puoi promettere più di quanto hai
+        else if (cost > budget) {
+          // Non e' piu' un tasto morto: se vuoi quella Contrada, uno spot ti da'
+          // i denari che ti mancano e il tasto diventa vero.
+          if (spotDisponibile()) {
+            btn = tastoSpot(`${cost} · trova i denari`);
+            btn.addEventListener("click", () => spotPerDenari(myId, cost - budget,
+              `Ti mancano ${cost - budget} denari per ${h.name}`, () => render()));
+          } else btn = disabledBtn(`${cost} · no fondi`);
+        }
         else if (spectate) {
           btn = mkBtn(`Para · ${cost}`);
           btn.addEventListener("click", () => {
@@ -9137,6 +9179,18 @@ function buildSceltaFantinoUI() {
       + '<div class="sf-stat"><span>Fedeltà</span>' + statPips(j.fedelta || 3) + '</div>'
       + '<div class="sf-taken"></div>';
     card.addEventListener("click", () => {
+      // Non te lo puoi permettere: invece di un tasto morto, lo spot ti da' i
+      // denari che mancano e poi la scelta prosegue normalmente (il fantino puo'
+      // comunque rifiutare: quello non si compra).
+      if (card.classList.contains("nofunds")) {
+        const io_ = getPlayer();
+        const manca = (j.ingaggio || 0) - (io_ ? contradaBudget(io_.id) : 0);
+        if (io_ && spotDisponibile() && manca > 0) {
+          spotPerDenari(io_.id, manca, `Ti mancano ${manca} denari per ingaggiare ${nickUp(j.nick)}`,
+            () => { try { refreshSfBudget(); } catch (e) { /* niente */ } });
+        } else toastMsg("Non hai abbastanza denari per questo fantino.");
+        return;
+      }
       if (fantinoSqualificato(j.nick)) { toastMsg("Questo fantino è squalificato: tre avvertimenti, salta questo Palio."); return; }
       if (fantinoBloccatoPerGiocatore(j.nick)) { toastMsg("Questo fantino ha montato per la rivale: non è disponibile per 3 palii."); return; }
       if (card.classList.contains("rifiutato")) { toastMsg("Questo fantino ti ha già detto di no."); return; }
@@ -9386,6 +9440,7 @@ function startMossa(fromTratta = false) {
   clearFallenRiders();   // via eventuali fantini caduti del palio precedente
   tiraMinACavallo();     // quanti fantini restano in sella: si tira a ogni palio
   state.staminaRecCd = 0;   // il recupero del fiato alla mossa riparte da zero
+  azzeraSpotDelPalio();     // gli spot facoltativi: due per palio, si riparte
   state.staminaNervCd = 0;  // …e cosi' il consumo di chi si agita
   state.horses.forEach((h) => {
     if (h.group.userData.jockey) h.group.userData.jockey.visible = true;   // fantino di nuovo in sella
