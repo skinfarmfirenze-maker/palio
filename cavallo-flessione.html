@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="it"><head><meta charset="UTF-8"/>
+<title>Flessione del cavallo in curva</title>
+<style>html,body{margin:0;height:100%;background:#c8b48c;overflow:hidden;font-family:system-ui}
+#eti{position:fixed;inset:0;pointer-events:none;z-index:5}
+.n{position:absolute;top:8px;color:#fff;font-size:13px;font-weight:600;text-shadow:0 1px 3px #000a;transform:translateX(-50%)}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"}}</script>
+</head><body><div id="eti"></div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+const lab = await import("./cavallo-lab.js?v=" + Date.now());
+const qp = new URLSearchParams(location.search);
+const DALTO = qp.get("alto") !== "0";          // vista dall'alto: la piega si vede lì
+const T = parseFloat(qp.get("t") || "0");      // istante del galoppo
+
+const renderer = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+renderer.setSize(innerWidth, innerHeight); renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.setScissorTest(true);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xc8b48c);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb99a72, 2.0));
+const sun = new THREE.DirectionalLight(0xfff4dc, 1.4); sun.position.set(3,8,4); scene.add(sun);
+
+const gltf = await new GLTFLoader().loadAsync("./assets/horses/horse_master.glb")
+  .catch(() => new GLTFLoader().loadAsync("https://fianca-la-mossa.vercel.app/assets/horses/horse_master.glb"));
+
+const CURV = [ 1/26, 0, -1/26 ];      // sinistra / dritto / destra (raggio 26 u ≈ curva del Casato)
+const cavalli = CURV.map((c) => {
+  const g = new THREE.Group();
+  const src = gltf.scene.clone(true);
+  let mesh = null; src.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+  // ⚠️ niente setFromObject: include gli estremi dei morph e la scala esce sbagliata
+  const pa = mesh.geometry.attributes.position;
+  let yMin = Infinity, yMax = -Infinity;
+  for (let k = 0; k < pa.count; k += 1) { const y = pa.getY(k); if (y < yMin) yMin = y; if (y > yMax) yMax = y; }
+  const s = (1.7 / (yMax - yMin)) * 2;
+  src.scale.setScalar(s); src.position.y = -0.75;
+  g.add(src); scene.add(g);
+  const st = lab.abilitaFlessione(mesh, {});
+  const mx = new THREE.AnimationMixer(src);
+  if (gltf.animations[0]) mx.clipAction(gltf.animations[0]).play();
+  mx.update(T);
+  return { g, mesh, st, curv: c, mx };
+});
+
+const COL = 3, target = new THREE.Vector3(0, 1.2, 0);
+const eti = document.getElementById("eti");
+function render() {
+  const w = innerWidth / COL, h = innerHeight;
+  eti.innerHTML = "";
+  cavalli.forEach((cv, i) => {
+    const forz = qp.get("bend");
+    const bend = forz !== null ? (parseFloat(forz) * (i - 1)) : lab.flessioneDaCurvatura(cv.mesh, cv.curv);
+    if (forz !== null) { cv.st.uBend.value = bend; cv.st.corrente = bend; }
+    else lab.aggiornaFlessione(cv.mesh, bend, 10);   // dt grande = va subito a regime
+    cavalli.forEach((o) => { o.g.visible = false; });
+    cv.g.visible = true;
+    const cam = new THREE.PerspectiveCamera(32, w/h, 0.1, 100);
+    if (DALTO) { cam.position.set(0, 19, 0.01); }
+    else { cam.position.set(6.5, 2.4, 5.5); }
+    cam.lookAt(target);
+    renderer.setViewport(i*w, 0, w, h); renderer.setScissor(i*w, 0, w, h);
+    renderer.render(scene, cam);
+    const d = document.createElement("div"); d.className = "n";
+    d.style.left = (i*w + w/2) + "px";
+    const R = cv.curv ? (1/cv.curv).toFixed(0) : "∞";
+    d.textContent = `R = ${R} u — flessione ${(bend*180/Math.PI).toFixed(1)}°  patch ${cv.st.patchOk ? "OK" : "FALLITA"}`;
+    eti.appendChild(d);
+  });
+  window.__stato = cavalli.map((c) => ({ patchOk: c.st.patchOk, uBend: c.st.uBend.value, curv: c.curv }));
+  window.__cavalli = cavalli;
+  window.__vs = () => { const m = cavalli[0].mesh.material; const pr = m.program; return pr ? pr.vertexShader : (m.userData && "no program"); };
+}
+render();
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); render(); });
+window.__render = render;
+</script></body></html>

@@ -224,3 +224,160 @@ export function epocaDi(nomeCavallo) {
 export function barberiDiEpoca(epoca) {
   return Object.keys(EPOCHE_BARBERI).filter((n) => EPOCHE_BARBERI[n].epoca === epoca);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. FLESSIONE LATERALE DEL CORPO IN CURVA
+// ──────────────────────────────────────────────────────────────────────────────
+// Un cavallo che affronta una curva non ruota come un blocco rigido: si incurva
+// lungo l'arco, il muso entra per primo, il collo segue, il tronco quasi non si
+// piega e il posteriore esce un poco. È il difetto più visibile dei cavalli nei
+// videogiochi, e da noi si nota nelle due curve del Casato e di San Martino.
+//
+// Il nostro cavallo NON ha scheletro (1 mesh, 15 morph target, 0 ossa): non c'è
+// una colonna da piegare. La flessione si fa allora nel VERTEX SHADER — ogni
+// vertice ruota attorno all'asse verticale di un angolo che dipende da quanto è
+// avanti o indietro lungo il corpo. Costa una manciata di istruzioni per vertice
+// su 796 vertici: nulla.
+//
+// L'angolo segue un profilo che tiene il TRONCO RIGIDO e lascia la piega a collo
+// e posteriore (0.4·s + 0.6·s³): il dorso di un cavallo vero si flette pochissimo
+// in laterale, la mobilità sta quasi tutta nel collo.
+//
+// La patch va inserita DOPO `morphtarget_vertex`, altrimenti la flessione viene
+// sovrascritta dalla miscela dei morph. Se three.js cambiasse il nome del chunk
+// il replace fallirebbe in silenzio: qui viene verificato e segnalato.
+
+const BEND_PROFILO = "0.4 * s + 0.6 * s * s * s";
+
+// Abilita la flessione su una mesh di cavallo. Clona il materiale (altrimenti
+// tutti i cavalli in pista si piegherebbero insieme) e restituisce lo stato da
+// passare alle altre funzioni. Idempotente: richiamarla non fa danni.
+export function abilitaFlessione(mesh, opts = {}) {
+  if (!mesh || !mesh.geometry) return null;
+  if (mesh.userData.flessione) return mesh.userData.flessione;
+
+  const geo = mesh.geometry;
+  // ⚠️ NON usare geo.boundingBox: three lo allarga fino a comprendere gli estremi di
+  // TUTTI i morph target, e su questo cavallo la semilunghezza usciva 360 invece di
+  // 161 — la flessione risultava un decimo di quella voluta. L'estensione va presa
+  // dalle posizioni di BASE.
+  let zMin = Infinity, zMax = -Infinity;
+  const ap = geo.attributes && geo.attributes.position;
+  if (ap) {
+    for (let i = 0; i < ap.count; i += 1) {
+      const z = ap.getZ(i);
+      if (z < zMin) zMin = z;
+      if (z > zMax) zMax = z;
+    }
+  } else { zMin = -1; zMax = 1; }
+  const zMid = opts.zMid !== undefined ? opts.zMid : (zMin + zMax) / 2;
+  const zHalf = opts.zHalf !== undefined ? opts.zHalf : Math.max(1e-4, (zMax - zMin) / 2);
+
+  const mat = mesh.material.clone();
+  mesh.material = mat;
+
+  const st = {
+    uBend: { value: 0 },      // radianti al culmine (muso e coda)
+    uZMid: { value: zMid },
+    uZHalf: { value: zHalf },
+    corrente: 0,
+    patchOk: false,
+  };
+
+  const precedente = mat.onBeforeCompile;
+  mat.onBeforeCompile = (shader, renderer) => {
+    if (typeof precedente === "function") precedente(shader, renderer);
+    shader.uniforms.uBend = st.uBend;
+    shader.uniforms.uZMid = st.uZMid;
+    shader.uniforms.uZHalf = st.uZHalf;
+
+    const testa = "uniform float uBend;\nuniform float uZMid;\nuniform float uZHalf;\n" +
+      "float bendAngolo(float z) {\n" +
+      "  float s = clamp((z - uZMid) / uZHalf, -1.0, 1.0);\n" +
+      "  return uBend * (" + BEND_PROFILO + ");\n" +
+      "}\n";
+    shader.vertexShader = testa + shader.vertexShader;
+
+    // POSIZIONE: dopo la miscela dei morph, altrimenti viene cancellata.
+    const ancoraPos = "#include <morphtarget_vertex>";
+    if (shader.vertexShader.indexOf(ancoraPos) === -1) {
+      console.warn("[cavallo-lab] flessione NON applicata: manca", ancoraPos);
+      return;
+    }
+    shader.vertexShader = shader.vertexShader.replace(ancoraPos, ancoraPos + `
+  {
+    float a = bendAngolo(transformed.z);
+    float ca = cos(a), sa = sin(a);
+    float dz = transformed.z - uZMid;
+    float nx = transformed.x * ca + dz * sa;
+    float nz = -transformed.x * sa + dz * ca;
+    transformed.x = nx;
+    transformed.z = uZMid + nz;
+  }`);
+
+    // NORMALI: stessa rotazione, altrimenti la luce resta quella del corpo dritto
+    // e la piega non si legge. Qui `position` è la posa di bind: per
+    // l'illuminazione lo scarto rispetto alla posa morphata è irrilevante.
+    const ancoraNrm = "#include <morphnormal_vertex>";
+    if (shader.vertexShader.indexOf(ancoraNrm) !== -1) {
+      shader.vertexShader = shader.vertexShader.replace(ancoraNrm, ancoraNrm + `
+  {
+    float a = bendAngolo(position.z);
+    float ca = cos(a), sa = sin(a);
+    float nx = objectNormal.x * ca + objectNormal.z * sa;
+    float nz = -objectNormal.x * sa + objectNormal.z * ca;
+    objectNormal.x = nx;
+    objectNormal.z = nz;
+  }`);
+    }
+    st.patchOk = true;
+    st.vs = shader.vertexShader;   // sonda: lo shader che three riceve davvero
+  };
+  mat.needsUpdate = true;
+
+  mesh.userData.flessione = st;
+  return st;
+}
+
+// Angolo di flessione al culmine che corrisponde a una curva di raggio R.
+// Un corpo lungo L che segue un arco di raggio R si piega di L/(2R) da metà a
+// estremità: è la piega "giusta", quella che fa seguire al cavallo la traiettoria
+// invece di scivolarci sopra di traverso.
+//   curvatura = 1/R, con segno: positiva a sinistra, negativa a destra.
+export function flessioneDaCurvatura(mesh, curvatura, opts = {}) {
+  const st = mesh && mesh.userData && mesh.userData.flessione;
+  if (!st) return 0;
+  // La semilunghezza è in unità del GLB: va portata in unità di MONDO, perché la
+  // curvatura arriva in 1/unità-di-gioco. La scala sta sul padre (il gioco scala il
+  // gruppo, non la mesh), quindi si legge dalla matrice mondo, non da mesh.scale.
+  if (mesh.updateWorldMatrix) mesh.updateWorldMatrix(true, false);
+  const e = mesh.matrixWorld && mesh.matrixWorld.elements;
+  const scalaMondo = e ? Math.hypot(e[8], e[9], e[10]) : 1;
+  const semiLung = st.uZHalf.value * scalaMondo;
+  // guadagno 1 = l'arco geometrico puro. Alla distanza della telecamera di gara la
+  // piega giusta si legge poco: 1.4-1.8 rende meglio senza diventare caricatura.
+  const max = opts.max !== undefined ? opts.max : 0.42;   // ~24°, oltre è da serpente
+  const guadagno = opts.guadagno !== undefined ? opts.guadagno : 1.5;
+  return Math.max(-max, Math.min(max, semiLung * curvatura * guadagno));
+}
+
+// Porta la flessione verso il valore voluto con un smorzamento esponenziale: il
+// cavallo si incurva e si raddrizza in ~`tempo` secondi, non a scatti. Da
+// chiamare a ogni frame.
+export function aggiornaFlessione(mesh, bendVoluto, dt, tempo = 0.28) {
+  const st = mesh && mesh.userData && mesh.userData.flessione;
+  if (!st) return 0;
+  const k = 1 - Math.exp(-Math.max(1e-4, dt) / Math.max(1e-3, tempo));
+  st.corrente += (bendVoluto - st.corrente) * k;
+  st.uBend.value = st.corrente;
+  return st.corrente;
+}
+
+// Inclinazione verso l'interno della curva (come un ciclista): è la fisica, non
+// un effetto. v in unità di gioco al secondo, curvatura = 1/R con segno.
+// Va applicata dal gioco come rollio del GRUPPO del cavallo, non qui: il fantino
+// deve inclinarsi con lui.
+export function inclinazioneInCurva(v, curvatura, g = 9.81, max = 0.30) {
+  const a = Math.atan((v * v * curvatura) / g);
+  return Math.max(-max, Math.min(max, a));
+}

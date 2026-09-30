@@ -10,7 +10,11 @@
 // attesa → premio. Quando l'account sara' approvato bastera' cambiare `rete`.
 
 export const PUBBLICITA = {
-  attiva: true,
+  // SPENTO in produzione finche' la rete pubblicitaria non e' collegata: con
+  // `rete: "prova"` i tasti mostrerebbero ai giocatori un segnaposto che dice
+  // "spot dimostrativo", e a chi gioca sembrerebbe rotto. Il meccanismo e' tutto
+  // qui e acceso: per accenderlo basta rimettere true.
+  attiva: false,
   rete: "prova",          // "prova" = spot finto · "adsense" = H5 Games Ads
   durata: 15,             // secondi (vale solo per lo spot finto)
   maxPerPalio: 2,         // oltre questo i tasti spariscono: non si tampina
