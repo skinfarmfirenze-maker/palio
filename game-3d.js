@@ -12,7 +12,7 @@ import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciF
 // `tr` e non `T`: nel file ci sono gia' variabili locali chiamate T (le timeline
 // di estrazione e tratta) che la coprirebbero dentro quelle funzioni.
 import { T as tr, linguaAttiva, impostaLingua, avviaTraduzione, traduciAlbero } from "./lingua.js";
-import { PUBBLICITA, offriSpot, spotDisponibile, azzeraSpotDelPalio, tastoSpot } from "./pubblicita.js";   // spot facoltativi
+import { PUBBLICITA, offriSpot, spotDisponibile, azzeraSpotDelPalio, tastoSpot, spotVisti } from "./pubblicita.js";   // spot facoltativi
 import { costruisciPalazzi } from "./palazzi-lab.js";               // cortina dei palazzi (chat grafica)
 // Attivi di DEFAULT (sostituiscono il vecchio fantino); disattivabili con ?fantino2=0.
 const USE_FANTINO2 = !/[?&]fantino2=0/.test(window.location.search);
@@ -5993,8 +5993,10 @@ function openModeChooser() {
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
           toastMsg(`Puoi correre una Paliata veloce ogni 10 minuti. Riprova fra ${min} min.`);
+          teleEvento("attesa", "veloce");
           return;
         }
+        state.teleGioco = "veloce";
         segnaPaliataVeloce();
         resetCampaign();          // azzera l'eventuale campagna (mette quickBudgets a null)
         // NIENTE reset dei tesori: i denari delle Contrade NON ripartono da capo a
@@ -6007,8 +6009,10 @@ function openModeChooser() {
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
           toastMsg(`Puoi iniziare una Campagna ogni 20 minuti. Riprova fra ${min} min.`);
+          teleEvento("attesa", "campagna");
           return;
         }
+        state.teleGioco = "campagna";
         const saved = loadCampaignSave();
         const start = () => { segnaCampagna(); closeCampaignOverlay(); beginCampaignSetup(); };
         if (saved) {
@@ -12082,6 +12086,7 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
   if ((attacker.nerbataCd || 0) > 0) return false;
   if ((attacker.nerbate ?? NERBATE_MAX) <= 0) return false;
   attacker.nerbate -= 1;                 // si consuma sempre
+  if (attacker.player && state.tele) state.tele.nerbate += 1;
   attacker.nerbataCd = NERBATA_COOLDOWN;
   attacker.nerbataSwing = 0.32;          // frusta in animazione
   attacker.nerbataSide = side;
@@ -15329,6 +15334,214 @@ function segnaController() {
   } catch (e) { /* niente */ }
 }
 
+// ── DATI DELLE CORSE PER L'ADMIN ─────────────────────────────────────────────
+// Ogni palio lascia una riga ANONIMA (niente email, niente nome): com'e' andato,
+// in che fase l'ha lasciato chi se n'e' andato a meta', su che dispositivo e a
+// quanti fotogrammi al secondo. Servono a migliorare il gioco, non a seguire le
+// persone. Le righe si accumulano qui e partono a gruppi di TELE_GRUPPO (o quando
+// si chiude la pagina): un gruppo = un comando sullo store, per non bruciare la
+// quota di Upstash come a settembre. In locale e da ?admin non si registra nulla,
+// cosi' le prove di sviluppo non sporcano i dati (localStorage palio.teleProva=1
+// per provarla lo stesso).
+const TELE_VER = "2026-10-25";
+const TELE_CODA = "palio.teleCoda";
+const TELE_APERTA = "palio.teleAperta";   // palio in corso quando la pagina e' finita in background
+const TELE_GRUPPO = 3;
+const TELE_CODA_MAX = 40;
+function teleAttiva() {
+  try { if (localStorage.getItem("palio.teleProva") === "1") return true; } catch (e) { /* niente */ }
+  const host = location.hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host === "") return false;
+  try { if (isAdminUrl()) return false; } catch (e) { /* niente */ }
+  return true;
+}
+let teleGpu = null;
+function teleSchedaGrafica() {
+  if (teleGpu !== null) return teleGpu;
+  teleGpu = "";
+  try {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    // Nome pulito, cosi' la stessa scheda non compare con dieci nomi diversi:
+    // "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)" → "Apple M2",
+    // "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)" → "NVIDIA GeForce RTX 3060".
+    let g = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER) || "");
+    const angle = g.match(/^ANGLE \((.*)\)$/);
+    if (angle) { const parti = angle[1].split(/,\s*/); g = parti.length > 1 ? parti[1] : parti[0]; }
+    teleGpu = g.replace(/^ANGLE \w+ Renderer:\s*/i, "").replace(/\s*\(0x[0-9a-f]+\)/gi, "")
+      .replace(/\s+(Direct3D|OpenGL|Vulkan|Metal).*$/i, "").trim().slice(0, 48);
+  } catch (e) { /* niente */ }
+  return teleGpu;
+}
+function teleDispositivo() {
+  const tel = suTelefono();
+  const touch = IS_TOUCH_DEVICE;
+  return {
+    disp: tel ? "tel" : (touch ? "tab" : "pc"), touch: touch ? 1 : 0, pwa: appGiaInstallata() ? 1 : 0,
+    w: window.innerWidth, h: window.innerHeight, dpr: Math.round((window.devicePixelRatio || 1) * 10) / 10,
+    gpu: teleSchedaGrafica(),
+  };
+}
+function teleApri() {
+  state.tele = {
+    t0: Date.now(), fase: state.mode, chiusa: false, nerbate: 0, mossaS: 0,
+    fotogrammi: 0, msCorsa: 0, lenti: 0, accMs: 0, accN: 0, peggiore: 0,
+    camere: {}, posStoria: [], posAcc: 0,
+  };
+}
+// Segue il cambio di fase del gioco (chiamata a ogni giro di update): apre la riga
+// all'uscita dal menu, la chiude all'arrivo o al ritorno al menu (= abbandono).
+function teleSeguiFase() {
+  const m = state.mode;
+  if (m === state.teleModo) return;
+  const prima = state.teleModo;
+  state.teleModo = m;
+  if (m === "menu") {
+    if (state.tele && !state.tele.chiusa && prima) teleChiudi("abbandono", prima);
+    state.tele = null;
+    return;
+  }
+  if (m === "replayWin") return;                       // rivedere il palio non e' un palio nuovo
+  if (!state.tele || state.tele.chiusa) teleApri();
+  const t = state.tele;
+  t.fase = m;
+  if (m === "race") t.mossaS = state.mossaTimer || 0;  // dopo una mossa falsa vale l'ultima
+  if (m === "finished") teleChiudi("arrivo", m);
+}
+// Fluidita' VERA (il dt del gioco e' tagliato a 33ms, qui serve quello reale):
+// fotogrammi al secondo medi, il secondo peggiore, e la quota di fotogrammi lenti.
+function teleFotogramma() {
+  const ora = performance.now();
+  const d = state.teleUltimoFotogramma ? ora - state.teleUltimoFotogramma : 0;
+  state.teleUltimoFotogramma = ora;
+  const t = state.tele;
+  if (!t || t.chiusa || state.mode !== "race" || !d || d > 1000) return;   // >1s = scheda in background
+  t.fotogrammi += 1; t.msCorsa += d;
+  if (d > 50) t.lenti += 1;                            // sotto i 20 fotogrammi al secondo
+  t.accMs += d; t.accN += 1;
+  if (t.accMs >= 1000) {
+    const fps = (t.accN * 1000) / t.accMs;
+    if (!t.peggiore || fps < t.peggiore) t.peggiore = fps;
+    t.accMs = 0; t.accN = 0;
+  }
+  const cam = state.cameraMode || "follow";
+  t.camere[cam] = (t.camere[cam] || 0) + d / 1000;
+  t.posAcc += d;
+  if (t.posAcc >= 2000 && t.posStoria.length < 80) {    // posizione ogni 2 secondi
+    t.posAcc = 0;
+    const p = getPlayer();
+    const i = p ? (state.rankings || []).indexOf(p) : -1;
+    if (i >= 0) t.posStoria.push(i + 1);
+  }
+}
+function teleChiudi(esito, fase) {
+  const t = state.tele;
+  if (!t || t.chiusa) return;
+  t.chiusa = true;
+  if (!teleAttiva()) return;
+  const riga = teleRiga(t, esito, fase);
+  if (riga) teleAccoda(riga);
+}
+// La riga del palio, senza toccare la coda (serve anche per metterla da parte).
+function teleRiga(t, esito, fase) {
+  try {
+    const p = getPlayer();
+    const cmp = state.campaign;
+    const arrivo = esito === "arrivo";
+    const rank = arrivo ? (state.rankings && state.rankings.length ? state.rankings : getRanking()) || [] : [];
+    const w = rank[0];
+    const camere = {};
+    Object.keys(t.camere).forEach((c) => { camere[c] = Math.round(t.camere[c]); });
+    const tipo = state.estrazione && state.estrazione.tipo;
+    let nPalio = 0; try { nPalio = normalizeAlbo(JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}).totalePalii || 0; } catch (e) { /* niente */ }
+    const riga = Object.assign({
+      v: TELE_VER, esito, fase: fase || state.mode,
+      dur: Math.round((Date.now() - t.t0) / 1000), ora: new Date().getHours(),
+      lingua: linguaAttiva(),
+      modo: state.teleGioco || (cmp && cmp.active ? (cmp.quick ? "veloce" : "campagna") : "altro"),
+      palio: (tipo && (tipo.id || tipo)) || "",
+      ruolo: (cmp && cmp.currentMode) || "",
+      contrada: (p && p.id) || (state.selectedContrada && state.selectedContrada.id) || "",
+      rinc: p && p.isRincorsa ? 1 : 0,
+      fantino: (p && p.jockey && p.jockey.nick) || "", cavallo: (p && p.horseName) || "", fascia: (p && p.horseTier) || "",
+      mossaS: Math.round(t.mossaS), falsa: state.falseStartCount || 0,
+      corsaS: arrivo ? Math.round(state.raceClock || 0) : 0,
+      pos: arrivo && p ? rank.indexOf(p) + 1 : 0,
+      scosso: p && (p.scosso || p.caduto) ? 1 : 0,
+      caduti: arrivo ? state.horses.filter((h) => h.scosso || h.caduto).length : 0,
+      minSella: MIN_A_CAVALLO,
+      vince: (w && w.id) || "", vinceFascia: (w && w.horseTier) || "", vinceFantino: (w && w.jockey && w.jockey.nick) || "",
+      nerbate: t.nerbate,
+      fps: t.msCorsa > 0 ? Math.round((t.fotogrammi * 1000) / t.msCorsa) : 0,
+      fpsMin: Math.round(t.peggiore || 0),
+      lenti: t.fotogrammi ? Math.round((t.lenti / t.fotogrammi) * 100) : 0,
+      camere, posStoria: t.posStoria,
+      spot: spotVisti() || 0,
+      denari: cmp && typeof cmp.budget === "number" ? Math.round(cmp.budget) : 0,
+      nPalio,
+    }, teleDispositivo());
+    return riga;
+  } catch (e) { return null; }   // i dati non devono mai fermare il gioco
+}
+// Un evento senza palio (per ora: ha trovato la modalita' bloccata dall'attesa).
+function teleEvento(esito, modo) {
+  if (!teleAttiva()) return;
+  try { teleAccoda(Object.assign({ v: TELE_VER, esito, fase: "menu", modo, ora: new Date().getHours(), lingua: linguaAttiva() }, teleDispositivo())); }
+  catch (e) { /* niente */ }
+}
+function teleLeggiCoda() {
+  try { const c = JSON.parse(localStorage.getItem(TELE_CODA)); return Array.isArray(c) ? c : []; } catch (e) { return []; }
+}
+function teleScriviCoda(c) { try { localStorage.setItem(TELE_CODA, JSON.stringify(c.slice(-TELE_CODA_MAX))); } catch (e) { /* niente */ } }
+function teleAccoda(riga) {
+  const c = teleLeggiCoda();
+  c.push(riga);
+  teleScriviCoda(c);
+  if (c.length >= TELE_GRUPPO) teleInvia(false);
+}
+let teleInviando = false;
+function teleInvia(chiusura) {
+  const c = teleLeggiCoda();
+  if (!c.length || teleInviando) return;
+  const pacco = c.slice(0, 20);
+  const body = JSON.stringify({ action: "tele", corse: pacco });
+  const togli = () => { teleScriviCoda(teleLeggiCoda().slice(pacco.length)); };
+  // Pagina che si chiude: sendBeacon arriva anche se la pagina muore subito dopo.
+  if (chiusura && navigator.sendBeacon) {
+    try { if (navigator.sendBeacon(ACCOUNT_API, body)) togli(); } catch (e) { /* niente */ }
+    return;
+  }
+  teleInviando = true;
+  fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true })
+    .then((r) => { if (r.ok) togli(); })
+    .catch(() => { /* resta in coda: riparte al prossimo gruppo */ })
+    .finally(() => { teleInviando = false; });
+}
+// All'avvio e quando la pagina va in background. Su telefono chi esce dal gioco
+// spesso non "chiude": la pagina va in background e muore li'. Allora il palio in
+// corso si mette da parte come abbandono, e se il giocatore torna si riprende.
+function teleAvvia() {
+  try {
+    const sospesa = localStorage.getItem(TELE_APERTA);
+    if (sospesa) { localStorage.removeItem(TELE_APERTA); const r = JSON.parse(sospesa); if (r && r.esito) teleAccoda(r); }
+  } catch (e) { /* niente */ }
+  if (teleLeggiCoda().length) teleInvia(false);        // quello rimasto dall'ultima volta
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      const t = state.tele;
+      if (t && !t.chiusa && teleAttiva()) {
+        // Il palio NON si chiude: se il giocatore torna continua normale. La riga
+        // si mette solo da parte; se non torna, al prossimo avvio conta come uscita.
+        const r = teleRiga(t, "uscita", state.mode);
+        if (r) { try { localStorage.setItem(TELE_APERTA, JSON.stringify(r)); } catch (e) { /* niente */ } }
+      }
+      teleInvia(true);
+    } else {
+      try { localStorage.removeItem(TELE_APERTA); } catch (e) { /* niente */ }   // tornato: non era un abbandono
+    }
+  });
+}
+
 function update(dt, time) {
   state.nervClock = (state.nervClock || 0) + dt;   // orologio unico del nervosismo
   if (state.horses && state.horses.length) tickNerbate(dt);   // ricarica/cooldown nerbate
@@ -15340,6 +15553,7 @@ function update(dt, time) {
   updateAtmosphere(dt, time);
   refreshCampaignMoney();   // soldi del giocatore sempre in alto a dx fino alla corsa
   refreshMenuHomeBtn();     // "‹ Menu" in alto a sx in ogni fase tranne il menu
+  try { teleSeguiFase(); } catch (e) { /* i dati non devono mai fermare il gioco */ }
   refreshSpectateSkipBtn(); // "Salta all'avvio" solo mentre assisti alla mossa della rivale
   if (ui.touchControls) ui.touchControls.classList.toggle("race-mode", state.mode === "race");   // in corsa: via lo scorrimento laterale
   updateFallenRiders(dt);   // fantini caduti a terra (animazione + sparizione a 15s)
@@ -15457,6 +15671,7 @@ function renderRincorsaMiniCam() {
 }
 
 function frame() {
+  try { teleFotogramma(); } catch (e) { /* niente */ }
   const dt = Math.min(clock.getDelta(), 0.033);
   const time = clock.elapsedTime;
   update(dt, time);
@@ -16849,6 +17064,7 @@ function maybeOpenAdmin() {
       + '<button type="button" class="admTab" data-sec="secHorses" style="' + admTabCss + '">🐎 Cavalli</button>'
       + '<button type="button" class="admTab" data-sec="secJockeys" style="' + admTabCss + '">🏇 Fantini</button>'
       + '<button type="button" class="admTab" data-sec="secDeals" style="' + admTabCss + '">🤝 Accordi</button>'
+      + '<button type="button" class="admTab" data-sec="secCorse" style="' + admTabCss + '">📊 Corse</button>'
       + '</div>'
       // Classifica account (sezione DEFAULT aperta)
       + '<div id="secAccounts" class="admSec">'
@@ -16891,6 +17107,14 @@ function maybeOpenAdmin() {
       // Proposte accordi
       + '<div id="secDeals" class="admSec" style="display:none">'
       + '<div id="adminDealProps" style="font-size:13px;opacity:.7">Caricamento proposte…</div>'
+      + '</div>'
+      // Dati delle corse (anonimi): abbandoni, fluidita', bilanciamento
+      + '<div id="secCorse" class="admSec" style="display:none">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 2px 10px">'
+      + [[1, "Oggi"], [3, "3 giorni"], [7, "7 giorni"], [30, "30 giorni"]].map(([g, l]) =>
+        '<button type="button" class="teleGiorni" data-g="' + g + '" style="' + admTabCss + ';font-size:12.5px;padding:6px 12px">' + l + '</button>').join("")
+      + '</div>'
+      + '<div id="adminTele" style="font-size:13px;opacity:.7">Scegli un periodo.</div>'
       + '</div>';
     // wiring dopo l'innerHTML: refresh + click sulle righe (dettaglio contrade)
     const refBtn = $("adminRefresh");
@@ -16913,6 +17137,7 @@ function maybeOpenAdmin() {
           if (sec.id === "secHorses") { loadHorseStats(); loadProposals("horse", "adminHorseProps"); }
           if (sec.id === "secJockeys") { loadJockeyStats(); }
           if (sec.id === "secDeals") { loadProposals("deal", "adminDealProps"); }
+          if (sec.id === "secCorse") { loadTele(state.teleGiorniAdmin || 1); }
         }
       });
     });
@@ -16921,6 +17146,115 @@ function maybeOpenAdmin() {
     loadProposals("deal", "adminDealProps");
     loadProposals("horse", "adminHorseProps");
     loadPalii24();
+    $("adminOut").querySelectorAll(".teleGiorni").forEach((b) => {
+      b.addEventListener("click", () => loadTele(Number(b.getAttribute("data-g")) || 1));
+    });
+  };
+
+  // ── DATI DELLE CORSE ──────────────────────────────────────────────────────
+  // Il server restituisce i CONTI gia' fatti sugli ultimi N giorni: qui solo
+  // impaginazione. Ogni riquadro risponde a una domanda su cosa migliorare.
+  const loadTele = (giorni) => {
+    state.teleGiorniAdmin = giorni;
+    const box = $("adminTele");
+    if (!box) return;
+    $("adminOut").querySelectorAll(".teleGiorni").forEach((b) => {
+      b.style.background = Number(b.getAttribute("data-g")) === giorni ? "rgba(240,203,53,.34)" : "rgba(240,203,53,.12)";
+    });
+    box.style.opacity = ".7"; box.textContent = "Caricamento…";
+    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "teleStats", adminKey, giorni }) })
+      .then((r) => r.json())
+      .then((j) => { if (!j || !j.ok) { box.textContent = "Errore nel caricamento dei dati."; return; } box.style.opacity = "1"; box.innerHTML = renderTele(j); })
+      .catch(() => { box.textContent = "Errore nel caricamento dei dati."; });
+  };
+  const nomeContrada = (id) => ((CONTRADE.find((c) => c.id === id) || {}).name || id || "—");
+  const NOMI_FASE = { select: "Scelta contrada", estrazione: "Estrazione", tratta: "Tratta", scelta: "Fantini e accordi", mossa: "Mossa", race: "Corsa", finished: "Arrivo" };
+  const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
+  const titolo = (t, sotto) => '<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;margin:18px 2px 4px;text-align:left">' + t + '</div>'
+    + (sotto ? '<div style="font-size:12px;opacity:.6;margin:0 2px 8px;text-align:left">' + sotto + '</div>' : "");
+  const carte = (lista) => '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:4px 2px">' + lista.map(([l, v, c]) =>
+    '<div style="flex:1 1 128px;min-width:118px;background:rgba(255,246,225,.05);border:1px solid rgba(240,203,53,.16);border-radius:10px;padding:8px 11px;text-align:left">'
+    + '<div style="font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.6">' + l + '</div>'
+    + '<div style="font-size:18px;font-weight:800;color:' + (c || "#f3e7cf") + ';margin-top:2px;font-variant-numeric:tabular-nums">' + v + '</div></div>').join("") + '</div>';
+  const tabella = (intest, righe) => '<div style="overflow:auto;border:1px solid rgba(240,203,53,.18);border-radius:10px;margin:4px 2px">'
+    + '<table style="width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums"><thead><tr style="background:rgba(240,203,53,.1)">'
+    + intest.map((h, i) => '<th style="padding:7px 8px;text-align:' + (i ? "right" : "left") + '">' + h + '</th>').join("") + '</tr></thead><tbody>'
+    + (righe.length ? righe.map((r) => '<tr style="border-top:1px solid rgba(240,203,53,.12)">' + r.map((c, i) =>
+      '<td style="padding:6px 8px;text-align:' + (i ? "right" : "left") + '">' + c + '</td>').join("") + '</tr>').join("")
+      : '<tr><td colspan="' + intest.length + '" style="padding:12px;opacity:.6">Nessun dato.</td></tr>')
+    + '</tbody></table></div>';
+  // Barre orizzontali per un conteggio { chiave: n }.
+  const barre = (obj, nome, ordina) => {
+    let ks = Object.keys(obj || {});
+    if (ordina === "chiave") ks.sort((a, b) => Number(a) - Number(b)); else ks.sort((a, b) => obj[b] - obj[a]);
+    const max = Math.max(1, ...ks.map((k) => obj[k]));
+    if (!ks.length) return '<div style="opacity:.6;margin:4px 2px">Nessun dato.</div>';
+    return '<div style="display:flex;flex-direction:column;gap:3px;margin:4px 2px">' + ks.map((k) =>
+      '<div style="display:grid;grid-template-columns:130px 1fr 52px;gap:8px;align-items:center;font-size:12.5px">'
+      + '<span style="text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(nome ? nome(k) : k) + '</span>'
+      + '<span style="height:9px;border-radius:5px;background:rgba(240,203,53,.12)"><span style="display:block;height:100%;border-radius:5px;background:#f0cb35;width:' + Math.round((obj[k] / max) * 100) + '%"></span></span>'
+      + '<span style="text-align:right;font-variant-numeric:tabular-nums">' + obj[k] + '</span></div>').join("") + '</div>';
+  };
+  const renderTele = (j) => {
+    if (!j.totale && !j.attese) return '<div style="opacity:.7;margin:6px 2px">Nessun palio registrato in questo periodo. I dati arrivano a gruppi di ' + TELE_GRUPPO + ' palii per giocatore.</div>';
+    const fpsCol = (f) => (f === null || f === undefined ? "—" : '<b style="color:' + (f >= 45 ? "#7fd98c" : f >= 30 ? "#e8b06f" : "#e8896f") + '">' + f + '</b>');
+    const camTot = Object.values(j.camere || {}).reduce((a, b) => a + b, 0);
+    const camPerc = {}; Object.keys(j.camere || {}).forEach((c) => { camPerc[c] = Math.round((j.camere[c] / Math.max(1, camTot)) * 100); });
+    return (j.troncato ? '<div style="color:#e8b06f;font-size:12px;margin:0 2px 6px">Giorni molto pieni: conteggiati solo gli ultimi palii di ciascun giorno (campione).</div>' : "")
+      + carte([
+        ["Palii registrati", j.totale, "#f0cb35"],
+        ["Arrivati in fondo", j.arrivi + " · " + pct(j.arrivi, j.totale), "#7fd98c"],
+        ["Lasciati a metà", j.abbandoni + " · " + pct(j.abbandoni, j.totale), j.abbandoni / j.totale > 0.3 ? "#e8896f" : "#e8b06f"],
+        ["Durata media", j.durataMedia ? Math.round(j.durataMedia / 60) + " min" : "—"],
+        ["Mossa media", j.mossaMedia ? Math.round(j.mossaMedia) + " s" : "—"],
+        ["Mosse con falsa", j.mossaConFalsa === null ? "—" : j.mossaConFalsa + "%"],
+        ["Corsa media", j.corsaMedia ? Math.round(j.corsaMedia) + " s" : "—"],
+        ["Vittorie giocatore", j.vintePerc === null ? "—" : j.vintePerc + "%", "#f0cb35"],
+        ["Posizione media", j.posMedia === null ? "—" : j.posMedia],
+        ["Giocatore scosso", j.scossoPerc === null ? "—" : j.scossoPerc + "%"],
+        ["Cadute per palio", j.cadutiMedi === null ? "—" : j.cadutiMedi],
+        ["Nerbate a palio", j.nerbateMedie === null ? "—" : j.nerbateMedie],
+        ["App installata", pct(j.pwa, j.totale)],
+        ["Spot visti", j.spotTot],
+        ["Bloccati dall'attesa", (j.attese || 0) + (j.attese ? " · veloce " + ((j.attesePerModo || {}).veloce || 0) + " · campagna " + ((j.attesePerModo || {}).campagna || 0) : ""), j.attese ? "#e8b06f" : null],
+      ])
+      + titolo("Dove lasciano il palio", "Fase in cui chi non arriva in fondo esce (tasto Menu o pagina chiusa).")
+      + barre(j.abbandoniPerFase, (k) => NOMI_FASE[k] || k)
+      + titolo("Fluidità per dispositivo", "Fotogrammi al secondo in corsa (mediana). Verde ≥45 · arancio 30-45 · rosso sotto 30. Fotogrammi lenti medi: " + (j.lentiMedi === null ? "—" : j.lentiMedi + "%") + ".")
+      + tabella(["Dispositivo", "Palii", "FPS", "Secondo peggiore", "Sotto 30 fps"],
+        (j.fpsDispositivo || []).map((r) => [({ tel: "Telefono", tab: "Tablet", pc: "PC" })[r.k] || escapeHtml(r.k), r.n, fpsCol(r.fps), fpsCol(r.fpsMin), r.sotto30 + "%"]))
+      + titolo("Fluidità per scheda grafica", "Le 15 più usate: dice su quali dispositivi alleggerire la grafica.")
+      + tabella(["Scheda grafica", "Palii", "FPS", "Secondo peggiore", "Sotto 30 fps"],
+        (j.fpsGpu || []).map((r) => [escapeHtml(r.k), r.n, fpsCol(r.fps), fpsCol(r.fpsMin), r.sotto30 + "%"]))
+      + titolo("Bilanciamento: cavallo del giocatore", "Quanto vince il giocatore con ogni fascia. Se la brenna vince come il bombolone, le fasce non contano.")
+      + tabella(["Fascia", "Palii", "Vinti", "% vittorie", "Pos. media"],
+        (j.perFascia || []).map((r) => [escapeHtml(r.k), r.n, r.vinte, pct(r.vinte, r.n), r.posMedia ?? "—"]))
+      + titolo("Chi vince il palio (tutte le contrade)")
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px">'
+      + '<div>' + titolo("Per fascia del cavallo") + barre(j.vinciFascia) + '</div>'
+      + '<div>' + titolo("Per contrada") + barre(j.vinciContrada, nomeContrada) + '</div></div>'
+      + titolo("Fantini scelti dal giocatore", "I 20 più ingaggiati, con le vittorie ottenute.")
+      + tabella(["Fantino", "Palii", "Vinti", "% vittorie", "Pos. media"],
+        (j.perFantino || []).map((r) => [escapeHtml(r.k), r.n, r.vinte, pct(r.vinte, r.n), r.posMedia ?? "—"]))
+      + titolo("Fantini che vincono (tutte le contrade)") + barre(Object.fromEntries(j.vinciFantino || []))
+      + titolo("Contrade giocate") + tabella(["Contrada", "Palii", "Vinti", "% vittorie", "Pos. media"],
+        (j.perContrada || []).map((r) => [escapeHtml(nomeContrada(r.k)), r.n, r.vinte, pct(r.vinte, r.n), r.posMedia ?? "—"]))
+      + titolo("Giocatore rincorsa", "Quando la rincorsa tocca al giocatore la mossa aspetta lui: se qui gli abbandoni sono alti, non ha capito cosa fare.")
+      + carte([["Palii da rincorsa", j.rincorsa.n], ["Lasciati a metà", j.rincorsa.abbandoni + " · " + pct(j.rincorsa.abbandoni, j.rincorsa.n), "#e8b06f"], ["Vinti", j.rincorsa.vinte]])
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 18px">'
+      + '<div>' + titolo("Cadute per palio", "Quante contrade cadono in un palio.") + barre(j.cadutiDistrib, (k) => k + " cadute", "chiave") + '</div>'
+      + '<div>' + titolo("Inquadrature usate", "% del tempo di corsa.") + barre(camPerc, (k) => k + " (%)") + '</div>'
+      + '<div>' + titolo("Ora del giorno") + barre(j.ore, (k) => "ore " + k, "chiave") + '</div>'
+      + '<div>' + titolo("Dispositivi e lingue") + barre(Object.assign({}, j.dispositivi, Object.fromEntries(Object.entries(j.lingue || {}).map(([k, v]) => ["lingua " + k, v])))) + '</div>'
+      + '<div>' + titolo("Modalità e palio") + barre(Object.assign({}, j.modi, j.palii)) + '</div>'
+      + '<div>' + titolo("Versione del gioco") + barre(j.versioni) + '</div></div>'
+      + titolo("Ultimi palii", "Le ultime 40 righe così come arrivano.")
+      + tabella(["Quando", "Esito", "Fase", "Disp.", "Contrada", "Fascia", "Pos.", "FPS", "Mossa"],
+        (j.ultime || []).map((r) => [
+          r.ts ? new Date(r.ts).toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—",
+          escapeHtml(r.esito || ""), escapeHtml(NOMI_FASE[r.fase] || r.fase || ""), escapeHtml(r.disp || ""),
+          escapeHtml(nomeContrada(r.contrada)), escapeHtml(r.fascia || ""), r.pos || "—", fpsCol(r.fps || null), r.mossaS ? r.mossaS + " s" : "—"]));
   };
 
   // Accetta/rifiuta una proposta di un dato kind (cavallo → col tier).
@@ -17201,6 +17535,7 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
 
 function init() {
   try { avviaTraduzione(); } catch (e) { /* la lingua non deve mai fermare il gioco */ }
+  try { teleAvvia(); } catch (e) { /* i dati non devono mai fermare il gioco */ }
   applicaImpostazioni();  // epoca (cavalli+fantini) e durata massima della mossa
   maybeOpenAdmin();       // ?admin → pannello amministratore (sopra tutto)
   ensurePasswordGate();   // gate password: copre tutto finché non entri

@@ -7,6 +7,8 @@
 //   · login     { email, password }                          → verifica le credenziali
 //   · palio     { email }                                    → +1 al conteggio palii dell'utente
 //   · adminList { adminKey }                                 → elenco di TUTTI gli account (solo owner)
+//   · tele      { corse: [...] }                             → righe ANONIME delle corse (a gruppi)
+//   · teleStats { adminKey, giorni }                         → conti delle corse per l'admin
 // GET ?admin=<KEY> è una scorciatoia equivalente ad adminList.
 //
 // Variabili d'ambiente (su Vercel):
@@ -129,6 +131,8 @@ module.exports = async (req, res) => {
     if (action === "proposalDecide") return await proposalDecide(body, res);
     if (action === "setHorseTier") return await setHorseTier(body, res);
     if (action === "palii24") return await palii24(body, res);
+    if (action === "tele") return await teleSalva(body, res);
+    if (action === "teleStats") return await teleStats(body, res);
     if (action === "adminList") return await adminList(body.adminKey, res);
     res.status(400).json({ error: "bad-action" });
   } catch (e) {
@@ -593,6 +597,165 @@ async function setHorseTier(body, res) {
 }
 
 // Elenco di TUTTI gli account + i consigli — solo se adminKey combacia con PALIO_ADMIN_KEY.
+// ── DATI DELLE CORSE (anonimi) ───────────────────────────────────────────────
+// Ogni palio giocato lascia una riga: com'e' andato, dove si e' fermato chi l'ha
+// lasciato a meta', su che dispositivo e quanto fluido. NIENTE email ne' nome:
+// servono a migliorare il gioco, non a seguire le persone.
+// Una LISTA per giorno (ora di Roma). Il client manda le righe a gruppi, e ogni
+// gruppo costa UN comando (LPUSH con piu' valori): la quota di Upstash e' gia'
+// saltata una volta. EXPIRE solo alla prima riga del giorno, LTRIM solo oltre il tetto.
+const TELE_TTL = 60 * 24 * 3600;          // ogni giorno si cancella da solo dopo 60 giorni
+const TELE_TETTO_GIORNO = 10000;          // righe massime tenute per giorno
+const TELE_LETTURA_GIORNO = 4000;         // righe lette per giorno dalle statistiche
+const teleKey = (giorno) => `palio:tele:${giorno}`;
+function giornoRoma(d) {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome", year: "numeric", month: "2-digit", day: "2-digit" });
+  return f.format(d).replace(/-/g, "");
+}
+// Campi ammessi e loro forma: tutto il resto si butta. s = testo (lunghezza max),
+// n = numero (min, max), o = oggetto di numeri (chiavi brevi), a = elenco di numeri.
+const TELE_CAMPI = {
+  v: ["s", 12], esito: ["s", 12], fase: ["s", 12], dur: ["n", 0, 7200], ora: ["n", 0, 23],
+  lingua: ["s", 3], disp: ["s", 4], touch: ["n", 0, 1], pwa: ["n", 0, 1], w: ["n", 0, 9999], h: ["n", 0, 9999],
+  dpr: ["n", 0, 8], gpu: ["s", 48], modo: ["s", 10], palio: ["s", 14], ruolo: ["s", 10],
+  contrada: ["s", 14], rinc: ["n", 0, 1], fantino: ["s", 24], cavallo: ["s", 32], fascia: ["s", 10],
+  mossaS: ["n", 0, 3600], falsa: ["n", 0, 9], corsaS: ["n", 0, 600], pos: ["n", 0, 10], scosso: ["n", 0, 1],
+  caduti: ["n", 0, 10], minSella: ["n", 0, 10], vince: ["s", 14], vinceFascia: ["s", 10], vinceFantino: ["s", 24],
+  nerbate: ["n", 0, 999], fps: ["n", 0, 240], fpsMin: ["n", 0, 240], lenti: ["n", 0, 100],
+  camere: ["o", 8], posStoria: ["a", 80], spot: ["n", 0, 99], denari: ["n", -99999, 999999], nPalio: ["n", 0, 99999],
+};
+function pulisciRiga(r) {
+  if (!r || typeof r !== "object") return null;
+  const o = {};
+  for (const k of Object.keys(TELE_CAMPI)) {
+    if (r[k] === undefined || r[k] === null) continue;
+    const [tipo, a, b] = TELE_CAMPI[k];
+    const x = r[k];
+    if (tipo === "s") { const t = String(x).slice(0, a); if (t) o[k] = t; }
+    else if (tipo === "n") { const n = Number(x); if (Number.isFinite(n)) o[k] = Math.round(Math.min(b, Math.max(a, n)) * 10) / 10; }
+    else if (tipo === "o" && typeof x === "object" && !Array.isArray(x)) {
+      const m = {};
+      Object.keys(x).slice(0, a).forEach((c) => { const n = Number(x[c]); if (/^[a-z0-9]{1,14}$/i.test(c) && Number.isFinite(n)) m[c] = Math.round(Math.max(0, Math.min(3600, n))); });
+      o[k] = m;
+    } else if (tipo === "a" && Array.isArray(x)) {
+      o[k] = x.slice(0, a).map((n) => Math.max(0, Math.min(10, Math.round(Number(n) || 0))));
+    }
+  }
+  if (!o.esito) return null;
+  return o;
+}
+async function teleSalva(body, res) {
+  const corse = Array.isArray(body.corse) ? body.corse.slice(0, 20) : [];
+  const adesso = Date.now();
+  const righe = corse.map(pulisciRiga).filter(Boolean)
+    .map((r) => JSON.stringify(Object.assign(r, { ts: adesso })))
+    .filter((t) => t.length <= 1200);
+  if (!righe.length) { res.status(200).json({ ok: true, n: 0 }); return; }
+  const k = teleKey(giornoRoma(new Date(adesso)));
+  const [{ result: len }] = await redisPipeline([["LPUSH", k, ...righe]]);
+  const extra = [];
+  if (Number(len) <= righe.length) extra.push(["EXPIRE", k, TELE_TTL]);           // prima riga del giorno
+  if (Number(len) > TELE_TETTO_GIORNO) extra.push(["LTRIM", k, 0, TELE_TETTO_GIORNO - 1]);
+  if (extra.length) await redisPipeline(extra);
+  res.status(200).json({ ok: true, n: righe.length });
+}
+
+// Statistiche per l'admin: legge gli ultimi N giorni e restituisce i CONTI, non
+// le righe (piu' le ultime 40 righe grezze, per guardarci dentro).
+async function teleStats(body, res) {
+  const secret = process.env.PALIO_ADMIN_KEY;
+  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
+  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  let giorni = parseInt(body.giorni, 10); if (!(giorni >= 1)) giorni = 1; if (giorni > 30) giorni = 30;
+  const righe = [];
+  let troncato = false;
+  for (let i = 0; i < giorni; i++) {
+    const k = teleKey(giornoRoma(new Date(Date.now() - i * 864e5)));
+    const [{ result }] = await redisPipeline([["LRANGE", k, 0, TELE_LETTURA_GIORNO - 1]]);
+    const lista = Array.isArray(result) ? result : [];
+    if (lista.length >= TELE_LETTURA_GIORNO) troncato = true;
+    lista.forEach((t) => { try { righe.push(JSON.parse(t)); } catch (e) { /* riga rotta: si salta */ } });
+  }
+  res.status(200).json({ ok: true, giorni, troncato, ...aggregaTele(righe) });
+}
+
+function aggregaTele(tutte) {
+  // Le righe "attesa" non sono palii (il giocatore ha trovato la modalita'
+  // bloccata dai minuti di attesa): si contano a parte.
+  const attese = tutte.filter((r) => r.esito === "attesa");
+  const righe = tutte.filter((r) => r.esito !== "attesa");
+  const conta = (arr, f) => arr.reduce((m, r) => { const k = f(r); if (k !== undefined && k !== null && k !== "") m[k] = (m[k] || 0) + 1; return m; }, {});
+  const media = (arr) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
+  const mediana = (arr) => { if (!arr.length) return null; const s = arr.slice().sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const r1 = (x) => (x === null ? null : Math.round(x * 10) / 10);
+  const arrivi = righe.filter((r) => r.esito === "arrivo");
+  const giocate = arrivi.filter((r) => r.ruolo === "play" || !r.ruolo);
+  const conFps = righe.filter((r) => r.fps > 0);
+  // Gruppo con: corse, vinte dal giocatore, posizione media.
+  const perGruppo = (arr, f) => {
+    const g = {};
+    arr.forEach((r) => {
+      const k = f(r); if (!k) return;
+      const x = g[k] || (g[k] = { n: 0, vinte: 0, pos: [] });
+      x.n++; if (r.pos === 1) x.vinte++; if (r.pos > 0) x.pos.push(r.pos);
+    });
+    return Object.keys(g).map((k) => ({ k, n: g[k].n, vinte: g[k].vinte, posMedia: r1(media(g[k].pos)) })).sort((a, b) => b.n - a.n);
+  };
+  const fpsPer = (f) => {
+    const g = {};
+    conFps.forEach((r) => { const k = f(r); if (!k) return; (g[k] || (g[k] = [])).push(r); });
+    return Object.keys(g).map((k) => ({
+      k, n: g[k].length,
+      fps: r1(mediana(g[k].map((r) => r.fps))),
+      fpsMin: r1(mediana(g[k].filter((r) => r.fpsMin > 0).map((r) => r.fpsMin))),
+      sotto30: Math.round(g[k].filter((r) => r.fps < 30).length / g[k].length * 100),
+    })).sort((a, b) => b.n - a.n);
+  };
+  const camere = {};
+  righe.forEach((r) => { Object.keys(r.camere || {}).forEach((c) => { camere[c] = (camere[c] || 0) + r.camere[c]; }); });
+  const rincorse = righe.filter((r) => r.rinc === 1);
+  return {
+    totale: righe.length,
+    attese: attese.length,
+    attesePerModo: attese.reduce((m, r) => { const k = r.modo || "?"; m[k] = (m[k] || 0) + 1; return m; }, {}),
+    arrivi: arrivi.length,
+    abbandoni: righe.filter((r) => r.esito !== "arrivo").length,
+    abbandoniPerFase: conta(righe.filter((r) => r.esito !== "arrivo"), (r) => r.fase),
+    esiti: conta(righe, (r) => r.esito),
+    dispositivi: conta(righe, (r) => r.disp),
+    lingue: conta(righe, (r) => r.lingua),
+    pwa: righe.filter((r) => r.pwa === 1).length,
+    modi: conta(righe, (r) => r.modo),
+    palii: conta(righe, (r) => r.palio),
+    ore: conta(righe, (r) => r.ora),
+    versioni: conta(righe, (r) => r.v),
+    durataMedia: r1(media(righe.map((r) => r.dur || 0))),
+    mossaMedia: r1(media(arrivi.filter((r) => r.mossaS > 0).map((r) => r.mossaS))),
+    mossaConFalsa: arrivi.length ? Math.round(arrivi.filter((r) => r.falsa > 0).length / arrivi.length * 100) : null,
+    corsaMedia: r1(media(arrivi.filter((r) => r.corsaS > 0).map((r) => r.corsaS))),
+    vintePerc: giocate.length ? r1(giocate.filter((r) => r.pos === 1).length / giocate.length * 100) : null,
+    posMedia: r1(media(giocate.filter((r) => r.pos > 0).map((r) => r.pos))),
+    scossoPerc: giocate.length ? Math.round(giocate.filter((r) => r.scosso === 1).length / giocate.length * 100) : null,
+    cadutiMedi: r1(media(arrivi.map((r) => r.caduti || 0))),
+    cadutiDistrib: conta(arrivi, (r) => r.caduti),
+    nerbateMedie: r1(media(giocate.map((r) => r.nerbate || 0))),
+    spotTot: righe.reduce((a, r) => a + (r.spot || 0), 0),
+    rincorsa: { n: rincorse.length, abbandoni: rincorse.filter((r) => r.esito !== "arrivo").length, vinte: rincorse.filter((r) => r.pos === 1).length },
+    perFascia: perGruppo(giocate, (r) => r.fascia),
+    perFantino: perGruppo(giocate, (r) => r.fantino).slice(0, 20),
+    perContrada: perGruppo(giocate, (r) => r.contrada),
+    perRuolo: perGruppo(arrivi, (r) => r.ruolo),
+    vinciContrada: conta(arrivi, (r) => r.vince),
+    vinciFascia: conta(arrivi, (r) => r.vinceFascia),
+    vinciFantino: Object.entries(conta(arrivi, (r) => r.vinceFantino)).sort((a, b) => b[1] - a[1]).slice(0, 15),
+    fpsDispositivo: fpsPer((r) => r.disp),
+    fpsGpu: fpsPer((r) => r.gpu).slice(0, 15),
+    lentiMedi: r1(media(conFps.map((r) => r.lenti || 0))),
+    camere,
+    ultime: righe.slice(0, 40),
+  };
+}
+
 async function adminList(adminKey, res) {
   const secret = process.env.PALIO_ADMIN_KEY;
   if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
