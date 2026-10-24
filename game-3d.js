@@ -5928,9 +5928,18 @@ function resumeCampaign() {
 
 // ── FREEZE PALIATA VELOCE: max 1 ogni 10 minuti per giocatore (Mario Rossi: illimitato).
 const PALIATA_COOLDOWN_MS = 10 * 60 * 1000;
+// Lo sviluppatore: account "Mario Rossi" SU UN DISPOSITIVO dove e' stato fatto
+// almeno una volta l'accesso al portale admin con la password vera. Prima bastava
+// il nome, e "Mario Rossi" e' fra i nomi piu' comuni d'Italia: chiunque si
+// iscrivesse cosi' aveva palii senza attesa, 5000 denari e il gioco aperto in demo.
+const SVILUPPATORE_KEY = "palio.sviluppatore";
+function dispositivoSviluppatore() {
+  try { return localStorage.getItem(SVILUPPATORE_KEY) === "1"; } catch (e) { return false; }
+}
 function isMarioRossi(acc) {
   return !!(acc && (acc.nome || "").trim().toLowerCase() === "mario"
-    && (acc.cognome || "").trim().toLowerCase() === "rossi");
+    && (acc.cognome || "").trim().toLowerCase() === "rossi")
+    && dispositivoSviluppatore();
 }
 function paliataVeloceAttesaMs() {
   const acc = getAccount();
@@ -15353,6 +15362,7 @@ function teleAttiva() {
   const host = location.hostname;
   if (host === "localhost" || host === "127.0.0.1" || host === "") return false;
   try { if (isAdminUrl()) return false; } catch (e) { /* niente */ }
+  if (dispositivoSviluppatore()) return false;   // le prove dello sviluppatore non sporcano i dati
   return true;
 }
 let teleGpu = null;
@@ -15716,19 +15726,6 @@ function reportBootError(error) {
   }));
 }
 
-// ══ PASSWORD DEL GIOCO ═══════════════════════════════════════════════════════
-// Gate leggero per tenere fuori i curiosi: NON è vera sicurezza (chi apre il
-// codice la vede). Per cambiarla, modifica SOLO questa riga:
-// La password cambia il 18 agosto 2026 alle 18:00: da "vincitore" a "vittorioso".
-// Da quel momento, chi era già entrato deve reinserirla (l'unlock vecchio non vale
-// più) e vede il messaggio "la password è cambiata".
-const PW_CUTOVER = new Date(2026, 7, 18, 18, 0, 0).getTime();   // 18 ago 2026, 18:00 (mese 7 = agosto)
-const PW_CHANGED = Date.now() >= PW_CUTOVER;
-const GAME_PASSWORD = PW_CHANGED ? "vittorioso" : "vincitore";
-const PW_UNLOCK_TOKEN = PW_CHANGED ? "v2" : "1";   // valore salvato quando si sblocca (per era password)
-// MANUTENZIONE: quando true, TUTTI i giocatori (tranne Mario Rossi) vengono bloccati
-// all'ingresso con una schermata "stiamo aggiornando", al posto della password.
-const MAINTENANCE = true;
 // Id votante stabile per-dispositivo (il sondaggio è prima del login): un voto per device.
 function getVoterId() {
   let v = null;
@@ -15964,241 +15961,6 @@ const CHANGELOG_NOVITA = [
   ["🗳️", "La vostra voce sui cavalli e fantini", "Sondaggio sui cavalli, proposta di nuovi cavalli e nuovi fantini: decidete voi."],
   ["💬", "Feedback e consigli", "Ci dite come migliorare il gioco e noi lo facciamo."],
 ];
-// STEP 1: le NOVITÀ fatte grazie ai giocatori, con il tasto Skip → apre il sondaggio.
-function showMaintenanceIntro() {
-  if (document.getElementById("maintIntro") || document.getElementById("maintGate") || document.getElementById("pwGate")) return;
-  const ov = document.createElement("div");
-  ov.id = "maintIntro";
-  ov.style.cssText = "position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;"
-    + "background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
-    + "color:#f3e7cf;font-family:inherit;padding:22px 16px;text-align:center;overflow-y:auto";
-  const items = CHANGELOG_NOVITA.map(([ic, t, d]) =>
-    '<div style="display:flex;gap:12px;align-items:flex-start;text-align:left;background:rgba(255,246,225,.04);border:1px solid rgba(240,203,53,.16);border-radius:12px;padding:11px 14px">'
-    + `<div style="font-size:22px;line-height:1">${ic}</div>`
-    + `<div><div style="font-weight:800;font-size:15px;color:#f6e6bd">${t}</div>`
-    + `<div style="opacity:.75;font-size:13px;margin-top:2px">${d}</div></div></div>`).join("");
-  ov.innerHTML =
-    '<div style="max-width:min(640px,94vw);width:100%;display:flex;flex-direction:column;align-items:center;gap:14px">'
-    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio Game</div>'
-    + '<div style="font-size:clamp(22px,5vw,38px);line-height:1.15;font-weight:800;max-width:min(640px,92vw)">Le novità fatte grazie alle vostre richieste</div>'
-    + '<div style="opacity:.8;font-size:clamp(13px,2.4vw,16px);max-width:min(520px,90vw)">Grazie a chi gioca e ci scrive: ecco cosa è cambiato.</div>'
-    + `<div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:4px">${items}</div>`
-    + '<button type="button" id="maintSkip" style="font:inherit;font-size:17px;font-weight:800;padding:12px 44px;border-radius:10px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer;margin:10px 0 20px">Continua ›</button>'
-    + '</div>';
-  document.body.appendChild(ov);
-  // Skip → password gate. RIMOSSO il sondaggio "vota le statistiche cavalli/fantini"
-  // (showMaintenanceGate): non si passa più da lì.
-  ov.querySelector("#maintSkip").addEventListener("click", () => { ov.remove(); showPasswordPrompt(); });
-}
-// STEP 2: sondaggio STATISTICHE — i giocatori votano Potenza e Turn (1..5) di ogni
-// cavallo. Cavalli in classifica per fascia: Brenna → Bono → Bombolone.
-function showMaintenanceGate() {
-  if (document.getElementById("maintGate")) return;
-  const voter = getVoterId();
-  const TORD = { brenna: 0, bono: 1, bombolone: 2 };
-  const TLAB = { brenna: "Brenna", bono: "Bono", bombolone: "Bombolone" };
-  const TCOL = { brenna: "#d79c81", bono: "#e7d18a", bombolone: "#9fe3a6" };
-  const STATS = [{ id: "potenza", label: "Potenza" }, { id: "turn", label: "Turn" }];
-  const ov = document.createElement("div");
-  ov.id = "maintGate";
-  ov.style.cssText = "position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;"
-    + "background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
-    + "color:#f3e7cf;font-family:inherit;padding:20px 16px;text-align:center;overflow-y:auto";
-  const enc = encodeURIComponent;
-  // La lista si costruisce DOPO aver caricato i cavalli accettati; è in CLASSIFICA
-  // per fascia (Brenna → Bono → Bombolone), con un'intestazione per gruppo.
-  const buildRows = () => {
-    const list = ov.querySelector("#mgList");
-    if (!list) return;
-    const names = Object.keys(HORSE_ROSTER).sort((a, b) => {
-      const ta = TORD[(HORSE_ROSTER[a] || {}).tier] ?? 1, tb = TORD[(HORSE_ROSTER[b] || {}).tier] ?? 1;
-      return ta - tb || a.localeCompare(b);
-    });
-    let rows = "", lastTier = null;
-    names.forEach((name) => {
-      const tier = (HORSE_ROSTER[name] || {}).tier || "bono";
-      if (tier !== lastTier) {
-        lastTier = tier;
-        rows += `<div style="text-align:left;font-weight:800;font-size:13px;color:${TCOL[tier]};text-transform:uppercase;letter-spacing:.09em;padding:14px 8px 4px">${TLAB[tier]}</div>`;
-      }
-      let statsHtml = "";
-      STATS.forEach((s) => {
-        let btns = "";
-        for (let v = 1; v <= 5; v += 1) {
-          btns += `<button type="button" class="mg-sv" data-horse="${enc(name)}" data-stat="${s.id}" data-val="${v}" `
-            + `style="font:inherit;font-size:13px;font-weight:800;width:30px;height:30px;border-radius:7px;cursor:pointer;`
-            + `border:1px solid rgba(240,203,53,.35);background:transparent;color:#f3e7cf">${v}</button>`;
-        }
-        statsHtml += `<div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap">`
-          + `<span style="width:62px;font-size:12px;opacity:.85;text-align:left">${s.label}</span>`
-          + `<div style="display:flex;gap:4px">${btns}</div>`
-          + `<span class="mg-avg" data-horse="${enc(name)}" data-stat="${s.id}" style="font-size:11px;opacity:.6">—</span></div>`;
-      });
-      rows += `<div class="mg-row" style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(240,203,53,.12)">`
-        + `<div style="font-weight:700;font-size:14px">${name}</div>${statsHtml}</div>`;
-    });
-    list.innerHTML = rows;
-  };
-  ov.innerHTML =
-    '<div style="max-width:min(680px,94vw);width:100%;display:flex;flex-direction:column;align-items:center;gap:12px">'
-    + '<div style="font-size:clamp(18px,3.2vw,30px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800;margin-top:8px">Palio Game</div>'
-    + '<div style="font-size:clamp(22px,5vw,38px);line-height:1.15;font-weight:800;max-width:min(680px,92vw)">Vota le statistiche dei cavalli</div>'
-    // ── SPIEGAZIONE (prima di votare) ──────────────────────────────────────────
-    + '<div style="width:100%;max-width:min(600px,92vw);text-align:left;background:rgba(255,246,225,.05);border:1px solid rgba(240,203,53,.22);border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.5">'
-    + '<div style="margin-bottom:8px">Aiutaci a tarare i cavalli: dai un voto da <b>1 a 5</b> a ognuno.</div>'
-    + '<div style="margin-bottom:6px"><b style="color:#f0cb35">Potenza</b> = quanto il cavallo, andando addosso agli altri <b>ai canapi</b>, li <b>SPOSTA</b> (la spinta alla mossa). <b>5</b> = spintone che apre il varco · <b>1</b> = non sposta nessuno.</div>'
-    + '<div><b style="color:#f0cb35">Turn</b> = quanto il cavallo <b>REGGE</b> ai canapi senza girarsi/imbizzarrirsi. <b>5</b> = fermo e tranquillo (si gira poco, è un pregio) · <b>1</b> = si gira e si imbizzarrisce subito.</div>'
-    + '</div>'
-    + `<div id="mgList" style="width:100%;max-width:min(680px,94vw);background:rgba(255,246,225,.04);border:1px solid rgba(240,203,53,.18);border-radius:14px;padding:4px 8px"><div style="opacity:.6;font-size:13px;padding:14px">Caricamento cavalli…</div></div>`
-    // ── VOTO FANTINI ───────────────────────────────────────────────────────────
-    + '<div style="font-size:clamp(20px,4.4vw,32px);line-height:1.15;font-weight:800;margin-top:12px">Aiutaci a tarare i fantini</div>'
-    + '<div style="width:100%;max-width:min(600px,92vw);text-align:left;background:rgba(255,246,225,.05);border:1px solid rgba(240,203,53,.22);border-radius:14px;padding:12px 16px;font-size:12.5px;line-height:1.45">'
-    + 'Vota da <b>1 a 5</b> ogni caratteristica: <b>Mossa</b> (partenza ai canapi) · <b>Difesa</b> (tiene la posizione/para) · <b>3° giro</b> (tenuta finale) · <b>Fedeltà</b> (resiste alla corruzione) · <b>Curva</b> (San Martino/Casato).'
-    + '</div>'
-    + `<div id="mgJkList" style="width:100%;max-width:min(680px,94vw);background:rgba(255,246,225,.04);border:1px solid rgba(231,209,138,.2);border-radius:14px;padding:4px 8px"><div style="opacity:.6;font-size:13px;padding:14px">Caricamento fantini…</div></div>`
-    + '<div id="mgStatus" style="opacity:.6;font-size:12px;min-height:16px">Caricamento voti…</div>'
-    + '<button type="button" id="mgContinua" style="font:inherit;font-size:16px;font-weight:800;padding:11px 36px;border-radius:10px;border:none;background:#f0cb35;color:#1a1206;cursor:pointer;margin-bottom:18px">Continua ›</button>'
-    + '</div>';
-  document.body.appendChild(ov);
-  ov.querySelector("#mgContinua").addEventListener("click", () => { ov.remove(); showPasswordPrompt(); });
-
-  let curRes = {};
-  const paint = () => {
-    ov.querySelectorAll(".mg-sv").forEach((btn) => {
-      const h = decodeURIComponent(btn.getAttribute("data-horse"));
-      const s = btn.getAttribute("data-stat");
-      const v = Number(btn.getAttribute("data-val"));
-      const mine = curRes[h] && curRes[h][s] ? curRes[h][s].mine : null;
-      const sel = mine === v;
-      btn.style.background = sel ? "rgba(240,203,53,.9)" : "transparent";
-      btn.style.color = sel ? "#1a1206" : "#f3e7cf";
-      btn.style.borderColor = sel ? "#f0cb35" : "rgba(240,203,53,.35)";
-    });
-    ov.querySelectorAll(".mg-avg").forEach((el) => {
-      const h = decodeURIComponent(el.getAttribute("data-horse"));
-      const s = el.getAttribute("data-stat");
-      const r = curRes[h] && curRes[h][s];
-      el.textContent = (r && r.n) ? `media ${r.avg} · ${r.n} ${r.n === 1 ? "voto" : "voti"}` : "—";
-    });
-  };
-  const load = () => {
-    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "statResults", voter }) })
-      .then((r) => r.json())
-      .then((d) => { if (d && d.ok) { curRes = d.results || {}; paint(); }
-        const st = ov.querySelector("#mgStatus"); if (st) st.textContent = "Il tuo voto si salva da solo."; })
-      .catch(() => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = "Voti offline: riprova più tardi."; });
-  };
-  ov.addEventListener("click", (e) => {
-    const btn = e.target.closest(".mg-sv");
-    if (!btn) return;
-    const horse = decodeURIComponent(btn.getAttribute("data-horse"));
-    const stat = btn.getAttribute("data-stat");
-    const val = Number(btn.getAttribute("data-val"));
-    if (!curRes[horse]) curRes[horse] = { potenza: { avg: 0, n: 0, mine: null }, turn: { avg: 0, n: 0, mine: null } };
-    curRes[horse][stat].mine = val;   // evidenzia subito
-    paint();
-    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "statVote", voter, horse, stat, value: val }) })
-      .then((r) => r.json())
-      .then((d) => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = (d && d.ok) ? "Voto salvato ✓" : "Errore nel salvare il voto."; if (d && d.ok) load(); })
-      .catch(() => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = "Voto non salvato (offline)."; });
-  });
-  // ── FANTINI: voto delle 5 metriche ─────────────────────────────────────────
-  const JKM = [{ id: "mossa", label: "Mossa" }, { id: "difesa", label: "Difesa" }, { id: "terzo", label: "3° giro" }, { id: "fedelta", label: "Fedeltà" }, { id: "curva", label: "Curva" }];
-  let curJk = {};
-  const buildJkRows = () => {
-    const list = ov.querySelector("#mgJkList");
-    if (!list) return;
-    const jks = JOCKEYS.slice().sort((a, b) => (b.ingaggio || 0) - (a.ingaggio || 0));
-    let rows = "";
-    jks.forEach((jk) => {
-      const nick = jk.nick;
-      let statsHtml = "";
-      JKM.forEach((s) => {
-        let btns = "";
-        for (let v = 1; v <= 5; v += 1) {
-          btns += `<button type="button" class="mg-jkv" data-jk="${enc(nick)}" data-stat="${s.id}" data-val="${v}" `
-            + `style="font:inherit;font-size:12px;font-weight:800;width:26px;height:26px;border-radius:6px;cursor:pointer;`
-            + `border:1px solid rgba(231,209,138,.35);background:transparent;color:#f3e7cf">${v}</button>`;
-        }
-        statsHtml += `<div style="display:flex;align-items:center;gap:6px;margin-top:4px;flex-wrap:wrap">`
-          + `<span style="width:58px;font-size:11.5px;opacity:.85;text-align:left">${s.label}</span>`
-          + `<div style="display:flex;gap:3px">${btns}</div>`
-          + `<span class="mg-jkavg" data-jk="${enc(nick)}" data-stat="${s.id}" style="font-size:11px;opacity:.6">—</span></div>`;
-      });
-      // Riga PREZZO: campo numerico 0-150 (il giocatore vota quanto dovrebbe costare).
-      const priceHtml = `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;border-top:1px solid rgba(231,209,138,.14);padding-top:5px">`
-        + `<span style="width:58px;font-size:11.5px;opacity:.85;text-align:left">Prezzo</span>`
-        + `<input type="number" min="0" max="150" inputmode="numeric" placeholder="0-150" class="mg-jkprice" data-jk="${enc(nick)}" style="width:62px;font:inherit;font-size:13px;padding:4px 6px;border-radius:7px;border:1px solid rgba(231,209,138,.4);background:#17110a;color:#f3e7cf">`
-        + `<span class="mg-jkpavg" data-jk="${enc(nick)}" style="font-size:11px;opacity:.6">—</span></div>`;
-      rows += `<div style="text-align:left;padding:9px 10px;border-bottom:1px solid rgba(231,209,138,.14)">`
-        + `<div style="font-weight:700;font-size:14px">${nick}${jk.nome && jk.nome !== "—" ? `<span style="opacity:.5;font-weight:400;font-size:12px;margin-left:7px">${jk.nome}</span>` : ""}</div>${statsHtml}${priceHtml}</div>`;
-    });
-    list.innerHTML = rows;
-  };
-  const paintJk = () => {
-    ov.querySelectorAll(".mg-jkv").forEach((btn) => {
-      const j = decodeURIComponent(btn.getAttribute("data-jk")), s = btn.getAttribute("data-stat"), v = Number(btn.getAttribute("data-val"));
-      const mine = curJk[j] && curJk[j][s] ? curJk[j][s].mine : null;
-      const sel = mine === v;
-      btn.style.background = sel ? "rgba(231,209,138,.9)" : "transparent";
-      btn.style.color = sel ? "#2b2410" : "#f3e7cf";
-      btn.style.borderColor = sel ? "#e7d18a" : "rgba(231,209,138,.35)";
-    });
-    ov.querySelectorAll(".mg-jkavg").forEach((el) => {
-      const j = decodeURIComponent(el.getAttribute("data-jk")), s = el.getAttribute("data-stat");
-      const r = curJk[j] && curJk[j][s];
-      el.textContent = (r && r.n) ? `media ${r.avg} · ${r.n}` : "—";
-    });
-    // PREZZO: media votata + prefill del proprio voto (senza sovrascrivere se sto scrivendo).
-    ov.querySelectorAll(".mg-jkpavg").forEach((el) => {
-      const j = decodeURIComponent(el.getAttribute("data-jk"));
-      const r = curJk[j] && curJk[j].ingaggio;
-      el.textContent = (r && r.n) ? `media ${r.avg} · ${r.n} ${r.n === 1 ? "voto" : "voti"}` : "—";
-    });
-    ov.querySelectorAll(".mg-jkprice").forEach((inp) => {
-      const j = decodeURIComponent(inp.getAttribute("data-jk"));
-      const r = curJk[j] && curJk[j].ingaggio;
-      if (document.activeElement !== inp && r && r.mine != null && inp.value === "") inp.value = r.mine;
-    });
-  };
-  const loadJk = () => {
-    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "jkStatResults", voter }) })
-      .then((r) => r.json()).then((d) => { if (d && d.ok) { curJk = d.results || {}; paintJk(); } }).catch(() => {});
-  };
-  ov.addEventListener("click", (e) => {
-    const btn = e.target.closest(".mg-jkv");
-    if (!btn) return;
-    const jk = decodeURIComponent(btn.getAttribute("data-jk")), stat = btn.getAttribute("data-stat"), val = Number(btn.getAttribute("data-val"));
-    if (!curJk[jk]) curJk[jk] = {};
-    if (!curJk[jk][stat]) curJk[jk][stat] = { avg: 0, n: 0, mine: null };
-    curJk[jk][stat].mine = val; paintJk();
-    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "jkStatVote", voter, jockey: jk, stat, value: val }) })
-      .then((r) => r.json()).then((d) => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = (d && d.ok) ? "Voto salvato ✓" : "Errore."; if (d && d.ok) loadJk(); })
-      .catch(() => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = "Voto non salvato (offline)."; });
-  });
-  // Voto PREZZO fantino: al cambio del campo numerico (0-150) invia il voto.
-  ov.addEventListener("change", (e) => {
-    const inp = e.target.closest(".mg-jkprice");
-    if (!inp) return;
-    const jk = decodeURIComponent(inp.getAttribute("data-jk"));
-    let val = Math.round(Number(inp.value));
-    if (!Number.isFinite(val)) return;
-    val = clamp(val, 0, 150); inp.value = val;
-    if (!curJk[jk]) curJk[jk] = {};
-    if (!curJk[jk].ingaggio) curJk[jk].ingaggio = { avg: 0, n: 0, mine: null };
-    curJk[jk].ingaggio.mine = val;
-    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "jkStatVote", voter, jockey: jk, stat: "ingaggio", value: val }) })
-      .then((r) => r.json()).then((d) => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = (d && d.ok) ? "Prezzo votato ✓" : "Errore."; if (d && d.ok) loadJk(); })
-      .catch(() => { const st = ov.querySelector("#mgStatus"); if (st) st.textContent = "Voto non salvato (offline)."; });
-  });
-  // i tasti nei campi prezzo non devono arrivare ai gestori di gioco.
-  ov.addEventListener("keydown", (e) => { if (e.target.closest(".mg-jkprice")) e.stopPropagation(); }, true);
-  // Prima i cavalli+fantini accettati (così ci sono TUTTI), poi si costruisce e carica.
-  fetchAcceptedHorses(() => { buildRows(); load(); });
-  fetchAcceptedJockeys(() => { buildJkRows(); loadJk(); });
-}
 // CICLO apertura/chiusura del gioco:
 //   • fino a RELAUNCH_AT (20 ago 21:00) → countdown "torna online"
 //   • RELAUNCH_AT → CYCLE_ANCHOR (21 ago 21:00) = 24h ONLINE (finestra iniziale)
@@ -16339,53 +16101,6 @@ function showCountdownGate(targetTs, subtitleHtml) {
   };
   tick();
   iv = setInterval(tick, 1000);
-}
-function showPasswordPrompt() {
-  if (document.getElementById("pwGate")) return;
-  let stored = null;
-  try { stored = localStorage.getItem("palioUnlocked"); } catch (e) { ensureAccountGate(); return; }
-  // Sbloccato se il token corrisponde all'era corrente (prima del cambio vale anche il vecchio "1").
-  const unlocked = PW_CHANGED ? (stored === "v2") : (stored === "1");
-  if (unlocked) { ensureAccountGate(); return; }
-  // Chi aveva l'unlock vecchio ("1") DOPO il cambio → messaggio "password cambiata".
-  const passwordCambiata = PW_CHANGED && stored === "1";
-  const sottotitolo = passwordCambiata
-    ? "La password del gioco è cambiata: digita la nuova password"
-    : "Inserisci la password per entrare";
-  const ov = document.createElement("div");
-  ov.id = "pwGate";
-  ov.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;"
-    + "justify-content:center;gap:16px;background:radial-gradient(1100px 700px at 50% -10%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
-    + "color:#f3e7cf;font-family:inherit;padding:24px;text-align:center";
-  ov.innerHTML =
-    '<div style="font-size:clamp(22px,4vw,40px);letter-spacing:.14em;color:#f0cb35;text-transform:uppercase;font-weight:800">Palio Game</div>'
-    + `<div style="opacity:.85;font-size:15px;max-width:min(420px,86vw)${passwordCambiata ? ";color:#f0cb35;font-weight:700" : ""}">${sottotitolo}</div>`
-    + '<input id="pwInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" enterkeyhint="go" spellcheck="false" '
-    + 'style="font:inherit;font-size:18px;padding:12px 16px;border-radius:10px;border:1px solid rgba(240,203,53,.5);'
-    + 'background:rgba(255,246,225,.1);color:#f3e7cf;text-align:center;width:min(280px,80vw)" />'
-    + '<button id="pwBtn" type="button" style="font:inherit;font-size:17px;font-weight:800;padding:11px 34px;border-radius:10px;'
-    + 'border:none;background:#f0cb35;color:#1a1206;cursor:pointer">Entra</button>'
-    + '<div id="pwErr" style="color:#e8896f;font-size:14px;min-height:18px"></div>';
-  document.body.appendChild(ov);
-  const input = ov.querySelector("#pwInput");
-  const err = ov.querySelector("#pwErr");
-  const tryUnlock = () => {
-    if ((input.value || "").trim().toLowerCase() === GAME_PASSWORD) {
-      try { localStorage.setItem("palioUnlocked", PW_UNLOCK_TOKEN); } catch (e) { /* no storage */ }
-      ov.remove();
-      ensureAccountGate();   // sbloccata la password: ora l'account (login/registrazione)
-    } else { err.textContent = "Password errata"; input.value = ""; input.focus(); }
-  };
-  ov.querySelector("#pwBtn").addEventListener("click", tryUnlock);
-  // stopPropagation: i tasti digitati nel campo password NON devono MAI arrivare ai
-  // gestori di gioco (che altrimenti potrebbero "mangiarli"). Doppia sicurezza oltre
-  // a uiIsTyping. Su keydown/keyup/keypress per coprire ogni caso.
-  ["keydown", "keyup", "keypress"].forEach((ev) => input.addEventListener(ev, (e) => e.stopPropagation()));
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") tryUnlock(); });
-  // Focus robusto: al primo tap/click sull'overlay o sul campo (utile su mobile,
-  // dove il focus programmatico può essere bloccato senza un gesto dell'utente).
-  ov.addEventListener("click", () => { try { input.focus(); } catch (e) { /* niente */ } });
-  setTimeout(() => { try { input.focus(); } catch (e) { /* niente */ } }, 60);
 }
 
 // ════ ACCOUNT UTENTI (login/registrazione) + SEZIONE ADMIN ═══════════════════
@@ -16992,6 +16707,9 @@ function maybeOpenAdmin() {
         }
         adminKey = key;
         $("adminErr").textContent = "";
+        // La password admin e' stata accettata dal server: questo e' il dispositivo
+        // dello sviluppatore (vedi isMarioRossi).
+        try { localStorage.setItem(SVILUPPATORE_KEY, "1"); } catch (e) { /* niente */ }
         renderAdmin(j.accounts || [], j.feedback || [], j.privacy || []);
       })
       .catch(() => { $("adminErr").textContent = "Connessione assente."; });

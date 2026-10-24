@@ -49,3 +49,6 @@ piazza-test.html
 pista-ring.js
 estrai-pista.mjs
 cavallo-flessione.html
+
+# Configurazione locale degli strumenti di sviluppo: non serve online.
+.claude/
