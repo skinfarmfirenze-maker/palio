@@ -4637,7 +4637,7 @@ function fetchAlboGlobale(cb, tentativi) {
 function openAlboVittorie() {
   // Dalle 21:00 del 21 ago (fase DEMO): albo momentaneamente RIMOSSO per tutti,
   // Mario Rossi compreso. Nasconde anche il bottone del menu.
-  if (typeof DEMO_CLOSE_AT !== "undefined" && Date.now() >= DEMO_CLOSE_AT) {
+  if (!gioccoAperto() && typeof DEMO_CLOSE_AT !== "undefined" && Date.now() >= DEMO_CLOSE_AT) {
     const b = document.getElementById("alboButton"); if (b) b.style.display = "none";
     return;
   }
@@ -4839,7 +4839,7 @@ function computeTop3Camera(dt) {
   camera.position.copy(state.cameraPosition);
   camera.lookAt(state.cameraLook);
   state.cameraFov += (52 - state.cameraFov) * clamp(dt * 4, 0, 1);
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
   return true;
 }
@@ -5658,7 +5658,7 @@ function updateEstrazione(dt, time) {
   }
   camera.lookAt(state.cameraLook);
   state.cameraFov += (52 - state.cameraFov) * clamp(dt * 3, 0, 1);
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
 }
 
@@ -8033,7 +8033,12 @@ function refreshHorseVoteUI(animate) {
     }
   });
   const btn = document.getElementById("hvConfirmBtn");
-  if (btn) btn.disabled = v.size === 0;   // vota almeno un cavallo
+  if (btn) {
+    btn.disabled = v.size === 0;   // vota almeno un cavallo
+    // Spento e basta non si capiva: chi arriva la prima volta lo toccava e non
+    // succedeva niente. Ora il tasto dice cosa manca.
+    btn.textContent = v.size === 0 ? "Vota almeno un cavallo" : "Conferma i voti →";
+  }
 }
 
 // Somma i voti del giocatore + degli altri Capitani (le Contrade che corrono,
@@ -9318,7 +9323,7 @@ function updateTratta(dt, time) {
   camera.position.copy(state.cameraPosition);
   camera.lookAt(state.cameraLook);
   state.cameraFov += (60 - state.cameraFov) * clamp(dt * 3, 0, 1);
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
 }
 
@@ -14595,7 +14600,7 @@ function updateReplayWin(dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (52 - state.cameraFov) * clamp(dt * 3, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return;
   }
@@ -14617,7 +14622,7 @@ function updateReplayWin(dt) {
   camera.position.copy(state.cameraPosition);
   camera.lookAt(state.cameraLook);
   state.cameraFov += (44 - state.cameraFov) * clamp(dt * 3, 0, 1);   // teleobiettivo
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
 }
 
@@ -14809,7 +14814,7 @@ function applicaVista(vista, primo, dt) {
     camera.lookAt(0, 0, centerZ);
     camera.up.set(0, 1, 0);
     state.cameraFov += (62 - state.cameraFov) * clamp(dt * 4, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return true;
   }
@@ -14827,7 +14832,7 @@ function applicaVista(vista, primo, dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (74 - state.cameraFov) * clamp(dt * 4, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return true;
   }
@@ -14847,7 +14852,7 @@ function applicaVista(vista, primo, dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (60 - state.cameraFov) * clamp(dt * 3, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return true;
   }
@@ -14863,7 +14868,7 @@ function applicaVista(vista, primo, dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (52 - state.cameraFov) * clamp(dt * 3, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return true;
   }
@@ -14881,7 +14886,7 @@ function applicaVista(vista, primo, dt) {
   camera.position.copy(state.cameraPosition);
   camera.lookAt(state.cameraLook);
   state.cameraFov += (44 - state.cameraFov) * clamp(dt * 3, 0, 1);
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
   return true;
 }
@@ -14935,7 +14940,7 @@ function updateCamera(dt) {
     camera.lookAt(0, 0, centerZ);
     camera.up.set(0, 1, 0);
     state.cameraFov += (62 - state.cameraFov) * clamp(dt * 4, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return;
   }
@@ -14954,7 +14959,7 @@ function updateCamera(dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (74 - state.cameraFov) * clamp(dt * 4, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return;
   }
@@ -14974,7 +14979,7 @@ function updateCamera(dt) {
     camera.position.copy(state.cameraPosition);
     camera.lookAt(state.cameraLook);
     state.cameraFov += (72 - state.cameraFov) * clamp(dt * 4, 0, 1);
-    camera.fov = state.cameraFov;
+    camera.fov = fovPerSchermo(state.cameraFov);
     camera.updateProjectionMatrix();
     return;
   }
@@ -15051,8 +15056,21 @@ function updateCamera(dt) {
   camera.lookAt(tmpLook);
 
   state.cameraFov += (targetFov - state.cameraFov) * clamp(dt * 4.2, 0, 1);
-  camera.fov = state.cameraFov;
+  camera.fov = fovPerSchermo(state.cameraFov);
   camera.updateProjectionMatrix();
+}
+
+// ── CAMPO VISIVO SUGLI SCHERMI LARGHI ──────────────────────────────────────
+// Le inquadrature fissano il campo VERTICALE. Su un telefono in orizzontale
+// (rapporto ~2,2:1) quello orizzontale arrivava cosi' a ~106 gradi: il tuo
+// cavallo diventava un puntino e i palazzi ai bordi si piegavano. Qui si mette
+// un tetto all'orizzontale (90 gradi): su un monitor 4:3 non cambia nulla, su
+// un 16:9 stringe appena, sul telefono riavvicina davvero la corsa.
+const FOV_ORIZZ_MAX = 90;
+function fovPerSchermo(fovVerticale) {
+  const aspetto = camera.aspect || 1;
+  const tetto = 2 * Math.atan(Math.tan((FOV_ORIZZ_MAX * Math.PI) / 360) / aspetto) * (180 / Math.PI);
+  return Math.min(fovVerticale, tetto);
 }
 
 function resize() {
@@ -15973,6 +15991,16 @@ const APERTURA_A  = new Date(2026, 8, 5, 15, 0, 0).getTime();    // 5 settembre 
 // pagina e trova il gate, anche se sta correndo. I cinque minuti fra le 15:00 e le
 // 15:05 servono a far finire il Palio a chi lo aveva gia' cominciato.
 const CHIUSURA_FORZATA = new Date(2026, 8, 5, 15, 5, 0).getTime();
+// ── RIAPERTURA DEFINITIVA ───────────────────────────────────────────────────
+// Il Consorzio per la Tutela del Palio ha approvato il gioco. Dal 25 ottobre
+// 2026 alle 10:00 il gioco e' aperto A TUTTI, per sempre: niente finestre,
+// niente elenco di abilitati. Da qui in poi l'unico accesso richiesto e'
+// l'account, che chiunque puo' crearsi.
+// Ora ITALIANA, non quella del telefono di chi gioca: con new Date(...) locale
+// un giocatore a Londra avrebbe visto aprire alle 11 italiane. Il 25/10/2026
+// finisce l'ora legale (alle 3:00), quindi le 10:00 di Siena sono le 09:00 UTC.
+const RIAPERTURA = Date.UTC(2026, 9, 25, 9, 0, 0);   // 9 = ottobre
+function gioccoAperto() { return Date.now() >= RIAPERTURA; }
 function aperturaInCorso() {
   const ora = Date.now();
   return ora >= APERTURA_DA && ora < APERTURA_A;
@@ -16006,6 +16034,7 @@ function demoBloccaQuesto() {
   // se sei GIA' fra gli abilitati. Il pannello admin resta raggiungibile lo stesso
   // (le sue operazioni le protegge il server con la password vera); da un
   // dispositivo dove non sei loggato, prima fai login e poi ci entri.
+  if (gioccoAperto()) return false;                // dal 25/10 il gioco e' di tutti
   if (isAdminUrl() && accountAbilitato(getAccount())) return false;
   if (Date.now() < DEMO_CLOSE_AT) return false;    // demo non ancora iniziata
   const acc = getAccount();
@@ -16015,7 +16044,8 @@ function demoBloccaQuesto() {
 }
 function ensurePasswordGate() {
   // Dalle 21 del 21 ago: albo vittorie momentaneamente RIMOSSO per tutti (anche Mario Rossi).
-  if (Date.now() >= DEMO_CLOSE_AT && !isAdminUrl()) { const ab = document.getElementById("alboButton"); if (ab) ab.style.display = "none"; }
+  // L'Albo era nascosto finche' il gioco era chiuso: riaperto, torna visibile.
+  if (!gioccoAperto() && Date.now() >= DEMO_CLOSE_AT && !isAdminUrl()) { const ab = document.getElementById("alboButton"); if (ab) ab.style.display = "none"; }
   if (demoBloccaQuesto()) { showDemoClosedGate(); return; }
   ensureAccountGate();   // admin, sviluppatore, o utente ancora da registrare
 }

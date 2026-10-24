@@ -741,7 +741,10 @@ body:not(.touch-device) .touch-controls {
 /* Durante la mossa la "Posizione" top-left è nascosta (sostituita dalla mini-cam) */
 .hud.mode-mossa .hud-top-left { display: none; }
 
-@media (max-width: 900px) {
+/* Telefono: anche i telefoni GRANDI in orizzontale (iPhone Pro Max 932px,
+   Samsung 915px) — col solo max-width:900 restavano fuori, e su di loro
+   classifica e minimappa coprivano la corsa e l'Andatura stava sulle frecce. */
+@media (max-width: 900px), (max-height: 520px) and (orientation: landscape) {
   .rincorsa-hud {
     right: calc(env(safe-area-inset-right, 0px) + 14px);
     bottom: 178px;
@@ -750,7 +753,9 @@ body:not(.touch-device) .touch-controls {
      Andatura/Stamina). Dimensioni contenute così sta tutto nell'inquadratura. */
   .rincorsa-watcher {
     left: auto;
-    right: calc(env(safe-area-inset-right, 0px) + 10px);
+    /* a 10px dal bordo copriva il box GIRO e il tasto C della telecamera:
+       ora si ferma alla loro sinistra */
+    right: calc(env(safe-area-inset-right, 0px) + 150px);
     top: calc(env(safe-area-inset-top, 0px) + 8px);
     width: 150px;
     height: 92px;
@@ -776,6 +781,20 @@ body:not(.touch-device) .touch-controls {
   .hud-bottom-left .hud-label { font-size: 9.5px; letter-spacing: .1em; }
   .hud-bottom-left .hud-value { font-size: 26px; line-height: 1.05; }
   .hud-bottom-left .bar { margin: 3px 0; height: 5px; }
+  /* Posizione ACCANTO al tasto Menu, non sotto: sotto finiva dietro al
+     pannello Andatura (su uno schermo alto 375px non c'e' posto per tutti e due). */
+  .hud-top-left {
+    top: 8px;
+    left: calc(env(safe-area-inset-left, 0px) + 104px);
+    padding: 5px 12px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .hud-top-left .hud-label { font-size: 9.5px; }
+  .hud-top-left .hud-value { font-size: 20px; line-height: 1.1; }
+  /* Le scritte di gara stavano a meta' schermo, proprio sopra i cavalli. */
+  .race-message { top: 20%; font-size: 19px; padding: 0 16px; }
 }
 
 /* ---- Bottone "‹ Menu" fisso in alto a sinistra (torna al menu, taglia audio) ---- */
