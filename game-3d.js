@@ -16471,11 +16471,12 @@ function ensureAccountGate() {
     + `<input id="suCognome" type="text" placeholder="Cognome" autocapitalize="words" style="${inCss}" />`
     + `<input id="suEmail" type="email" placeholder="Email" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" style="${inCss}" />`
     + `<input id="suPw" type="password" placeholder="Password (min 6 caratteri)" autocomplete="new-password" style="${inCss}" />`
-    + `<input id="suEta" type="number" min="4" max="120" inputmode="numeric" placeholder="Età" style="${inCss}" />`
+    + `<input id="suEta" type="number" min="14" max="120" inputmode="numeric" placeholder="Età (almeno 14 anni)" style="${inCss}" />`
     + `<select id="suSesso" style="${inCss}"><option value="">— Sesso —</option><option value="M">Maschio</option><option value="F">Femmina</option><option value="A">Altro / preferisco non dirlo</option></select>`
     + '<div style="font-size:13.5px;opacity:.82;width:min(300px,84vw);text-align:left">Appartieni a una contrada?</div>'
     + `<select id="suContrada" style="${inCss}"><option value="">— Nessuna / preferisco non dirlo —</option>${opts}</select>`
     + `<button type="button" id="signupBtn" style="${btnCss}">Crea account</button>`
+    + '<div style="font-size:12.5px;opacity:.75;width:min(300px,84vw);line-height:1.45">Creando l\'account accetti che i tuoi dati siano usati per far funzionare il gioco e migliorarlo, come spiegato nell\'<a href="privacy.html" target="_blank" rel="noopener" style="color:#f0cb35">informativa privacy</a>. Nessun uso commerciale.</div>'
     + '</div>'
     + '</div>'
     + '<div id="accErr" style="color:#e8896f;font-size:14px;min-height:18px;max-width:84vw"></div>';
@@ -16521,7 +16522,8 @@ function ensureAccountGate() {
     "nome-cognome": "Inserisci nome e cognome.",
     "email": "Email non valida.",
     "password-corta": "La password deve avere almeno 6 caratteri.",
-    "eta": "Inserisci un'età valida (4–120).",
+    "eta": "Inserisci un'età valida.",
+    "eta-minima": "Per iscriverti devi avere almeno 14 anni.",
     "email-esiste": "Esiste già un account con questa email. Entra.",
     "no-account": "Nessun account con questa email. Registrati.",
     "credenziali": "Email o password errata.",
@@ -16559,7 +16561,8 @@ function ensureAccountGate() {
     if (!nome || !cognome) { err.textContent = "Inserisci nome e cognome."; return; }
     if (!email) { err.textContent = "Inserisci l'email."; return; }
     if (password.length < 6) { err.textContent = "Password troppo corta (min 6)."; return; }
-    if (!eta || eta < 4 || eta > 120) { err.textContent = "Inserisci un'età valida (4–120)."; return; }
+    if (!eta || eta > 120) { err.textContent = "Inserisci un'età valida."; return; }
+    if (eta < 14) { err.textContent = "Per iscriverti devi avere almeno 14 anni."; return; }
     if (!sesso) { err.textContent = "Seleziona il sesso."; return; }
     err.textContent = "Attendi…";
     fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
@@ -16989,7 +16992,7 @@ function maybeOpenAdmin() {
         }
         adminKey = key;
         $("adminErr").textContent = "";
-        renderAdmin(j.accounts || [], j.feedback || []);
+        renderAdmin(j.accounts || [], j.feedback || [], j.privacy || []);
       })
       .catch(() => { $("adminErr").textContent = "Connessione assente."; });
   };
@@ -17022,7 +17025,7 @@ function maybeOpenAdmin() {
       })
       .catch(() => { const body = d.querySelector("#awdBody"); if (body) body.textContent = "Connessione assente."; });
   };
-  const renderAdmin = (accounts, feedback) => {
+  const renderAdmin = (accounts, feedback, privacy = []) => {
     const totPalii = accounts.reduce((s, a) => s + (a.palii || 0), 0);
     const totVinti = accounts.reduce((s, a) => s + (a.vinti || 0), 0);
     // ── METRICHE per l'analisi (tutte calcolate dagli account, nessuna chiamata extra) ──
@@ -17059,6 +17062,8 @@ function maybeOpenAdmin() {
       + mCard("Nuovi 7gg", nuovi7g, "#8fd3ff")
       + mCard("Età media", etaMedia ? etaMedia.toFixed(0) : "—")
       + mCard("Sesso M / F / Altro", nM + " / " + nF + " / " + nA)
+      // Iscritti PRIMA della regola dei 14 anni: da valutare (vanno cancellati).
+      + mCard("Sotto i 14 anni", accounts.filter((a) => (a.eta || 0) > 0 && a.eta < 14).length, accounts.some((a) => (a.eta || 0) > 0 && a.eta < 14) ? "#e8896f" : "#7fd98c")
       + mCard("Contrada + scelta", escapeHtml(topContradaTxt))
       + mCard("Top palii corsi", topCorsi ? escapeHtml((topCorsi.nome || "—") + " · " + (topCorsi.palii || 0)) : "—")
       + mCard("Top vittorie", topVinti ? escapeHtml((topVinti.nome || "—") + " · " + (topVinti.vinti || 0)) : "—")
@@ -17092,6 +17097,7 @@ function maybeOpenAdmin() {
       + '<button type="button" class="admTab" data-sec="secJockeys" style="' + admTabCss + '">🏇 Fantini</button>'
       + '<button type="button" class="admTab" data-sec="secDeals" style="' + admTabCss + '">🤝 Accordi</button>'
       + '<button type="button" class="admTab" data-sec="secCorse" style="' + admTabCss + '">📊 Corse</button>'
+      + '<button type="button" class="admTab" data-sec="secPrivacy" style="' + admTabCss + (privacy.length ? ';border-color:#e8896f' : "") + '">🔒 Privacy <span style="opacity:.7">(' + privacy.length + ')</span></button>'
       + '</div>'
       // Classifica account (sezione DEFAULT aperta)
       + '<div id="secAccounts" class="admSec">'
@@ -17135,6 +17141,19 @@ function maybeOpenAdmin() {
       + '<div id="secDeals" class="admSec" style="display:none">'
       + '<div id="adminDealProps" style="font-size:13px;opacity:.7">Caricamento proposte…</div>'
       + '</div>'
+      // Richieste dal modulo dell'informativa privacy: vanno lette e gestite.
+      + '<div id="secPrivacy" class="admSec" style="display:none">'
+      + '<div style="font-size:12px;opacity:.6;margin:0 2px 8px;text-align:left">Richieste arrivate dal modulo di privacy.html. Per legge vanno gestite entro un mese. Per cancellare un account: il giocatore può farlo da solo con "Elimina account".</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px">'
+      + (privacy.length
+        ? privacy.map((f) => {
+            const d = f.created ? new Date(f.created).toLocaleString("it-IT") : "";
+            return '<div style="text-align:left;background:rgba(232,137,111,.07);border:1px solid rgba(232,137,111,.25);border-radius:9px;padding:9px 12px">'
+              + `<div style="font-size:12px;opacity:.65;margin-bottom:3px">${f.email ? escapeHtml(f.email) : "nessuna email lasciata"} · ${d}</div>`
+              + `<div style="font-size:14px;white-space:pre-wrap">${escapeHtml(f.text || "")}</div></div>`;
+          }).join("")
+        : '<div style="opacity:.6;font-size:14px">Nessuna richiesta.</div>')
+      + '</div></div>'
       // Dati delle corse (anonimi): abbandoni, fluidita', bilanciamento
       + '<div id="secCorse" class="admSec" style="display:none">'
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 2px 10px">'

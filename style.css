@@ -1219,6 +1219,8 @@ textarea {
 /* Firma dell'autore: FUORI dal pannello, sul tufo della Piazza. Un filo piu'
    grande di prima e con un pelo di contrasto in piu', perche' qui sotto non ha
    il fondo scuro del pannello che l'aiutava a staccare. */
+.link-privacy { color: inherit; text-decoration: underline; text-underline-offset: 2px; opacity: .9; }
+.link-privacy:hover, .link-privacy:focus-visible { color: var(--gold); }
 .firma-autore {
   margin: 16px 0 0;
   font-size: 13px;

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Privacy · Palio Game</title>
+<meta name="robots" content="noindex" />
+<style>
+  /* Una sola tinta, quella del gioco: pagina scura, oro e crema. */
+  :root {
+    --fondo: #120d08;
+    --carta: #1c150e;
+    --bordo: rgba(216, 169, 58, 0.28);
+    --testo: #efe4cc;
+    --tenue: #b9aa8c;
+    --oro: #d8a93a;
+    --rosso: #e8896f;
+    --verde: #8fd19e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--fondo);
+    color: var(--testo);
+    font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  .torna { color: var(--oro); text-decoration: none; font-size: 14px; }
+  .torna:hover, .torna:focus-visible { text-decoration: underline; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 18px 0 4px; color: var(--oro); text-wrap: balance; letter-spacing: .02em; }
+  .agg { color: var(--tenue); font-size: 13.5px; margin: 0 0 22px; }
+  .sintesi {
+    background: var(--carta);
+    border: 1px solid var(--bordo);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin: 0 0 26px;
+  }
+  .sintesi ul { margin: 6px 0 0; padding-left: 20px; }
+  .sintesi li { margin: 3px 0; }
+  h2 {
+    font-size: 13px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--oro);
+    margin: 30px 0 8px;
+  }
+  p, li { max-width: 65ch; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  b { color: #fff6e4; }
+  a { color: var(--oro); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 6px 0; }
+  .tab { overflow-x: auto; border: 1px solid var(--bordo); border-radius: 10px; }
+  th, td { text-align: left; padding: 8px 10px; vertical-align: top; border-top: 1px solid rgba(216,169,58,.14); }
+  th { background: rgba(216,169,58,.1); border-top: none; font-weight: 700; }
+  form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+  label { font-size: 14px; color: var(--tenue); display: flex; flex-direction: column; gap: 4px; }
+  textarea, input {
+    font: inherit;
+    color: var(--testo);
+    background: #0d0906;
+    border: 1px solid var(--bordo);
+    border-radius: 9px;
+    padding: 10px 12px;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  textarea:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--oro); outline-offset: 2px; }
+  button {
+    align-self: flex-start;
+    font: inherit;
+    font-weight: 800;
+    padding: 10px 22px;
+    border-radius: 10px;
+    border: none;
+    background: var(--oro);
+    color: #1a1206;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: wait; }
+  #esito { min-height: 22px; font-size: 14.5px; }
+  .ok { color: var(--verde); }
+  .ko { color: var(--rosso); }
+  .en { color: var(--tenue); font-size: 14.5px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="torna" href="/">‹ Torna al gioco</a>
+  <h1>Informativa sulla privacy</h1>
+  <p class="agg">Palio Game · ultimo aggiornamento 25 ottobre 2026</p>
+
+  <div class="sintesi">
+    <b>In breve</b>
+    <ul>
+      <li>Il gioco è gratuito e lo gestisce una persona sola, Simone Meschino.</li>
+      <li>I dati servono a far funzionare il tuo account e a migliorare il gioco. Non li vendiamo, non li usiamo per pubblicità e non mandiamo newsletter.</li>
+      <li>Puoi modificare o cancellare il tuo account in qualsiasi momento dal gioco.</li>
+      <li>Per iscriversi bisogna avere almeno 14 anni.</li>
+    </ul>
+  </div>
+
+  <h2>Chi tratta i dati</h2>
+  <p>Il titolare del trattamento è <b>Simone Meschino</b>, che ha ideato e gestisce Palio Game, un gioco gratuito e senza scopo di lucro ispirato al Palio di Siena. Per qualsiasi richiesta sui tuoi dati usa il <a href="#contatto">modulo in fondo a questa pagina</a>.</p>
+
+  <h2>Quali dati raccogliamo</h2>
+  <div class="tab"><table>
+    <thead><tr><th>Dati</th><th>Quando</th></tr></thead>
+    <tbody>
+      <tr><td><b>Account:</b> nome, cognome, email, età, sesso (puoi scegliere "preferisco non dirlo"), contrada di appartenenza (facoltativa), data di iscrizione. La password è salvata solo in forma cifrata e non è leggibile da nessuno.</td><td>Quando crei l'account</td></tr>
+      <tr><td><b>Attività di gioco del tuo account:</b> quanti palii hai corso e vinto, e con quali contrade hai vinto.</td><td>Mentre giochi</td></tr>
+      <tr><td><b>Consigli, proposte e voti:</b> il testo che scrivi e, se hai fatto l'accesso, l'email del tuo account.</td><td>Solo se scrivi un consiglio, proponi un cavallo, un fantino o un accordo, o voti</td></tr>
+      <tr><td><b>Dati anonimi sulle corse:</b> come va ogni palio (fase raggiunta, durata, risultato, cavallo e fantino scelti, fluidità della grafica) e caratteristiche tecniche del dispositivo (tipo, dimensioni dello schermo, modello della scheda grafica, lingua). Non contengono email, nome né altri dati che ti identifichino.</td><td>A ogni palio</td></tr>
+      <tr><td><b>Dati tecnici:</b> l'indirizzo IP, trattato dal fornitore che ospita il sito per farlo funzionare, e usato da noi per 15 minuti per bloccare chi prova molte password di seguito.</td><td>A ogni visita</td></tr>
+    </tbody>
+  </table></div>
+  <p>Sul tuo dispositivo il gioco salva (nella memoria del browser, non con cookie pubblicitari) i dati del tuo account senza password, le impostazioni, i progressi e i dati anonimi delle corse in attesa di essere inviati. Il gioco non usa cookie di profilazione né pubblicità.</p>
+
+  <h2>Perché li usiamo</h2>
+  <ul>
+    <li><b>Far funzionare il tuo account e il gioco</b>: accesso, classifiche, Albo delle Vittorie. Base giuridica: il servizio che ci chiedi iscrivendoti (art. 6.1.b del GDPR).</li>
+    <li><b>Migliorare il gioco</b>: capire dove i giocatori si fermano, su quali dispositivi la grafica va lenta, se cavalli e fantini sono bilanciati. Usiamo dati anonimi o statistiche d'insieme. Base giuridica: legittimo interesse a migliorare il gioco (art. 6.1.f).</li>
+    <li><b>Sicurezza</b>: bloccare tentativi ripetuti di indovinare le password. Base giuridica: legittimo interesse (art. 6.1.f).</li>
+  </ul>
+  <p>Non usiamo i dati per scopi commerciali, non li vendiamo e non li cediamo a nessuno.</p>
+
+  <h2>Chi altro li tratta</h2>
+  <p>Per far funzionare il gioco ci appoggiamo a questi fornitori, che trattano i dati solo per conto nostro:</p>
+  <ul>
+    <li><b>Vercel Inc.</b> ospita il sito e le funzioni del server.</li>
+    <li><b>Upstash Inc.</b> ospita il database con account, Albo e statistiche.</li>
+    <li><b>jsDelivr</b> fornisce le librerie della grafica 3D: quando il gioco le scarica, il tuo browser comunica loro l'indirizzo IP.</li>
+  </ul>
+  <p>Questi fornitori possono trattare dati anche fuori dall'Unione Europea, per esempio negli Stati Uniti, con le garanzie previste dai rispettivi contratti per la protezione dei dati.</p>
+
+  <h2>Per quanto tempo</h2>
+  <ul>
+    <li><b>Account e attività di gioco</b>: finché non elimini l'account.</li>
+    <li><b>Consigli</b>: restano solo gli ultimi 500 ricevuti.</li>
+    <li><b>Dati anonimi sulle corse</b>: 60 giorni, poi si cancellano da soli.</li>
+    <li><b>Indirizzo IP per la sicurezza</b>: 15 minuti.</li>
+    <li><b>Richieste inviate con il modulo qui sotto</b>: restano solo le ultime 200.</li>
+  </ul>
+
+  <h2>Età minima</h2>
+  <p>Per creare un account bisogna avere almeno <b>14 anni</b>. Se scopriamo che un account appartiene a una persona più giovane, lo cancelliamo.</p>
+
+  <h2>I tuoi diritti</h2>
+  <p>Puoi chiedere in qualsiasi momento di vedere i tuoi dati, correggerli, cancellarli, limitarne l'uso, opporti al trattamento o riceverli in un formato leggibile (artt. 15-22 GDPR). Molte cose le fai da solo nel gioco:</p>
+  <ul>
+    <li><b>Modificare</b> nome, cognome, contrada e password: dal tuo account nel gioco.</li>
+    <li><b>Cancellare tutto</b>: tasto <b>Elimina account</b> nel tuo account. Cancella i dati del tuo account dal database.</li>
+  </ul>
+  <p>Per tutto il resto usa il modulo qui sotto. Hai anche il diritto di presentare reclamo al Garante per la protezione dei dati personali (<a href="https://www.garanteprivacy.it" rel="noopener">garanteprivacy.it</a>).</p>
+
+  <h2>Modifiche</h2>
+  <p>Se cambia qualcosa, per esempio se un giorno nel gioco arrivano le pubblicità, aggiorneremo questa pagina e la data in cima prima di attivare la novità.</p>
+
+  <h2 id="contatto">Scrivi al titolare</h2>
+  <p>Richieste sui tuoi dati, dubbi o segnalazioni. Se vuoi una risposta, lascia un'email (facoltativa): la useremo solo per risponderti.</p>
+  <form id="modulo" novalidate>
+    <label>La tua richiesta
+      <textarea id="testo" maxlength="1000" required></textarea>
+    </label>
+    <label>La tua email per la risposta (facoltativa)
+      <input id="email" type="email" maxlength="120" autocomplete="email" />
+    </label>
+    <button type="submit" id="invia">Invia la richiesta</button>
+    <div id="esito" role="status" aria-live="polite"></div>
+  </form>
+
+  <h2>In English</h2>
+  <p class="en">Palio Game is a free, non-commercial game run by Simone Meschino (data controller). We collect account data (name, surname, email, age, sex, contrada), your game activity, optional feedback and anonymous race statistics, only to run your account and improve the game. We do not sell data, show ads or send newsletters. You must be at least 14 to sign up. You can edit or delete your account from inside the game at any time; for anything else use the form above.</p>
+</main>
+<script>
+  // Il modulo scrive al server del gioco: la richiesta arriva nel portale admin.
+  const modulo = document.getElementById("modulo");
+  const esito = document.getElementById("esito");
+  modulo.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const testo = document.getElementById("testo").value.trim();
+    const email = document.getElementById("email").value.trim();
+    if (testo.length < 5) { esito.className = "ko"; esito.textContent = "Scrivi la richiesta (almeno qualche parola)."; return; }
+    const tasto = document.getElementById("invia");
+    tasto.disabled = true; esito.className = ""; esito.textContent = "Invio…";
+    try {
+      const r = await fetch("/api/account", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "privacyRequest", text: testo, email }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok) {
+        esito.className = "ok"; esito.textContent = "Richiesta inviata. Grazie.";
+        modulo.reset();
+      } else if (j.error === "troppi-tentativi") {
+        esito.className = "ko"; esito.textContent = "Hai già inviato diverse richieste: riprova fra un quarto d'ora.";
+      } else if (j.error === "email") {
+        esito.className = "ko"; esito.textContent = "L'email non sembra valida: correggila o lasciala vuota.";
+      } else {
+        esito.className = "ko"; esito.textContent = "Invio non riuscito. Riprova fra qualche minuto.";
+      }
+    } catch (err) {
+      esito.className = "ko"; esito.textContent = "Connessione assente. Riprova quando sei online.";
+    }
+    tasto.disabled = false;
+  });
+</script>
+</body>
+</html>

@@ -173,6 +173,7 @@ module.exports = async (req, res) => {
     if (action === "win") return await bumpWin(body, res);
     if (action === "playerWins") return await playerWins(body, res);
     if (action === "feedback") return await addFeedback(body, res);
+    if (action === "privacyRequest") return await addPrivacyRequest(body, res);
     if (action === "pollVote") return await pollVote(body, res);
     if (action === "pollResults") return await pollResults(body, res);
     if (action === "statVote") return await statVote(body, res);
@@ -220,7 +221,9 @@ async function signup(body, res) {
   if (!nome || !cognome) { res.status(400).json({ error: "nome-cognome" }); return; }
   if (!email) { res.status(400).json({ error: "email" }); return; }
   if (password.length < 6) { res.status(400).json({ error: "password-corta" }); return; }
-  if (!eta || eta < 4 || eta > 120) { res.status(400).json({ error: "eta" }); return; }
+  // Almeno 14 anni: sotto, in Italia, servirebbe il consenso dei genitori.
+  if (!eta || eta > 120) { res.status(400).json({ error: "eta" }); return; }
+  if (eta < 14) { res.status(400).json({ error: "eta-minima" }); return; }
 
   // Email già registrata?
   const [{ result: exists }] = await redisPipeline([["SISMEMBER", ACCOUNTS_SET, email]]);
@@ -301,7 +304,33 @@ async function deleteAccount(body, res) {
     ["SREM", ACCOUNTS_SET, email],
     ["DEL", acctKey(email)],
   ]);
+  try { await cancellaTracce(email); } catch (e) { /* l'account e' gia' cancellato: le tracce si riprovano a mano */ }
   res.status(200).json({ ok: true });
+}
+
+// "Elimina account" deve cancellare TUTTO quello che porta l'email, non solo
+// l'account: vittorie per contrada, voti, consigli, proposte e richieste privacy.
+// E' raro (un account alla volta), quindi qui si puo' spendere qualche comando.
+async function cancellaTracce(email) {
+  const cmds = [["DEL", winsKey(email)]];
+  const [{ result: poll }, { result: sv }, { result: jk }, { result: fb }, { result: pr }, ...props] = await redisPipeline([
+    ["SMEMBERS", POLL_HORSES_SET], ["SMEMBERS", SV_HORSES], ["SMEMBERS", JKV_SET],
+    ["LRANGE", FEEDBACK_LIST, 0, -1], ["LRANGE", PRIVACY_LIST, 0, -1],
+    ...[...PROP_KINDS].map((k) => ["HGETALL", propHash(k)]),
+  ]);
+  (poll || []).forEach((h) => cmds.push(["HDEL", pollHorseKey(h), email]));
+  (sv || []).forEach((h) => { cmds.push(["HDEL", svKey("potenza", h), email]); cmds.push(["HDEL", svKey("turn", h), email]); });
+  (jk || []).forEach((j) => JK_ALL.forEach((st) => cmds.push(["HDEL", jkvKey(st, j), email])));
+  const tuoi = (lista) => (lista || []).filter((t) => { try { return String(JSON.parse(t).email || "").toLowerCase() === email; } catch (e) { return false; } });
+  tuoi(fb).forEach((t) => cmds.push(["LREM", FEEDBACK_LIST, 0, t]));
+  tuoi(pr).forEach((t) => cmds.push(["LREM", PRIVACY_LIST, 0, t]));
+  [...PROP_KINDS].forEach((k, i) => {
+    const h = hashToObj(props[i] && props[i].result);
+    Object.keys(h).forEach((campo) => {
+      try { const o = JSON.parse(h[campo]); if (String(o.by || "").toLowerCase() === email) { o.by = ""; cmds.push(["HSET", propHash(k), campo, JSON.stringify(o)]); } } catch (e) { /* niente */ }
+    });
+  });
+  for (let i = 0; i < cmds.length; i += 400) await redisPipeline(cmds.slice(i, i + 400));
 }
 
 // Contatore dei palii per FASCIA ORARIA (UTC), per sapere quanti se ne corrono
@@ -387,6 +416,25 @@ async function addFeedback(body, res) {
 // vorrebbe per ciascun cavallo. Un voto per DISPOSITIVO per cavallo (modificabile).
 // Store: un HASH per cavallo (campo = id votante, valore = tier) + un SET dei
 // cavalli votati. L'aggregato si calcola contando i valori.
+// Richieste dal modulo dell'informativa privacy (non c'e' un'email del titolare:
+// arrivano qui e si leggono nel portale admin). Tenute le ultime 200.
+const PRIVACY_LIST = "palio:privacy";
+async function addPrivacyRequest(body, res) {
+  const text = String(body.text || "").trim().slice(0, 1000);
+  if (text.length < 5) { res.status(400).json({ error: "vuoto" }); return; }
+  const grezza = String(body.email || "").trim();
+  const email = grezza ? normEmail(grezza) : "";
+  if (grezza && !email) { res.status(400).json({ error: "email" }); return; }
+  const k = `palio:rl:privacy:${body.__ip}`;
+  if (await bloccato(k, 5)) { res.status(429).json({ error: "troppi-tentativi" }); return; }
+  await segnaTentativo(k);
+  await redisPipeline([
+    ["LPUSH", PRIVACY_LIST, JSON.stringify({ text, email, created: Date.now() })],
+    ["LTRIM", PRIVACY_LIST, 0, 199],
+  ]);
+  res.status(200).json({ ok: true });
+}
+
 const POLL_HORSES_SET = "palio:poll:horses";
 const pollHorseKey = (h) => `palio:poll:h:${h}`;
 const POLL_TIERS = new Set(["brenna", "bono", "bombolone"]);
@@ -822,19 +870,22 @@ function aggregaTele(tutte) {
 
 async function adminList(body, res) {
   if (!(await adminOk(body, res))) return;
-  const [{ result: emails }, { result: fbRaw }] = await redisPipeline([
+  const [{ result: emails }, { result: fbRaw }, { result: prRaw }] = await redisPipeline([
     ["SMEMBERS", ACCOUNTS_SET],
     ["LRANGE", FEEDBACK_LIST, 0, 199],   // ultimi 200 consigli
+    ["LRANGE", PRIVACY_LIST, 0, 199],    // richieste dal modulo privacy
   ]);
-  const feedback = (Array.isArray(fbRaw) ? fbRaw : [])
+  const leggi = (raw) => (Array.isArray(raw) ? raw : [])
     .map((s) => { try { return JSON.parse(s); } catch (e) { return null; } })
     .filter(Boolean);
+  const feedback = leggi(fbRaw);
+  const privacy = leggi(prRaw);
   const list = Array.isArray(emails) ? emails : [];
-  if (!list.length) { res.status(200).json({ ok: true, accounts: [], feedback }); return; }
+  if (!list.length) { res.status(200).json({ ok: true, accounts: [], feedback, privacy }); return; }
   const out = await redisPipeline(list.map((e) => ["HGETALL", acctKey(e)]));
   const accounts = out
     .map((r) => publicAccount(hashToObj(r && r.result)))
     .filter((a) => a.email)
     .sort((a, b) => b.palii - a.palii);
-  res.status(200).json({ ok: true, accounts, feedback });
+  res.status(200).json({ ok: true, accounts, feedback, privacy });
 }
