@@ -51,6 +51,62 @@ function hashToObj(result) {
   return o;
 }
 
+// ── PROTEZIONI ───────────────────────────────────────────────────────────────
+// Nessun limite ai tentativi voleva dire: la chiave admin (dietro cui ci sono
+// email, eta' e sesso di tutti gli iscritti) e le password dei giocatori si
+// potevano provare all'infinito. Ora i tentativi SBAGLIATI si contano per
+// indirizzo IP e oltre la soglia si risponde 429 per un quarto d'ora. I tentativi
+// giusti non costano comandi in piu' (a parte una lettura).
+const RL_FINESTRA = 15 * 60;
+function ipDi(req) {
+  const h = (req && req.headers) || {};
+  return String(h["x-forwarded-for"] || h["x-real-ip"] || "").split(",")[0].trim().slice(0, 64) || "sconosciuto";
+}
+async function bloccato(chiave, max) {
+  const [{ result }] = await redisPipeline([["GET", chiave]]);
+  return Number(result) >= max;
+}
+async function segnaTentativo(chiave) {
+  const [{ result: n }] = await redisPipeline([["INCR", chiave]]);
+  if (Number(n) === 1) await redisPipeline([["EXPIRE", chiave, RL_FINESTRA]]);
+}
+// Confronto a tempo costante (un confronto normale si ferma al primo carattere diverso).
+function chiaveUguale(a, b) {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+const ADMIN_TENTATIVI = 8;     // solo l'admin: stretto
+const LOGIN_TENTATIVI = 60;    // password SBAGLIATE per IP in 15 minuti (IP condivisi degli operatori)
+async function adminOk(body, res) {
+  const secret = process.env.PALIO_ADMIN_KEY;
+  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return false; }
+  const k = `palio:rl:admin:${body.__ip}`;
+  if (await bloccato(k, ADMIN_TENTATIVI)) { res.status(429).json({ error: "troppi-tentativi" }); return false; }
+  if (!body.adminKey || !chiaveUguale(body.adminKey, secret)) {
+    await segnaTentativo(k);
+    res.status(403).json({ error: "forbidden" });
+    return false;
+  }
+  return true;
+}
+// Nomi di cavalli e fantini: lettere (anche accentate), numeri, spazi, apostrofo,
+// punto e trattino. Fuori da qui e' spazzatura o un tentativo di iniettare testo.
+const NOME_OK = /^[\p{L}\p{N} '\u2019.\-]{2,40}$/u;
+function nomeValido(n) { return NOME_OK.test(String(n || "")); }
+// Tetti agli elenchi aperti a tutti (voti, proposte): senza, si potevano riempire
+// di nomi inventati e ogni lettura dei risultati costava un comando per nome.
+const TETTO_NOMI_VOTATI = 400;
+const TETTO_PROPOSTE = 500;
+async function aggiungiConTetto(set, nome, tetto, altri) {
+  const out = await redisPipeline([["SADD", set, nome], ["SCARD", set], ...altri]);
+  if (Number(out[0].result) === 1 && Number(out[1].result) > tetto) {
+    await redisPipeline([["SREM", set, nome], ...altri.map((c) => ["HDEL", c[1], c[2]])]);
+    return false;
+  }
+  return true;
+}
+
 // ── Password: scrypt con salt per-utente ──────────────────────────────────────
 function hashPassword(password, salt) {
   return crypto.scryptSync(String(password), salt, 64).toString("hex");
@@ -91,10 +147,11 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // GET ?admin=<KEY> → scorciatoia per l'elenco account.
+  // Niente piu' GET ?admin=<KEY>: la chiave nell'indirizzo finiva nei log di
+  // Vercel e nella cronologia del browser. L'elenco si chiede in POST (adminList).
   if (req.method === "GET") {
-    const adminKey = (req.query && req.query.admin) || "";
-    return adminList(adminKey, res);
+    res.status(405).json({ error: "method" });
+    return;
   }
   if (req.method !== "POST") {
     res.status(405).json({ error: "method" });
@@ -104,6 +161,7 @@ module.exports = async (req, res) => {
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = {}; } }
   body = body || {};
+  body.__ip = ipDi(req);   // messo QUI, dopo il parsing: il client non puo' sceglierlo
   const action = body.action;
 
   try {
@@ -133,7 +191,7 @@ module.exports = async (req, res) => {
     if (action === "palii24") return await palii24(body, res);
     if (action === "tele") return await teleSalva(body, res);
     if (action === "teleStats") return await teleStats(body, res);
-    if (action === "adminList") return await adminList(body.adminKey, res);
+    if (action === "adminList") return await adminList(body, res);
     res.status(400).json({ error: "bad-action" });
   } catch (e) {
     res.status(500).json({ error: "server" });
@@ -141,9 +199,15 @@ module.exports = async (req, res) => {
 };
 
 async function signup(body, res) {
-  // Iscrizioni aperte ora; si chiudono dal 23 agosto 2026 alle 12:00 ora italiana
-  // (= 10:00 UTC, CEST +2). Blocco anche lato server.
-  if (Date.now() >= Date.UTC(2026, 7, 23, 10, 0, 0)) { res.status(403).json({ error: "iscrizioni-chiuse" }); return; }
+  // Iscrizioni chiuse dal 23 agosto 2026 (demo riservata) e RIAPERTE con il gioco:
+  // dal 25 ottobre 2026 alle 10:00 di Roma (= 09:00 UTC) chiunque puo' iscriversi.
+  const chiuse = Date.now() >= Date.UTC(2026, 7, 23, 10, 0, 0) && Date.now() < Date.UTC(2026, 9, 25, 9, 0, 0);
+  if (chiuse) { res.status(403).json({ error: "iscrizioni-chiuse" }); return; }
+  // Al massimo 30 account nuovi in un quarto d'ora dallo stesso indirizzo. Non
+  // meno: molti telefoni escono su internet con l'IP condiviso dell'operatore, e
+  // al lancio una soglia bassa bloccherebbe giocatori veri. Ferma le raffiche.
+  const kIscr = `palio:rl:signup:${body.__ip}`;
+  if (await bloccato(kIscr, 30)) { res.status(429).json({ error: "troppi-tentativi" }); return; }
   const nome = String(body.nome || "").trim().slice(0, 60);
   const cognome = String(body.cognome || "").trim().slice(0, 60);
   const email = normEmail(body.email);
@@ -162,6 +226,7 @@ async function signup(body, res) {
   const [{ result: exists }] = await redisPipeline([["SISMEMBER", ACCOUNTS_SET, email]]);
   if (Number(exists) === 1) { res.status(409).json({ error: "email-esiste" }); return; }
 
+  await segnaTentativo(kIscr);
   const salt = crypto.randomBytes(16).toString("hex");
   const pwHash = hashPassword(password, salt);
   const created = Date.now();
@@ -179,10 +244,13 @@ async function login(body, res) {
   const email = normEmail(body.email);
   const password = String(body.password || "");
   if (!email) { res.status(400).json({ error: "email" }); return; }
+  const kLogin = `palio:rl:login:${body.__ip}`;
+  if (await bloccato(kLogin, LOGIN_TENTATIVI)) { res.status(429).json({ error: "troppi-tentativi" }); return; }
   const [{ result }] = await redisPipeline([["HGETALL", acctKey(email)]]);
   const h = hashToObj(result);
   if (!h.email) { res.status(404).json({ error: "no-account" }); return; }
   if (!verifyPassword(password, h.pwSalt, h.pwHash)) {
+    await segnaTentativo(kLogin);
     res.status(401).json({ error: "credenziali" });
     return;
   }
@@ -199,7 +267,8 @@ async function updateAccount(body, res) {
   const [{ result }] = await redisPipeline([["HGETALL", acctKey(email)]]);
   const h = hashToObj(result);
   if (!h.email) { res.status(404).json({ error: "no-account" }); return; }
-  if (!verifyPassword(password, h.pwSalt, h.pwHash)) { res.status(401).json({ error: "credenziali" }); return; }
+  if (await bloccato(`palio:rl:login:${body.__ip}`, LOGIN_TENTATIVI)) { res.status(429).json({ error: "troppi-tentativi" }); return; }
+  if (!verifyPassword(password, h.pwSalt, h.pwHash)) { await segnaTentativo(`palio:rl:login:${body.__ip}`); res.status(401).json({ error: "credenziali" }); return; }
 
   const nome = String(body.nome != null ? body.nome : h.nome).trim().slice(0, 60);
   const cognome = String(body.cognome != null ? body.cognome : h.cognome).trim().slice(0, 60);
@@ -226,7 +295,8 @@ async function deleteAccount(body, res) {
   const [{ result }] = await redisPipeline([["HGETALL", acctKey(email)]]);
   const h = hashToObj(result);
   if (!h.email) { res.status(404).json({ error: "no-account" }); return; }
-  if (!verifyPassword(password, h.pwSalt, h.pwHash)) { res.status(401).json({ error: "credenziali" }); return; }
+  if (await bloccato(`palio:rl:login:${body.__ip}`, LOGIN_TENTATIVI)) { res.status(429).json({ error: "troppi-tentativi" }); return; }
+  if (!verifyPassword(password, h.pwSalt, h.pwHash)) { await segnaTentativo(`palio:rl:login:${body.__ip}`); res.status(401).json({ error: "credenziali" }); return; }
   await redisPipeline([
     ["SREM", ACCOUNTS_SET, email],
     ["DEL", acctKey(email)],
@@ -262,9 +332,7 @@ async function bumpPalio(body, res) {
 // Quanti palii sono stati corsi nelle ultime 24 ore (solo admin). Somma le 24
 // caselle orarie; perOra[0] e' l'ora in corso, perOra[23] quella di 23 ore fa.
 async function palii24(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const adesso = Date.now();
   const chiavi = [];
   for (let i = 0; i < 24; i++) chiavi.push(oraKey(new Date(adesso - i * 3600000)));
@@ -291,9 +359,7 @@ async function bumpWin(body, res) {
 
 // Dettaglio vittorie PER CONTRADA di un giocatore — solo admin.
 async function playerWins(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const email = normEmail(body.email);
   if (!email) { res.status(400).json({ error: "email" }); return; }
   const [{ result }] = await redisPipeline([["HGETALL", winsKey(email)]]);
@@ -331,10 +397,10 @@ async function pollVote(body, res) {
   const tier = String(body.tier || "").trim().toLowerCase();
   if (!voter || !horse) { res.status(400).json({ error: "dati" }); return; }
   if (!POLL_TIERS.has(tier)) { res.status(400).json({ error: "tier" }); return; }
-  await redisPipeline([
-    ["SADD", POLL_HORSES_SET, horse],
-    ["HSET", pollHorseKey(horse), voter, tier],
-  ]);
+  if (!nomeValido(horse)) { res.status(400).json({ error: "nome" }); return; }
+  if (!(await aggiungiConTetto(POLL_HORSES_SET, horse, TETTO_NOMI_VOTATI, [["HSET", pollHorseKey(horse), voter, tier]]))) {
+    res.status(429).json({ error: "troppi-nomi" }); return;
+  }
   res.status(200).json({ ok: true });
 }
 
@@ -371,10 +437,10 @@ async function statVote(body, res) {
   if (!voter || !horse) { res.status(400).json({ error: "dati" }); return; }
   if (!SV_STATS.has(stat)) { res.status(400).json({ error: "stat" }); return; }
   if (!(value >= 1 && value <= 5)) { res.status(400).json({ error: "value" }); return; }
-  await redisPipeline([
-    ["SADD", SV_HORSES, horse],
-    ["HSET", svKey(stat, horse), voter, String(value)],
-  ]);
+  if (!nomeValido(horse)) { res.status(400).json({ error: "nome" }); return; }
+  if (!(await aggiungiConTetto(SV_HORSES, horse, TETTO_NOMI_VOTATI, [["HSET", svKey(stat, horse), voter, String(value)]]))) {
+    res.status(429).json({ error: "troppi-nomi" }); return;
+  }
   res.status(200).json({ ok: true });
 }
 
@@ -424,7 +490,10 @@ async function jkStatVote(body, res) {
     if (!JK_STATS_SET.has(stat)) { res.status(400).json({ error: "stat" }); return; }
     if (!(value >= 1 && value <= 5)) { res.status(400).json({ error: "value" }); return; }
   }
-  await redisPipeline([["SADD", JKV_SET, jk], ["HSET", jkvKey(stat, jk), voter, String(value)]]);
+  if (!nomeValido(jk)) { res.status(400).json({ error: "nome" }); return; }
+  if (!(await aggiungiConTetto(JKV_SET, jk, TETTO_NOMI_VOTATI, [["HSET", jkvKey(stat, jk), voter, String(value)]]))) {
+    res.status(429).json({ error: "troppi-nomi" }); return;
+  }
   res.status(200).json({ ok: true });
 }
 
@@ -458,9 +527,7 @@ async function jkStatResults(body, res) {
 // Store: HASH per kind, campo = "nome|stat" → valore. Il gioco li carica al boot.
 const OV_KEY = (kind) => `palio:ov:${kind}`;   // kind = horse | jockey
 async function setStatOverride(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const kind = String(body.kind || "").toLowerCase();
   if (kind !== "horse" && kind !== "jockey") { res.status(400).json({ error: "kind" }); return; }
   const name = String(body.name || "").trim().slice(0, 80);
@@ -504,9 +571,11 @@ async function propose(body, res) {
   if (!Number.isFinite(stamina)) stamina = 0;
   else stamina = Math.max(70, Math.min(100, stamina));
   if (!name || name.length < 2) { res.status(400).json({ error: "nome" }); return; }
+  if (kind !== "deal" && !nomeValido(name)) { res.status(400).json({ error: "nome" }); return; }
   const field = name.toLowerCase();
-  const [{ result: existing }] = await redisPipeline([["HGET", propHash(kind), field]]);
+  const [{ result: existing }, { result: quante }] = await redisPipeline([["HGET", propHash(kind), field], ["HLEN", propHash(kind)]]);
   if (existing) { res.status(200).json({ ok: true, already: true }); return; }  // già proposto
+  if (Number(quante) >= TETTO_PROPOSTE) { res.status(429).json({ error: "troppe-proposte" }); return; }
   const entry = JSON.stringify({ name, tier, stamina, by, created: Date.now(), status: "pending", kind });
   await redisPipeline([["HSET", propHash(kind), field, entry]]);
   res.status(200).json({ ok: true });
@@ -526,9 +595,7 @@ async function acceptedItems(body, res) {
 
 // Elenco proposte di un kind (solo admin).
 async function proposalsList(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const kind = propKind(body);
   if (!kind) { res.status(400).json({ error: "kind" }); return; }
   const [{ result }] = await redisPipeline([["HGETALL", propHash(kind)]]);
@@ -542,9 +609,7 @@ async function proposalsList(body, res) {
 
 // Accetta/rifiuta una proposta (solo admin). Accettando, l'elemento entra nel gioco.
 async function proposalDecide(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const kind = propKind(body);
   if (!kind) { res.status(400).json({ error: "kind" }); return; }
   const name = String(body.name || "").trim().slice(0, 120);
@@ -584,9 +649,7 @@ async function proposalDecide(body, res) {
 // nuovo tier senza che ci sia una "proposta". Va nell'hash accepted dei cavalli,
 // che il gioco applica al roster. tier vuoto = rimuove l'override.
 async function setHorseTier(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   const name = String(body.name || "").trim().slice(0, 40);
   if (!name) { res.status(400).json({ error: "nome" }); return; }
   const tier = String(body.tier || "").trim().toLowerCase();
@@ -663,9 +726,7 @@ async function teleSalva(body, res) {
 // Statistiche per l'admin: legge gli ultimi N giorni e restituisce i CONTI, non
 // le righe (piu' le ultime 40 righe grezze, per guardarci dentro).
 async function teleStats(body, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!body.adminKey || String(body.adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+  if (!(await adminOk(body, res))) return;
   let giorni = parseInt(body.giorni, 10); if (!(giorni >= 1)) giorni = 1; if (giorni > 30) giorni = 30;
   const righe = [];
   let troncato = false;
@@ -759,10 +820,8 @@ function aggregaTele(tutte) {
   };
 }
 
-async function adminList(adminKey, res) {
-  const secret = process.env.PALIO_ADMIN_KEY;
-  if (!secret) { res.status(503).json({ error: "admin-non-configurato" }); return; }
-  if (!adminKey || String(adminKey) !== secret) { res.status(403).json({ error: "forbidden" }); return; }
+async function adminList(body, res) {
+  if (!(await adminOk(body, res))) return;
   const [{ result: emails }, { result: fbRaw }] = await redisPipeline([
     ["SMEMBERS", ACCOUNTS_SET],
     ["LRANGE", FEEDBACK_LIST, 0, 199],   // ultimi 200 consigli

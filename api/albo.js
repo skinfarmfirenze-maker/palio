@@ -13,6 +13,12 @@ const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const CATS = ["contrada", "cavallo", "fantino"];
 const keyFor = (cat) => `palio:albo:${cat}`;
+const CONTRADE_IDS = new Set([
+  "aquila", "bruco", "chiocciola", "civetta", "drago", "giraffa", "istrice",
+  "leocorno", "lupa", "nicchio", "oca", "onda", "pantera", "selva", "tartuca",
+  "torre", "valdimontone",
+]);
+const NOME_OK = /^[\p{L}\p{N} '\u2019.\-]{2,40}$/u;
 
 // Esegue una pipeline di comandi Redis via REST Upstash. Ritorna l'array dei result.
 async function redisPipeline(commands) {
@@ -59,7 +65,9 @@ module.exports = async (req, res) => {
       // coi valori ATTUALI (storico preservato). SICUREZZA: legge prima lo stato e,
       // se risulta VUOTO (replica vuota), ANNULLA senza toccare nulla.
       if (body.adminReset) {
-        if (String(body.adminReset) !== process.env.PALIO_ADMIN_KEY) { res.status(403).json({ error: "forbidden" }); return; }
+        const k = process.env.PALIO_ADMIN_KEY;
+        const uguale = (a, b) => { const c = require("crypto"); return c.timingSafeEqual(c.createHash("sha256").update(String(a)).digest(), c.createHash("sha256").update(String(b)).digest()); };
+        if (!k || !uguale(body.adminReset, k)) { res.status(403).json({ error: "forbidden" }); return; }
         let snap = null;
         for (let k = 0; k < 10 && !snap; k += 1) {
           const out = await redisPipeline([...CATS.map((c) => ["HGETALL", keyFor(c)]), ["GET", "palio:totalePalii"]]);
@@ -84,6 +92,13 @@ module.exports = async (req, res) => {
 
       const cmds = [];
       const meta = [];
+      // L'Albo e' PUBBLICO: senza controlli chiunque poteva scriverci un nome
+      // qualsiasi (anche offensivo) o una contrada inesistente.
+      for (const cat of CATS) {
+        const v = body[cat];
+        if (!v) continue;
+        if (cat === "contrada" ? !CONTRADE_IDS.has(String(v)) : !NOME_OK.test(String(v))) { body[cat] = null; }
+      }
       for (const cat of CATS) {
         const field = body[cat];
         if (field) { cmds.push(["HINCRBY", keyFor(cat), String(field), 1]); meta.push(["cat", cat, field]); }

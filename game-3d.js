@@ -6478,7 +6478,7 @@ function campaignAccoppiateScreen(next) {
       const flag = document.createElement("div"); flag.className = "cmp-row-flag"; flag.style.cssText = `width:24px;height:24px;border-radius:4px;background:url('${BANDIERE[h.id]}') center/cover;flex:0 0 auto`;
       const info = document.createElement("div"); info.style.flex = "1";
       const tierBadge = tm ? ` <span style="font-size:10.5px;font-weight:700;color:${tm.fg};background:${tm.bg};border-radius:5px;padding:1px 7px">${tm.label}</span>` : "";
-      info.innerHTML = `<b${isRival ? ' style="color:#e8896f"' : ""}>${h.name}</b>${isRival ? " (rivale)" : ""} · ${h.horseName || "—"}${tierBadge} · <span style="color:#f0cb35">${h.jockey ? nickUp(h.jockey.nick) : "—"}</span>`;
+      info.innerHTML = `<b${isRival ? ' style="color:#e8896f"' : ""}>${h.name}</b>${isRival ? " (rivale)" : ""} · ${escapeHtml(h.horseName || "—")}${tierBadge} · <span style="color:#f0cb35">${h.jockey ? escapeHtml(nickUp(h.jockey.nick)) : "—"}</span>`;
       row.append(flag, info); list.appendChild(row);
     });
     const b = document.createElement("button"); b.className = "cmp-btn"; b.textContent = "Vai agli accordi →";
@@ -9238,7 +9238,7 @@ function showAccoppiateFinali() {
     const sw = '<div class="sf-sw">' + (h.colors || []).slice(0, 3).map((c) => '<span style="background:' + c + '"></span>').join("") + '</div>';
     const tm = TRATTA_TIERS[h.horseTier];
     const tierBadge = tm ? ' <span style="font-size:10.5px;font-weight:700;color:' + tm.fg + ';background:' + tm.bg + ';border-radius:5px;padding:1px 7px;margin-left:6px">' + tm.label + '</span>' : '';
-    row.innerHTML = sw + '<div class="c">' + h.name + '</div><div class="h">' + (h.horseName || "") + tierBadge + '</div><div class="j">' + (j ? j.nick : "—") + '</div>';
+    row.innerHTML = sw + '<div class="c">' + h.name + '</div><div class="h">' + escapeHtml(h.horseName || "") + tierBadge + '</div><div class="j">' + (j ? escapeHtml(j.nick) : "—") + '</div>';
     box.appendChild(row);
   });
   document.getElementById("sfGoBtn").addEventListener("click", endSceltaFantino);
@@ -16245,19 +16245,24 @@ function isAdminUrl() {
 }
 // Blocco DEMO: vale solo per un account REGISTRATO che non sia Mario Rossi.
 // Prima di avere un account si passa liberamente da login/registrazione.
-// Chi puo' GIOCARE durante la DEMO, oltre allo sviluppatore: elenco di email.
-// Login e registrazione restano aperti a tutti — chiunque puo' crearsi l'account —
-// ma chi non e' in questa lista si ferma alla schermata "gioco in aggiornamento".
-// Per abilitare qualcuno basta aggiungere qui la sua email, in minuscolo.
-const GIOCATORI_ABILITATI = new Set([
-  "papeusleonardus10@gmail.com",   // Leonardo Papei
-  "fili.toscano5@gmail.com",       // Filippo Toscano
-  "pietromartini821@gmail.com",    // Pietro Martini
-]);
+// Chi puo' GIOCARE durante la DEMO, oltre allo sviluppatore. Dal 25/10 alle 10
+// (gioccoAperto) l'elenco non serve piu': gioca chiunque abbia un account.
+// Non piu' le email in chiaro: il codice del gioco e' pubblico (sito e GitHub) e
+// tre indirizzi veri di giocatori erano leggibili da chiunque. Qui ci sono solo
+// le loro IMPRONTE (cyrb53 di "palio:" + email minuscola). Per aggiungere qualcuno:
+// calcola l'impronta con impronta("palio:" + email) dalla console e incollala.
+const GIOCATORI_ABILITATI = new Set(["1i3hsh0v88k", "1qw006311or", "l2uauz3mp3"]);
+function impronta(str, seed = 0) {
+  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for (let i = 0, ch; i < str.length; i++) { ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 function accountAbilitato(acc) {
   if (isMarioRossi(acc)) return true;                       // lo sviluppatore
   const mail = ((acc && acc.email) || "").trim().toLowerCase();
-  return !!mail && GIOCATORI_ABILITATI.has(mail);
+  return !!mail && GIOCATORI_ABILITATI.has(impronta("palio:" + mail));
 }
 function demoBloccaQuesto() {
   // ?admin nell'URL non basta piu' a giocare: non chiede nessuna password, quindi
@@ -16520,6 +16525,7 @@ function ensureAccountGate() {
     "email-esiste": "Esiste già un account con questa email. Entra.",
     "no-account": "Nessun account con questa email. Registrati.",
     "credenziali": "Email o password errata.",
+    "troppi-tentativi": "Troppi tentativi: riprova fra un quarto d'ora.",
     "no-store": "Servizio account non disponibile. Riprova più tardi.",
     "iscrizioni-chiuse": SIGNUP_BLOCK_MSG,
   }[code] || "Errore. Riprova.");
@@ -16718,7 +16724,7 @@ function openAccountManage() {
   });
   const msg = $("amMsg");
   const errMsg = (code) => ({
-    "credenziali": "Password attuale errata.", "nome-cognome": "Inserisci nome e cognome.",
+    "credenziali": "Password attuale errata.", "nome-cognome": "Inserisci nome e cognome.", "troppi-tentativi": "Troppi tentativi: riprova fra un quarto d'ora.",
     "password-corta": "La nuova password deve avere almeno 6 caratteri.",
     "no-account": "Account non trovato.", "no-store": "Servizio non disponibile.",
   }[code] || "Errore. Riprova.");
@@ -16967,13 +16973,18 @@ function maybeOpenAdmin() {
     const key = $("adminPw").value || adminKey || "";
     if (!key) { $("adminErr").textContent = "Inserisci la password."; return; }
     $("adminErr").textContent = "Attendi…";
-    fetch(ACCOUNT_API + "?admin=" + encodeURIComponent(key))
+    // POST e non GET: con ?admin=CHIAVE la password finiva nei log del server e
+    // nella cronologia del browser.
+    fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "adminList", adminKey: key }) })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (!ok || !j.ok) {
           $("adminErr").textContent = j && j.error === "admin-non-configurato"
             ? "Admin non configurato sul server (manca PALIO_ADMIN_KEY)."
-            : "Password admin errata.";
+            : j && j.error === "troppi-tentativi"
+              ? "Troppi tentativi sbagliati: riprova fra un quarto d'ora."
+              : "Password admin errata.";
           return;
         }
         adminKey = key;

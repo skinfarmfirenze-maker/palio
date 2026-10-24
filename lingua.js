@@ -77,6 +77,7 @@ export const EN = {
   "Il popolo vota": "The people vote",
   "Conferma i voti →": "Confirm the votes →",
   "Vota almeno un cavallo": "Vote for at least one horse",
+  "Troppi tentativi: riprova fra un quarto d'ora.": "Too many attempts: try again in fifteen minutes.",
   "Voti": "Votes",
   "I dieci cavalli che corrono il Palio": "The ten horses running the Palio",
   "Vai alla Tratta →": "On to the Tratta →",
