@@ -717,6 +717,9 @@ function aggregaTele(tutte) {
   return {
     totale: righe.length,
     attese: attese.length,
+    // Nuovi (primi 3 palii su quel dispositivo) contro chi gioca da piu' tempo.
+    nuovi: { n: righe.filter((r) => r.nPalio > 0 && r.nPalio <= 3).length, abbandoni: righe.filter((r) => r.nPalio > 0 && r.nPalio <= 3 && r.esito !== "arrivo").length },
+    esperti: { n: righe.filter((r) => r.nPalio > 3).length, abbandoni: righe.filter((r) => r.nPalio > 3 && r.esito !== "arrivo").length },
     attesePerModo: attese.reduce((m, r) => { const k = r.modo || "?"; m[k] = (m[k] || 0) + 1; return m; }, {}),
     arrivi: arrivi.length,
     abbandoni: righe.filter((r) => r.esito !== "arrivo").length,

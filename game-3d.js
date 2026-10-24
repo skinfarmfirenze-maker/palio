@@ -15383,8 +15383,11 @@ function teleDispositivo() {
   };
 }
 function teleApri() {
+  // Quanti palii ha cominciato QUESTO dispositivo: dice se chi abbandona e' nuovo.
+  let n = 0;
+  try { n = (parseInt(localStorage.getItem("palio.teleN") || "0", 10) || 0) + 1; localStorage.setItem("palio.teleN", String(n)); } catch (e) { /* niente */ }
   state.tele = {
-    t0: Date.now(), fase: state.mode, chiusa: false, nerbate: 0, mossaS: 0,
+    n, t0: Date.now(), fase: state.mode, chiusa: false, nerbate: 0, mossaS: 0,
     fotogrammi: 0, msCorsa: 0, lenti: 0, accMs: 0, accN: 0, peggiore: 0,
     camere: {}, posStoria: [], posAcc: 0,
   };
@@ -15402,7 +15405,13 @@ function teleSeguiFase() {
     return;
   }
   if (m === "replayWin") return;                       // rivedere il palio non e' un palio nuovo
-  if (!state.tele || state.tele.chiusa) teleApri();
+  if (!state.tele || state.tele.chiusa) {
+    // Un palio nuovo comincia solo da una fase di INIZIO. Senza questo, il ritorno
+    // ai risultati dopo "Rivedi il Palio" (replayWin → finished) apriva e chiudeva
+    // subito una seconda riga d'arrivo, vuota: un palio finto in piu' nei conti.
+    if (m === "finished" || m === "race") return;
+    teleApri();
+  }
   const t = state.tele;
   t.fase = m;
   if (m === "race") t.mossaS = state.mossaTimer || 0;  // dopo una mossa falsa vale l'ultima
@@ -15445,29 +15454,36 @@ function teleChiudi(esito, fase) {
 // La riga del palio, senza toccare la coda (serve anche per metterla da parte).
 function teleRiga(t, esito, fase) {
   try {
-    const p = getPlayer();
-    const cmp = state.campaign;
+    let p = getPlayer();
+    let cmp = state.campaign;
     const arrivo = esito === "arrivo";
     const rank = arrivo ? (state.rankings && state.rankings.length ? state.rankings : getRanking()) || [] : [];
     const w = rank[0];
     const camere = {};
     Object.keys(t.camere).forEach((c) => { camere[c] = Math.round(t.camere[c]); });
     const tipo = state.estrazione && state.estrazione.tipo;
-    let nPalio = 0; try { nPalio = normalizeAlbo(JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}).totalePalii || 0; } catch (e) { /* niente */ }
+    // Chi lascia presto ha ancora in memoria cavalli, fantino ed estrazione del
+    // palio PRECEDENTE: ogni dato si scrive solo se la fase che lo crea e' stata
+    // raggiunta, sennò finirebbe nella riga un fantino che in questo palio non c'e'.
+    const ORDINE = ["select", "estrazione", "tratta", "scelta", "mossa", "race", "finished"];
+    const raggiunta = ORDINE.indexOf(t.fase);
+    const dopo = (f) => raggiunta >= ORDINE.indexOf(f);
+    if (!dopo("estrazione")) { p = null; cmp = null; }
+    if (p && !dopo("scelta")) p = null;
     const riga = Object.assign({
       v: TELE_VER, esito, fase: fase || state.mode,
       dur: Math.round((Date.now() - t.t0) / 1000), ora: new Date().getHours(),
       lingua: linguaAttiva(),
       modo: state.teleGioco || (cmp && cmp.active ? (cmp.quick ? "veloce" : "campagna") : "altro"),
-      palio: (tipo && (tipo.id || tipo)) || "",
+      palio: dopo("estrazione") ? (tipo && (tipo.id || tipo)) || "" : "",
       ruolo: (cmp && cmp.currentMode) || "",
-      contrada: (p && p.id) || (state.selectedContrada && state.selectedContrada.id) || "",
-      rinc: p && p.isRincorsa ? 1 : 0,
-      fantino: (p && p.jockey && p.jockey.nick) || "", cavallo: (p && p.horseName) || "", fascia: (p && p.horseTier) || "",
-      mossaS: Math.round(t.mossaS), falsa: state.falseStartCount || 0,
+      contrada: dopo("estrazione") ? (p && p.id) || (state.selectedContrada && state.selectedContrada.id) || "" : "",
+      rinc: p && dopo("mossa") && p.isRincorsa ? 1 : 0,
+      fantino: (p && dopo("mossa") && p.jockey && p.jockey.nick) || "", cavallo: (p && p.horseName) || "", fascia: (p && p.horseTier) || "",
+      mossaS: Math.round(t.mossaS), falsa: dopo("mossa") ? state.falseStartCount || 0 : 0,
       corsaS: arrivo ? Math.round(state.raceClock || 0) : 0,
       pos: arrivo && p ? rank.indexOf(p) + 1 : 0,
-      scosso: p && (p.scosso || p.caduto) ? 1 : 0,
+      scosso: p && dopo("race") && (p.scosso || p.caduto) ? 1 : 0,
       caduti: arrivo ? state.horses.filter((h) => h.scosso || h.caduto).length : 0,
       minSella: MIN_A_CAVALLO,
       vince: (w && w.id) || "", vinceFascia: (w && w.horseTier) || "", vinceFantino: (w && w.jockey && w.jockey.nick) || "",
@@ -15478,7 +15494,7 @@ function teleRiga(t, esito, fase) {
       camere, posStoria: t.posStoria,
       spot: spotVisti() || 0,
       denari: cmp && typeof cmp.budget === "number" ? Math.round(cmp.budget) : 0,
-      nPalio,
+      nPalio: t.n || 0,
     }, teleDispositivo());
     return riga;
   } catch (e) { return null; }   // i dati non devono mai fermare il gioco
@@ -17217,6 +17233,8 @@ function maybeOpenAdmin() {
         ["Nerbate a palio", j.nerbateMedie === null ? "—" : j.nerbateMedie],
         ["App installata", pct(j.pwa, j.totale)],
         ["Spot visti", j.spotTot],
+        ["Lasciano a metà: primi 3 palii", j.nuovi && j.nuovi.n ? pct(j.nuovi.abbandoni, j.nuovi.n) + " di " + j.nuovi.n : "—", "#e8b06f"],
+        ["Lasciano a metà: dal 4° in poi", j.esperti && j.esperti.n ? pct(j.esperti.abbandoni, j.esperti.n) + " di " + j.esperti.n : "—"],
         ["Bloccati dall'attesa", (j.attese || 0) + (j.attese ? " · veloce " + ((j.attesePerModo || {}).veloce || 0) + " · campagna " + ((j.attesePerModo || {}).campagna || 0) : ""), j.attese ? "#e8b06f" : null],
       ])
       + titolo("Dove lasciano il palio", "Fase in cui chi non arriva in fondo esce (tasto Menu o pagina chiusa).")
