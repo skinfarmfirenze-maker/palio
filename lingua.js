@@ -20,7 +20,6 @@ export const EN = {
   "💡 Dacci un consiglio": "💡 Send us a suggestion",
   "per migliorare il gioco": "to improve the game",
   "Un gioco ideato e sviluppato da Simone Meschino": "A game devised and developed by Simone Meschino",
-  "Un gioco ideato e sviluppato da Simone Meschino ·": "A game devised and developed by Simone Meschino ·",
   "Creando l'account accetti che i tuoi dati siano usati per far funzionare il gioco e migliorarlo, come spiegato nell'": "By creating an account you agree that your data is used to run and improve the game, as explained in the ",
   "informativa privacy": "privacy notice",
   ". Nessun uso commerciale.": ". No commercial use.",

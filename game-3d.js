@@ -16194,7 +16194,8 @@ function ensureAccountGate() {
     + '<div style="font-size:12.5px;opacity:.75;width:min(300px,84vw);line-height:1.45">Creando l\'account accetti che i tuoi dati siano usati per far funzionare il gioco e migliorarlo, come spiegato nell\'<a href="privacy.html" target="_blank" rel="noopener" style="color:#f0cb35">informativa privacy</a>. Nessun uso commerciale.</div>'
     + '</div>'
     + '</div>'
-    + '<div id="accErr" style="color:#e8896f;font-size:14px;min-height:18px;max-width:84vw"></div>';
+    + '<div id="accErr" style="color:#e8896f;font-size:14px;min-height:18px;max-width:84vw"></div>'
+    + '<a class="mini-privacy" href="privacy.html" target="_blank" rel="noopener" style="position:fixed">Privacy</a>';
 
   document.body.appendChild(ov);
   const $ = (id) => ov.querySelector("#" + id);
