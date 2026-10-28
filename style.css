@@ -70,7 +70,10 @@ body {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   opacity: 0.7;
+  text-wrap: balance;   /* il testo e' lungo: va a capo in righe di lunghezza simile */
 }
+.kicker-riga { display: block; }
+.kicker-riga + .kicker-riga { margin-top: 3px; font-size: .88em; }
 
 .menu-panel h1 {
   margin: 0 0 14px;
@@ -1295,13 +1298,18 @@ body.con-controller .controls-pad {
   /* Pannello piu' compatto: ci sta tutto senza tagliare la firma. */
   #screenMenu .panel {
     width: min(460px, 88vw);
-    padding: 14px 20px;
+    padding: 9px 20px 12px;
     border-radius: 14px;
   }
-  #screenMenu .kicker { font-size: 10px; margin-bottom: 2px; }
-  #screenMenu .menu-panel h1 { font-size: 26px; margin-bottom: 6px; }
-  #screenMenu .lede { font-size: 13px; margin-bottom: 14px; }
+  /* Due righe sopra il titolo (videogioco ufficiale + approvazione del
+     Consorzio): piu' strette, e lo spazio si recupera dal sottotitolo. */
+  #screenMenu .kicker { font-size: 9.5px; letter-spacing: .14em; margin-bottom: 2px; }
+  #screenMenu .kicker-riga + .kicker-riga { margin-top: 1px; }
+  #screenMenu .menu-panel h1 { font-size: 26px; margin-bottom: 4px; }
+  #screenMenu .lede { font-size: 13px; margin-bottom: 8px; }
   #screenMenu .btn-primary { padding: 10px 34px; font-size: 15px; }
+  /* L'Albo e' secondario: non piu' grande del tasto Gioca. */
+  #screenMenu #alboButton { padding: 8px 22px; font-size: 14px; margin-top: 8px; }
   .firma-autore { margin-top: 9px; }
   /* Col controller collegato le righe diventano tre: il pannello non deve
      crescere fin sopra la firma, quindi qui si stringe e semmai scorre. */

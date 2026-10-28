@@ -12,7 +12,8 @@
 
 export const EN = {
   // ── Home e menu ───────────────────────────────────────────────────────────
-  "Prototipo in fase di sviluppo": "Work in progress",
+  "Videogioco ufficiale sul Palio di Siena": "Official Palio di Siena video game",
+  "Approvato dal Consorzio per la Tutela del Palio di Siena": "Approved by the Consorzio per la Tutela del Palio di Siena",
   "Un gioco ispirato al Palio di Siena": "A game inspired by the Palio di Siena",
   "Gioca": "Play",
   "🏆 Albo delle Vittorie": "🏆 Roll of Honour",
