@@ -1131,6 +1131,9 @@ textarea {
     padding-bottom: 14px !important;      /* l'ultima riga non tocca il bordo */
   }
   .sf-card { padding: 6px 8px !important; border-radius: 8px !important; }
+  /* La targhetta "chi l'ha preso" stava sopra nome e prezzo: qui ha una riga sua. */
+  .sf-taken { position: static !important; display: inline-block !important; margin: 0 0 3px !important; max-width: 100% !important; font-size: 9.5px !important; }
+
   /* Il prezzo era in float e finiva SOPRA la fine del nome ("Trecciolino 105"):
      qui nome e prezzo stanno sulla stessa riga, ognuno al suo posto. */
   .sf-nick {
@@ -1207,6 +1210,13 @@ textarea {
   /* ── Niente testo sotto gli 11px in nessuna schermata: sotto non si legge
      su un telefono tenuto a mezzo braccio. */
   .screen, .screen *, #hvOverlay *, #sfOverlay *, #campaignOverlay * { min-height: 0; }
+/* ...ma le RIGHE delle liste che scorrono non si schiacciano: con min-height 0
+   una riga andata a capo si stringeva e il suo testo finiva sulla riga sotto
+   (accordi su telefono). La lista scorre, le righe restano intere. */
+#campaignOverlay .cmp-row,
+#campaignOverlay .acc-fantini > *,
+#campaignOverlay [style*="flex-direction: column"] > *,
+#campaignOverlay [style*="flex-direction:column"] > * { flex-shrink: 0; }
   .result-summary, .cmp-kicker, .hud-label { font-size: 11px !important; }
 }
 
@@ -1308,6 +1318,13 @@ body.con-controller .controls-pad {
   #screenMenu .menu-panel h1 { font-size: 26px; margin-bottom: 4px; }
   #screenMenu .lede { font-size: 13px; margin-bottom: 8px; }
   #screenMenu .btn-primary { padding: 10px 34px; font-size: 15px; }
+  /* Il tasto "‹ Menu" sta fisso in alto a sinistra: i riquadri della campagna
+     (accordi, tratta...) si spostano a destra quanto basta per non finirci sotto. */
+  body #campaignOverlay { padding-left: calc(env(safe-area-inset-left, 0px) + 96px) !important; }
+  /* Denari in alto a destra: su telefono solo moneta e cifra (prima "1523 denari ·
+     Onda", 170px, finiva sopra i sottotitoli delle schermate). */
+  #cmpMoney > span:nth-child(2) { font-size: 0 !important; }
+  #cmpMoney #cmpMoneyVal { font-size: 16px !important; }
   /* L'Albo e' secondario: non piu' grande del tasto Gioca. */
   #screenMenu #alboButton { padding: 8px 22px; font-size: 14px; margin-top: 8px; }
   .firma-autore { margin-top: 9px; }
@@ -1392,3 +1409,7 @@ body.con-controller .controls-pad {
   .lang-btn { font-size: 10.5px; padding: 5px 9px; }
   .home-settings { gap: 6px; }
 }
+
+/* La targhetta "chi ha preso il fantino" vuota si vedeva come un trattino scuro
+   sopra il prezzo (PC e telefono): se non c'e' niente da dire, non c'e'. */
+.sf-taken:empty { display: none !important; }

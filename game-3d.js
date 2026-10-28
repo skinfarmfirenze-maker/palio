@@ -6507,8 +6507,8 @@ function rigaContrada(h) {
   const tier = h.horseTier || "";
   // Tutto BIANCO: niente giallo sul nome del cavallo né tinte sulla fascia. La
   // gerarchia la fanno il grassetto e l'opacità, non il colore.
-  return `<b>${h.name}</b> · ${j ? nickUp(j.nick) : "—"}`
-    + ` <span style="opacity:.55">su</span> <b>${cav}</b>`
+  return `<b>${h.name}</b> · ${j ? escapeHtml(nickUp(j.nick)) : "—"}`
+    + ` <span style="opacity:.55">su</span> <b>${escapeHtml(cav)}</b>`
     + (tier ? ` <span style="opacity:.75;font-size:12px">${tier}</span>` : "")
     + ` <span style="opacity:.65">· fedeltà ${(j && j.fedelta) || 3}</span>`;
 }
@@ -7947,8 +7947,9 @@ function ensureVotoCavalliStyle() {
      dentro i bottoni ce n'era troppo. */
   #hvOverlay{padding:6px calc(env(safe-area-inset-right,0px) + 8px) 6px calc(env(safe-area-inset-left,0px) + 8px)}
   .hv-card{padding:4px 7px !important}
-  .hv-name{font-size:12px !important;padding-right:2px !important}
-  .hv-tier{margin-top:3px !important;font-size:10px !important;padding:1px 7px !important}
+  .hv-name{font-size:12px !important;padding-right:16px !important}   /* la spunta sta in alto a destra */
+  .hv-tier{margin-top:4px !important;font-size:10px !important;padding:1px 7px !important}
+  .hv-card{padding-bottom:6px !important}                            /* il numero dei voti sta sulla riga della fascia */
   .hv-votes{bottom:4px !important;right:5px !important;font-size:10.5px !important;padding:0 5px !important}
   #hvOverlay h2{font-size:15px;margin:0;letter-spacing:.06em;padding:0 118px}
   #hvOverlay .hv-sub{font-size:12px;margin:2px 0 4px;max-width:none;line-height:1.25;padding:0 10px}
@@ -8427,7 +8428,9 @@ function buildTrattaPresentation(pairings) {
   el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:58;"
     + "background:rgba(18,13,8,.9);border:1px solid rgba(240,203,53,.5);border-radius:16px;"
     + "padding:clamp(10px,2.4vh,22px) clamp(16px,4vw,30px);max-width:94vw;max-height:92vh;overflow:auto;"
-    + "text-align:center;font-family:inherit;color:#f3e7cf;box-shadow:0 10px 40px rgba(0,0,0,.6)";
+    // Il velo scuro tutt'intorno (l'ombra enorme) fa da sfondo da finestra: su
+    // telefono le caselle della tratta spuntavano ai lati, tagliate a meta'.
+    + "text-align:center;font-family:inherit;color:#f3e7cf;box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 0 100vmax rgba(8,6,3,.62)";
   const h = document.createElement("div");
   h.style.cssText = "font-size:clamp(12px,1.8vh,15px);letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;margin-bottom:clamp(6px,1.4vh,12px)";
   h.textContent = "I dieci cavalli che corrono il Palio";
@@ -16229,7 +16232,7 @@ function ensureAccountGate() {
     + '</div>'
     + '</div>'
     + '<div id="accErr" style="color:#e8896f;font-size:14px;min-height:18px;max-width:84vw"></div>'
-    + '<a class="mini-privacy" href="privacy.html" target="_blank" rel="noopener" style="position:fixed">Privacy</a>';
+    + '<a class="mini-privacy" href="privacy.html" target="_blank" rel="noopener" style="position:static;transform:none;margin-top:2px">Privacy</a>';
 
   document.body.appendChild(ov);
   const $ = (id) => ov.querySelector("#" + id);
@@ -17305,7 +17308,8 @@ body:not(.touch-device) .touch-controls{display:none !important}
 .touch-steer-left{left:auto !important;right:calc(env(safe-area-inset-right,0px) + 84px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
 .touch-steer-right{left:auto !important;right:calc(env(safe-area-inset-right,0px) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
 .touch-controls.race-mode .touch-lat{display:none !important}
-body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 30px) !important;bottom:auto !important;left:calc(env(safe-area-inset-left,0px) + 10px) !important;transform:scale(.82) !important;transform-origin:top left !important}
+body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 50px) !important;bottom:auto !important;left:calc(env(safe-area-inset-left,0px) + 10px) !important;transform:scale(.74) !important;transform-origin:top left !important}
+body.touch-device .race-message{top:46% !important;left:27% !important;right:31% !important;font-size:17px !important;line-height:1.25 !important;padding:0 !important}
 .touch-nerb{width:112px !important;height:44px !important;left:auto !important;right:calc(env(safe-area-inset-right,0px) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:14px !important;font-weight:800 !important;letter-spacing:.1em !important;background:rgba(160,42,32,.86) !important;border-color:rgba(245,160,130,.6) !important;color:#fff5ec !important}
 .touch-nerb:active{background:rgba(200,60,46,.95) !important;transform:scale(.96)}
 body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;transform:translateX(-50%) !important;top:calc(env(safe-area-inset-top,0px) + 30px) !important;width:188px !important;height:116px !important}
