@@ -14,7 +14,7 @@ export const EN = {
   // ── Home e menu ───────────────────────────────────────────────────────────
   "Videogioco ufficiale sul Palio di Siena": "Official Palio di Siena video game",
   "Approvato dal Consorzio per la Tutela del Palio di Siena": "Approved by the Consorzio per la Tutela del Palio di Siena",
-  "Un gioco ispirato al Palio di Siena": "A game inspired by the Palio di Siena",
+  "È gratuito, per tutti": "It's free, for everyone",
   "Gioca": "Play",
   "🏆 Albo delle Vittorie": "🏆 Roll of Honour",
   "🐴 Proponici un cavallo": "🐴 Suggest a horse",
