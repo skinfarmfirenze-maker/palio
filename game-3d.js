@@ -13020,13 +13020,19 @@ function updateAiHorse(horse, dt, time) {
   {
     const umana = laneDaTraccia(horse);
     if (umana != null && state.mode === "race") {
-      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95));
+      // ALLA PARTENZA la traccia entra piano: nei primi 2s non conta, poi cresce
+      // fino a pieno a 8s. Prima tirava subito tutte le Contrade sulla corsia che
+      // l'umano teneva li' all'ultimo giro, e appena partite si schiacciavano
+      // tutte da un lato.
+      const avvio = clamp(((state.raceClock || 0) - 2) / 6, 0, 1);
+      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95) * avvio);
       // TETTO DI SCOSTAMENTO. Le decisioni prese qui sopra (sorpasso, marcatura,
       // parata) restano, ma non possono portare l'AI lontano dalla linea che
       // l'umano teneva in questo punto: si sposta per passare o per chiudere, poi
       // rientra. Senza questo tetto, una singola manovra la mandava larga e la
       // traccia non si vedeva più.
-      horse.targetLane = clamp(horse.targetLane, umana - TRACCIA_SCOSTO, umana + TRACCIA_SCOSTO);
+      const scosto = TRACCIA_SCOSTO + (1 - avvio) * 2 * AI_LANE_LIMIT;   // in partenza il tetto non stringe
+      horse.targetLane = clamp(horse.targetLane, umana - scosto, umana + scosto);
     }
   }
 
@@ -14453,8 +14459,17 @@ function laneDaTraccia(horse) {
   // tu passi a sfiorare il colonnino, ci devono passare anche loro. Quello che
   // succede allora e' che si INCOLONNANO invece di affiancarsi — ed e' giusto
   // cosi', in Piazza sulla corda si va in fila, non in tre di fronte.
-  const estremita = clamp(Math.abs(v) / (AI_LANE_LIMIT || 1), 0, 1);
-  return v + (horse.tracciaScarto || 0) * (1 - 0.9 * estremita);
+  // Solo sulla CORDA (+, lato Campo). Sullo STECCATO (−) e' il contrario: se tu
+  // corri attaccato ai materassi, le Contrade non ti seguono tutte in fila li'
+  // (si schiacciavano tutte da un lato appena partite) ma si aprono verso il
+  // centro, ognuna di quanto vale il suo scarto.
+  const scarto = horse.tracciaScarto || 0;
+  if (v >= 0) {
+    const estremita = clamp(v / (AI_LANE_LIMIT || 1), 0, 1);
+    return v + scarto * (1 - 0.9 * estremita);
+  }
+  const steccato = clamp(-v / (AI_LANE_LIMIT || 1), 0, 1);
+  return v + lerp(scarto, (scarto + 2.6) * 1.6, steccato);
 }
 
 function finishRace() {
