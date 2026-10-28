@@ -4937,6 +4937,9 @@ function ensureMenuHomeBtn() {
 function refreshMenuHomeBtn() {
   const b = ensureMenuHomeBtn();
   b.style.display = (state.mode && state.mode !== "menu") ? "" : "none";
+  // In mossa e in corsa (solo telefono, vedi lo stile touch) il Menu va accanto
+  // al pannello Andatura invece che sopra: prima ne copriva la scritta.
+  b.classList.toggle("in-corsa", state.mode === "mossa" || state.mode === "race");
 }
 
 // "Salta all'avvio" — appare SOLO quando ASSISTI al palio della rivale (mossa in
@@ -17346,7 +17349,9 @@ body:not(.touch-device) .touch-controls{display:none !important}
 .touch-steer-left{left:auto !important;right:calc(var(--margine-sicuro) + 84px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
 .touch-steer-right{left:auto !important;right:calc(var(--margine-sicuro) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
 .touch-controls.race-mode .touch-lat{display:none !important}
-body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 50px) !important;bottom:auto !important;left:calc(var(--margine-sicuro) + 10px) !important;transform:scale(.74) !important;transform-origin:top left !important}
+body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 12px) !important;bottom:auto !important;left:calc(var(--margine-sicuro) + 10px) !important;transform:scale(.74) !important;transform-origin:top left !important}
+body.touch-device #menuHomeBtn.in-corsa{left:calc(var(--margine-sicuro) + 146px) !important;top:calc(env(safe-area-inset-top,0px) + 12px) !important}
+body.touch-device .hud-top-left{top:calc(env(safe-area-inset-top,0px) + 98px) !important;left:auto !important;right:calc(var(--margine-sicuro) + 18px) !important}
 body.touch-device .race-message{top:46% !important;left:27% !important;right:31% !important;font-size:17px !important;line-height:1.25 !important;padding:0 !important}
 .touch-nerb{width:112px !important;height:44px !important;left:auto !important;right:calc(var(--margine-sicuro) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:14px !important;font-weight:800 !important;letter-spacing:.1em !important;background:rgba(160,42,32,.86) !important;border-color:rgba(245,160,130,.6) !important;color:#fff5ec !important}
 .touch-nerb:active{background:rgba(200,60,46,.95) !important;transform:scale(.96)}
