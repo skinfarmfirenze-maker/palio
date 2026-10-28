@@ -4486,23 +4486,10 @@ function recordPalioRun() {
     }
     localStorage.setItem("palio.bonus20", String(n));
   } catch (e) { /* niente */ }
-  try {
-    fetch(ALBO_API, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ palio: 1 }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((srv) => {
-        // Risposta SNELLA { ok, totalePalii }: aggiorna SOLO il totale dal server,
-        // conservando contrada/cavallo/fantino locali (non riletti per risparmiare comandi).
-        if (srv && srv.ok && typeof srv.totalePalii === "number") {
-          globalAlbo = normalizeAlbo(globalAlbo || {});
-          globalAlbo.totalePalii = srv.totalePalii;
-          try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
-        }
-      })
-      .catch(() => { /* offline */ });
-  } catch (e) { /* niente */ }
+  // Il +1 ai palii dell'Albo GLOBALE non parte piu' da qui: viaggia con le righe
+  // dei dati corse (teleRiga → teleSalva sul server), a gruppi di 3 palii. Prima
+  // era una chiamata al server a ogni palio, e ogni chiamata costa CPU su Vercel
+  // (a fine ottobre 2026 si e' sforata la quota gratuita di 4 ore).
   // Contatore LOCALE dei palii corsi dal giocatore (per il popup feedback al 3°).
   try {
     if (getAccount()) {
@@ -4562,7 +4549,9 @@ async function fetchGlobalAlbo(force) {
     }
   } catch (e) { /* cache illeggibile: si legge dal server */ }
   try {
-    const res = await fetch(ALBO_API, { cache: "no-store" });
+    // Niente cache:"no-store": farebbe chiedere al browser di saltare anche la
+    // cache di Vercel, che invece serve proprio a non avviare la funzione.
+    const res = await fetch(ALBO_API);
     if (!res.ok) return null;
     const raw = await res.json();
     if (!raw || raw._nostore || raw._error) return null;   // store non pronto: resta sul locale
@@ -4583,28 +4572,9 @@ function recordVictoryToAlbo(winner) {
   if (nick) a.fantino[nick] = (a.fantino[nick] || 0) + 1;
   globalAlbo = a;
   try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(a)); } catch (e) { /* niente */ }
-  // 2) Invio al server dell'albo GLOBALE: incrementi ATOMICI (HINCRBY), poi
-  // sincronizza con la verità del server. Se offline, resta solo il locale.
-  try {
-    fetch(ALBO_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contrada: winner.id || null, cavallo: winner.horseName || null, fantino: nick || null }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((srv) => {
-        // Risposta SNELLA { ok, contrada/cavallo/fantino: {id:nuovoTot} }: fondi SOLO
-        // i campi incrementati, senza rileggere (né azzerare) il resto dell'albo.
-        if (srv && srv.ok) {
-          globalAlbo = normalizeAlbo(globalAlbo || {});
-          ["contrada", "cavallo", "fantino"].forEach((cat) => {
-            if (srv[cat]) Object.keys(srv[cat]).forEach((k) => { globalAlbo[cat][k] = srv[cat][k]; });
-          });
-          try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
-        }
-      })
-      .catch(() => { /* offline: pazienza */ });
-  } catch (e) { /* niente */ }
+  // 2) L'Albo GLOBALE sul server si aggiorna con le righe dei dati corse (la
+  // riga d'arrivo porta contrada, cavallo e fantino vincitori): niente chiamata
+  // in piu' a ogni palio. Il locale qui sopra resta immediato.
 }
 // (Rimosso winBalanceByContrada: il freno/spinta di velocità in base alle vittorie
 // non esiste più. L'unico svantaggio della più vittoriosa è la brenna garantita
@@ -15497,6 +15467,7 @@ function teleRiga(t, esito, fase) {
       caduti: arrivo ? state.horses.filter((h) => h.scosso || h.caduto).length : 0,
       minSella: MIN_A_CAVALLO,
       vince: (w && w.id) || "", vinceFascia: (w && w.horseTier) || "", vinceFantino: (w && w.jockey && w.jockey.nick) || "",
+      vinceCavallo: (w && w.horseName) || "",
       nerbate: t.nerbate,
       fps: t.msCorsa > 0 ? Math.round((t.fotogrammi * 1000) / t.msCorsa) : 0,
       fpsMin: Math.round(t.peggiore || 0),

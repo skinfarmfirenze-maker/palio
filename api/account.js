@@ -731,7 +731,7 @@ const TELE_CAMPI = {
   dpr: ["n", 0, 8], gpu: ["s", 48], modo: ["s", 10], palio: ["s", 14], ruolo: ["s", 10],
   contrada: ["s", 14], rinc: ["n", 0, 1], fantino: ["s", 24], cavallo: ["s", 32], fascia: ["s", 10],
   mossaS: ["n", 0, 3600], falsa: ["n", 0, 9], corsaS: ["n", 0, 600], pos: ["n", 0, 10], scosso: ["n", 0, 1],
-  caduti: ["n", 0, 10], minSella: ["n", 0, 10], vince: ["s", 14], vinceFascia: ["s", 10], vinceFantino: ["s", 24],
+  caduti: ["n", 0, 10], minSella: ["n", 0, 10], vince: ["s", 14], vinceFascia: ["s", 10], vinceFantino: ["s", 24], vinceCavallo: ["s", 40],
   nerbate: ["n", 0, 999], fps: ["n", 0, 240], fpsMin: ["n", 0, 240], lenti: ["n", 0, 100],
   camere: ["o", 8], posStoria: ["a", 80], spot: ["n", 0, 99], denari: ["n", -99999, 999999], nPalio: ["n", 0, 99999],
 };
@@ -763,7 +763,20 @@ async function teleSalva(body, res) {
     .filter((t) => t.length <= 1200);
   if (!righe.length) { res.status(200).json({ ok: true, n: 0 }); return; }
   const k = teleKey(giornoRoma(new Date(adesso)));
-  const [{ result: len }] = await redisPipeline([["LPUSH", k, ...righe]]);
+  // ALBO GLOBALE: viaggia con le righe (prima erano due chiamate a /api/albo per
+  // ogni palio). +1 ai palii per ogni corsa partita, +1 a contrada/cavallo/fantino
+  // vincitori per ogni arrivo. Gli stessi controlli dell'Albo: solo contrade vere
+  // e nomi validi.
+  const albo = [];
+  corse.map(pulisciRiga).filter(Boolean).forEach((r) => {
+    if (r.esito === "arrivo" || r.fase === "race") albo.push(["INCRBY", "palio:totalePalii", 1]);
+    if (r.esito !== "arrivo") return;
+    if (!r.vince || !CONTRADE_IDS.has(r.vince)) return;   // un arrivo vero ha sempre una contrada vera
+    albo.push(["HINCRBY", "palio:albo:contrada", r.vince, 1]);
+    if (r.vinceCavallo && nomeValido(r.vinceCavallo)) albo.push(["HINCRBY", "palio:albo:cavallo", r.vinceCavallo, 1]);
+    if (r.vinceFantino && nomeValido(r.vinceFantino)) albo.push(["HINCRBY", "palio:albo:fantino", r.vinceFantino, 1]);
+  });
+  const [{ result: len }] = await redisPipeline([["LPUSH", k, ...righe], ...albo]);
   const extra = [];
   if (Number(len) <= righe.length) extra.push(["EXPIRE", k, TELE_TTL]);           // prima riga del giorno
   if (Number(len) > TELE_TETTO_GIORNO) extra.push(["LTRIM", k, 0, TELE_TETTO_GIORNO - 1]);
