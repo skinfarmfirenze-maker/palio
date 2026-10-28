@@ -11179,20 +11179,21 @@ function updateMossa(dt, time) {
           progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
           // Verso il lato, ma DENTRO la pista: prima puntavano 3 corsie oltre il bordo
           // e si portavano dietro tutta la fila (sul telefono sparivano dall'inquadratura).
-          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.7 + agg * 0.15), -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.3 + agg * 0.1), -AI_LANE_LIMIT, AI_LANE_LIMIT);
           turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
         } else if (state.caosFront.indexOf(horse.id) !== -1) {
           // LE 6 ADDOSSO AI CANAPI: stringono da un lato e si accavallano fra loro,
           // ma NON arretrano — restano al fronte, così il canape resta pieno.
           // Si STRINGONO verso il lato, ma ognuna si sposta solo per il 40% della
-          // strada dalla sua posta: la fila resta in ordine, compatta e in vista.
+          // strada dalla sua posta (ora il 12%): da telefono anche il 40% le faceva
+          // sembrare tutte addossate su un lato. La fila resta larga come le poste.
           // Prima andavano TUTTE sul bordo (side*(limite-1.2)): sembrava che i
           // cavalli scappassero sul bordo della pista.
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.4) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
           progGoal = frontLine - Math.abs(Math.sin(time * 0.7 + horse.phase * 1.5)) * 0.5;   // appena uno scarto, restano sotto il canape
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 0.9;     // muso storto, ma non girate del tutto
         } else {
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.4) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
           const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
           progGoal = frontLine - back;                                   // vanno anche dietro
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
