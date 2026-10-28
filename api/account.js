@@ -753,6 +753,7 @@ const TELE_CAMPI = {
   caduti: ["n", 0, 10], minSella: ["n", 0, 10], vince: ["s", 14], vinceFascia: ["s", 10], vinceFantino: ["s", 24], vinceCavallo: ["s", 40],
   nerbate: ["n", 0, 999], fps: ["n", 0, 240], fpsMin: ["n", 0, 240], lenti: ["n", 0, 100],
   camere: ["o", 8], posStoria: ["a", 80], spot: ["n", 0, 99], denari: ["n", -99999, 999999], nPalio: ["n", 0, 99999],
+  qual: ["n", 0, 3],
 };
 function pulisciRiga(r) {
   if (!r || typeof r !== "object") return null;
@@ -865,6 +866,17 @@ function aggregaTele(tutte) {
     arrivi: arrivi.length,
     abbandoni: righe.filter((r) => r.esito !== "arrivo").length,
     abbandoniPerFase: conta(righe.filter((r) => r.esito !== "arrivo"), (r) => r.fase),
+    // Stessa cosa divisa per dispositivo, con la quota sul totale dei palii di
+    // quel dispositivo: dice se sul telefono si molla in un punto preciso.
+    abbandoniPerDisp: (() => {
+      const o = {};
+      righe.forEach((r) => {
+        const d = r.disp || "?"; const x = o[d] || (o[d] = { n: 0, fasi: {} });
+        x.n += 1;
+        if (r.esito !== "arrivo") x.fasi[r.fase || "?"] = (x.fasi[r.fase || "?"] || 0) + 1;
+      });
+      return o;
+    })(),
     esiti: conta(righe, (r) => r.esito),
     dispositivi: conta(righe, (r) => r.disp),
     lingue: conta(righe, (r) => r.lingua),
@@ -894,6 +906,7 @@ function aggregaTele(tutte) {
     vinciFantino: Object.entries(conta(arrivi, (r) => r.vinceFantino)).sort((a, b) => b[1] - a[1]).slice(0, 15),
     fpsDispositivo: fpsPer((r) => r.disp),
     fpsGpu: fpsPer((r) => r.gpu).slice(0, 15),
+    fpsQualita: fpsPer((r) => (r.qual === undefined ? "" : String(r.qual))).sort((a, b) => a.k.localeCompare(b.k)),
     lentiMedi: r1(media(conFps.map((r) => r.lenti || 0))),
     camere,
     ultime: righe.slice(0, 40),

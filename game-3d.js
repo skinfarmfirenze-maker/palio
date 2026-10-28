@@ -503,7 +503,22 @@ const renderer = new THREE.WebGLRenderer({ antialias: !_touchBoot, powerPreferen
 // TETTO 1.5 (era 2): su un Retina 2x significa il 44% di pixel in MENO da
 // disegnare a ogni frame — è la prima causa di laptop rovente, e a queste
 // dimensioni di scena la differenza di nitidezza non si nota. Su TELEFONO 1.25.
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, _touchBoot ? 1.25 : 1.5));
+// ── QUALITA' AUTOMATICA ─────────────────────────────────────────────────────
+// I dati delle corse (fine ottobre 2026) dicono che sui telefoni economici
+// (Mali-G52, Adreno 610, Mali-G57) e sui portatili con Intel UHD il gioco va a
+// 19-30 fotogrammi al secondo. Qui la qualita' scende da sola, un gradino alla
+// volta, finche' non torna fluido: prima meno pixel da disegnare (su uno schermo
+// piccolo quasi non si vede), poi via le ombre. Il livello si ricorda sul
+// dispositivo, cosi' il palio dopo parte gia' leggero. Chi va bene non cambia.
+const QUALITA_KEY = "palio.qualita";
+const PIXEL_BASE = Math.min(window.devicePixelRatio || 1, _touchBoot ? 1.25 : 1.5);
+const QUALITA_SCALA = [1, 0.85, 0.72, 0.6];          // frazione della risoluzione di partenza
+let qualitaLivello = (() => {
+  try { const n = parseInt(localStorage.getItem(QUALITA_KEY) || "0", 10); return n >= 0 && n < QUALITA_SCALA.length ? n : 0; }
+  catch (e) { return 0; }
+})();
+let soleOmbre = null;                                 // la luce che proietta le ombre (vedi la scena)
+renderer.setPixelRatio(Math.max(0.5, PIXEL_BASE * QUALITA_SCALA[qualitaLivello]));
 renderer.shadowMap.enabled = !_touchBoot;   // niente ombre su telefono (grosso risparmio GPU)
 // PCF semplice al posto del PCFSoft: bordi ombra un filo più netti, parecchio
 // lavoro GPU in meno su una scena con centinaia di caster.
@@ -1242,7 +1257,8 @@ function buildScene() {
 
   const sun = new THREE.DirectionalLight(0xfff3e0, 2.8);
   sun.position.set(-28, 42, -22);
-  sun.castShadow = true;
+  sun.castShadow = qualitaLivello < 2;   // dal livello "leggera" in giu' niente ombre
+  soleOmbre = sun;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -75;
   sun.shadow.camera.right = 75;
@@ -15057,6 +15073,43 @@ function fovPerSchermo(fovVerticale) {
   return Math.min(fovVerticale, tetto);
 }
 
+function applicaQualita(livello) {
+  qualitaLivello = Math.max(0, Math.min(QUALITA_SCALA.length - 1, livello));
+  renderer.setPixelRatio(Math.max(0.5, PIXEL_BASE * QUALITA_SCALA[qualitaLivello]));
+  if (soleOmbre) soleOmbre.castShadow = qualitaLivello < 2;
+  try { localStorage.setItem(QUALITA_KEY, String(qualitaLivello)); } catch (e) { /* niente */ }
+  resize();                                           // ridisegna alla nuova risoluzione
+}
+// Misura la fluidita' VERA durante la mossa e la corsa (non nei menu, dove una
+// scena ferma non dice niente). Sotto i 40 fotogrammi per 3 secondi: un gradino
+// giu'. Sopra i 58 per 30 secondi: un gradino su — ma se dopo essere risalito
+// riscende, in questa visita non risale piu' (niente altalena).
+const qualitaMisura = { ultimo: 0, ms: 0, n: 0, sopraMs: 0, attesaMs: 3000, modo: null, bloccaSalita: false };
+function qualitaFotogramma() {
+  const ora = performance.now();
+  const Q = qualitaMisura;
+  const d = Q.ultimo ? ora - Q.ultimo : 0;
+  Q.ultimo = ora;
+  const gioco = state.mode === "race" || state.mode === "mossa";
+  if (!gioco || !d || d > 250) { Q.ms = 0; Q.n = 0; return; }   // menu, o scheda appena tornata visibile
+  if (state.mode !== Q.modo) { Q.modo = state.mode; Q.attesaMs = 3000; Q.ms = 0; Q.n = 0; }
+  if (Q.attesaMs > 0) { Q.attesaMs -= d; return; }   // i primi secondi di una fase caricano roba: non contano
+  Q.ms += d; Q.n += 1;
+  if (Q.ms < 3000) return;
+  const fps = (Q.n * 1000) / Q.ms;
+  Q.ms = 0; Q.n = 0;
+  if (fps < 40 && qualitaLivello < QUALITA_SCALA.length - 1) {
+    if (Q.sopraMs < 0) Q.bloccaSalita = true;         // era appena risalito: resta giu'
+    applicaQualita(qualitaLivello + 1);
+    Q.sopraMs = 0; Q.attesaMs = 2000;
+  } else if (fps > 58 && qualitaLivello > 0 && !Q.bloccaSalita) {
+    Q.sopraMs += 3000;
+    if (Q.sopraMs >= 30000) { applicaQualita(qualitaLivello - 1); Q.sopraMs = -1; Q.attesaMs = 2000; }
+  } else if (Q.sopraMs > 0) {
+    Q.sopraMs = 0;
+  }
+}
+
 function resize() {
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -15476,6 +15529,7 @@ function teleRiga(t, esito, fase) {
       spot: spotVisti() || 0,
       denari: cmp && typeof cmp.budget === "number" ? Math.round(cmp.budget) : 0,
       nPalio: t.n || 0,
+      qual: qualitaLivello,
     }, teleDispositivo());
     return riga;
   } catch (e) { return null; }   // i dati non devono mai fermare il gioco
@@ -15669,6 +15723,7 @@ function renderRincorsaMiniCam() {
 
 function frame() {
   try { teleFotogramma(); } catch (e) { /* niente */ }
+  try { qualitaFotogramma(); } catch (e) { /* niente */ }
   const dt = Math.min(clock.getDelta(), 0.033);
   const time = clock.elapsedTime;
   update(dt, time);
@@ -16913,7 +16968,7 @@ function maybeOpenAdmin() {
       .catch(() => { box.textContent = "Errore nel caricamento dei dati."; });
   };
   const nomeContrada = (id) => ((CONTRADE.find((c) => c.id === id) || {}).name || id || "—");
-  const NOMI_FASE = { select: "Scelta contrada", estrazione: "Estrazione", tratta: "Tratta", scelta: "Fantini e accordi", mossa: "Mossa", race: "Corsa", finished: "Arrivo" };
+  const NOMI_FASE = { select: "Scelta contrada", estrazione: "Estrazione", tratta: "Tratta", scelta: "Fantini e accordi", mossa: "Mossa", race: "Corsa", finished: "Arrivo", replayWin: "Replay dopo l'arrivo" };
   const pct = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
   const titolo = (t, sotto) => '<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;margin:18px 2px 4px;text-align:left">' + t + '</div>'
     + (sotto ? '<div style="font-size:12px;opacity:.6;margin:0 2px 8px;text-align:left">' + sotto + '</div>' : "");
@@ -16967,12 +17022,25 @@ function maybeOpenAdmin() {
       ])
       + titolo("Dove lasciano il palio", "Fase in cui chi non arriva in fondo esce (tasto Menu o pagina chiusa).")
       + barre(j.abbandoniPerFase, (k) => NOMI_FASE[k] || k)
+      + (() => {
+        // Per dispositivo: % dei palii di quel dispositivo lasciati in ogni fase.
+        const D = j.abbandoniPerDisp || {};
+        const disp = ["tel", "pc", "tab"].filter((d) => D[d] && D[d].n);
+        if (!disp.length) return "";
+        const fasi = ["select", "estrazione", "tratta", "scelta", "mossa", "race"];
+        return titolo("Dove lasciano, per dispositivo", "Percentuale dei palii di quel dispositivo lasciati in quella fase.")
+          + tabella(["Fase"].concat(disp.map((d) => ({ tel: "Telefono", pc: "PC", tab: "Tablet" })[d] + " (" + D[d].n + ")")),
+            fasi.map((f) => [NOMI_FASE[f]].concat(disp.map((d) => pct(D[d].fasi[f] || 0, D[d].n)))));
+      })()
       + titolo("Fluidità per dispositivo", "Fotogrammi al secondo in corsa (mediana). Verde ≥45 · arancio 30-45 · rosso sotto 30. Fotogrammi lenti medi: " + (j.lentiMedi === null ? "—" : j.lentiMedi + "%") + ".")
       + tabella(["Dispositivo", "Palii", "FPS", "Secondo peggiore", "Sotto 30 fps"],
         (j.fpsDispositivo || []).map((r) => [({ tel: "Telefono", tab: "Tablet", pc: "PC" })[r.k] || escapeHtml(r.k), r.n, fpsCol(r.fps), fpsCol(r.fpsMin), r.sotto30 + "%"]))
       + titolo("Fluidità per scheda grafica", "Le 15 più usate: dice su quali dispositivi alleggerire la grafica.")
       + tabella(["Scheda grafica", "Palii", "FPS", "Secondo peggiore", "Sotto 30 fps"],
         (j.fpsGpu || []).map((r) => [escapeHtml(r.k), r.n, fpsCol(r.fps), fpsCol(r.fpsMin), r.sotto30 + "%"]))
+      + titolo("Qualità grafica automatica", "Su che livello finiscono i palii e quanto vanno fluidi. Piena = come prima; più in basso = meno pixel e niente ombre, scelto dal gioco quando è lento.")
+      + tabella(["Livello", "Palii", "FPS", "Secondo peggiore", "Sotto 30 fps"],
+        (j.fpsQualita || []).map((r) => [({ 0: "Piena", 1: "Ridotta", 2: "Leggera", 3: "Minima" })[r.k] || escapeHtml(r.k), r.n, fpsCol(r.fps), fpsCol(r.fpsMin), r.sotto30 + "%"]))
       + titolo("Bilanciamento: cavallo del giocatore", "Quanto vince il giocatore con ogni fascia. Se la brenna vince come il bombolone, le fasce non contano.")
       + tabella(["Fascia", "Palii", "Vinti", "% vittorie", "Pos. media"],
         (j.perFascia || []).map((r) => [escapeHtml(r.k), r.n, r.vinte, pct(r.vinte, r.n), r.posMedia ?? "—"]))
