@@ -74,6 +74,7 @@ export const EN = {
   "Avanti": "Next",
   "Avanti →": "Next →",
   "Vai avanti →": "Continue →",
+  "Vai all'assegnazione →": "Go to the draw →",
   "Conferma": "Confirm",
   "Salta": "Skip",
   "Che Palio si corre?": "Which Palio are we running?",

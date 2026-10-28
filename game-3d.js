@@ -5790,9 +5790,13 @@ function ensureCampaignStyle() {
     .acc-sub{font-size:12px !important;margin:2px 0 4px !important}
     /* Accordi coi FANTINI: le righe si stringono e restano una sotto l'altra,
        col nome e il costo che non si accavallano piu'. */
-    .acc-fantini{gap:4px !important;margin:6px 0 !important;max-height:56vh !important}
-    .acc-fantini > div{padding:4px 8px !important;font-size:11.5px !important;gap:6px !important;flex-wrap:nowrap !important}
-    .acc-fantini .cmp-btn{font-size:11.5px !important;padding:4px 9px !important;flex:0 0 auto !important}
+    /* Tasti da toccare col DITO: righe piu' distanziate e tasti alti almeno
+       38px (prima erano 22px, uno attaccato all'altro). */
+    .acc-fantini{gap:8px !important;margin:6px 0 !important;max-height:56vh !important}
+    .acc-fantini > div{padding:6px 10px !important;font-size:12px !important;gap:10px !important;flex-wrap:nowrap !important;min-height:46px !important}
+    .acc-fantini .cmp-btn{font-size:13px !important;padding:9px 14px !important;min-height:40px !important;flex:0 0 auto !important}
+    #campaignOverlay .cmp-cols .cmp-btn{font-size:13px !important;padding:9px 14px !important;min-height:40px !important}
+    .cmp-cols [style*="flex-direction: column"],.cmp-cols [style*="flex-direction:column"]{gap:8px !important}
     /* Il tasto "Proponi" era STIRATO a tutta la riga da align-items:stretch: un
        bottone rosso enorme per ogni Contrada. Ora sta alla sua misura, come
        quelli dei fantini, appoggiato a destra. */
@@ -6206,7 +6210,7 @@ function refreshCampaignMoney() {
     // Il margine destro si stringe da telefono (16 → 6): il box stava troppo
     // dentro lo schermo e sembrava fuori posto. La distanza dalla fotocamera
     // resta garantita dall'area sicura del sistema.
-    el.style.cssText = "position:fixed;top:14px;right:calc(env(safe-area-inset-right,0px) + var(--money-gap,16px));z-index:200;display:flex;align-items:center;gap:8px;"
+    el.style.cssText = "position:fixed;top:14px;right:calc(var(--margine-sicuro) + var(--money-gap,16px));z-index:200;display:flex;align-items:center;gap:8px;"
       + "background:rgba(20,14,8,.82);border:1px solid rgba(240,203,53,.55);border-radius:11px;padding:8px 14px;"
       + "font-family:inherit;color:#f3e7cf;font-size:15px;box-shadow:0 3px 14px rgba(0,0,0,.5);pointer-events:none";
     el.innerHTML = '<span style="width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe680,#e0a800);'
@@ -7914,7 +7918,7 @@ function ensureVotoCavalliStyle() {
 #hvCount{font-weight:800;color:#f0cb35}
 #hvGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;width:min(1050px,97vw)}
 #hvOverlay .hv-voti{font-size:14px;font-weight:700;margin-bottom:10px;letter-spacing:.04em}
-.hv-card{position:relative;text-align:left;background:rgba(255,246,225,.1);border:1px solid rgba(240,203,53,.4);
+.hv-card{position:relative;text-align:left;color:#f5ecd8;background:rgba(255,246,225,.1);border:1px solid rgba(240,203,53,.4);
   border-radius:12px;padding:10px 12px;cursor:pointer;transition:transform .1s ease,border-color .12s,box-shadow .12s}
 .hv-card:hover{transform:translateY(-2px);border-color:#f0cb35}
 .hv-card.voted{border-color:#7fd98c;box-shadow:0 0 0 2px rgba(127,217,140,.55);background:rgba(127,217,140,.12)}
@@ -7945,7 +7949,7 @@ function ensureVotoCavalliStyle() {
      contenuto si tiene dentro l'area sicura, se no la colonna di sinistra
      finisce sotto la tacca. E le card si stringono, che di spazio vuoto
      dentro i bottoni ce n'era troppo. */
-  #hvOverlay{padding:6px calc(env(safe-area-inset-right,0px) + 8px) 6px calc(env(safe-area-inset-left,0px) + 8px)}
+  #hvOverlay{padding:6px calc(var(--margine-sicuro) + 8px)}
   .hv-card{padding:4px 7px !important}
   .hv-name{font-size:12px !important;padding-right:16px !important}   /* la spunta sta in alto a destra */
   .hv-tier{margin-top:4px !important;font-size:10px !important;padding:1px 7px !important}
@@ -7954,7 +7958,7 @@ function ensureVotoCavalliStyle() {
   #hvOverlay h2{font-size:15px;margin:0;letter-spacing:.06em;padding:0 118px}
   #hvOverlay .hv-sub{font-size:12px;margin:2px 0 4px;max-width:none;line-height:1.25;padding:0 10px}
   #hvOverlay .hv-voti{font-size:12px;margin-bottom:6px}
-  #hvGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;width:min(1200px,99vw)}
+  #hvGrid{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;width:min(1200px,calc(100vw - 2 * var(--margine-sicuro) - 16px))}
   .hv-card{padding:5px 8px;border-radius:8px}
   .hv-name{font-size:12px;padding-right:12px}
   .hv-tier{font-size:9px;margin-top:2px;padding:1px 6px}
@@ -8085,11 +8089,17 @@ function enforceTierFreni(assign) {
   if (frenoRange(504, 524)) ["chiocciola", "giraffa"].forEach((id) => { constraints[id] = ["brenna"]; });
   else if (frenoRange(524, 700)) ["chiocciola", "giraffa"].forEach((id) => { constraints[id] = ["bono"]; });
   if (!Object.keys(constraints).length) return;
-  const entries = [...assign.entries()];   // [entrant, drawn]
-  for (const [entrant, drawn] of entries) {
+  // Si legge SEMPRE l'abbinamento ATTUALE (assign.get), non una fotografia
+  // presa all'inizio: con la fotografia, dopo il primo scambio i successivi
+  // usavano cavalli gia' passati di mano e lo STESSO cavallo finiva a due
+  // Contrade (visto: "Galleggiante" due volte fra i dieci).
+  const entranti = [...assign.keys()];
+  for (const entrant of entranti) {
+    const drawn = assign.get(entrant);
     const allowed = constraints[entrant.id];
     if (!allowed || allowed.indexOf(drawn.tier) >= 0) continue;   // già ok
-    for (const [other, otherDrawn] of entries) {
+    for (const other of entranti) {
+      const otherDrawn = assign.get(other);
       if (other === entrant) continue;
       if (allowed.indexOf(otherDrawn.tier) < 0) continue;         // il suo cavallo deve andarmi bene
       const otherAllowed = constraints[other.id];
@@ -8414,7 +8424,9 @@ function startTrattaCeremony3D(pairings) {
   // Timeline: PRESENTA (lista dei 10 cavalli in gara, mentre suonano le chiarine)
   // → poi per ogni cavallo, DUE TEMPI: prima il CAVALLO (nome+fascia), pausa, poi
   // la CONTRADA a cui tocca.
-  state.tratta.timeline = { idx: 0, phase: "presenta", timer: 5.5, labels: [], done: false };
+  // 8 secondi di presentazione a tutto schermo, POI il tabellone delle
+  // assegnazioni (prima i due stavano insieme e sul telefono non ci entravano).
+  state.tratta.timeline = { idx: 0, phase: "presenta", timer: 8, labels: [], done: false };
   buildTrattaHud();
   buildTrattaPresentation(pairings);
 }
@@ -8425,18 +8437,18 @@ function buildTrattaPresentation(pairings) {
   const old = document.getElementById("trattaPresenta"); if (old) old.remove();
   const el = document.createElement("div");
   el.id = "trattaPresenta";
-  el.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:58;"
-    + "background:rgba(18,13,8,.9);border:1px solid rgba(240,203,53,.5);border-radius:16px;"
-    + "padding:clamp(10px,2.4vh,22px) clamp(16px,4vw,30px);max-width:94vw;max-height:92vh;overflow:auto;"
-    // Il velo scuro tutt'intorno (l'ombra enorme) fa da sfondo da finestra: su
-    // telefono le caselle della tratta spuntavano ai lati, tagliate a meta'.
-    + "text-align:center;font-family:inherit;color:#f3e7cf;box-shadow:0 10px 40px rgba(0,0,0,.6),0 0 0 100vmax rgba(8,6,3,.62)";
+  // A TUTTO SCHERMO, sopra il tabellone (che compare dopo 8 secondi): sul
+  // telefono le due cose insieme non ci stavano. Margini dentro l'area sicura,
+  // cosi' la fotocamera dell'iPhone non copre i nomi da nessuno dei due lati.
+  el.style.cssText = "position:fixed;inset:0;z-index:74;display:flex;flex-direction:column;align-items:center;justify-content:center;"
+    + "gap:clamp(8px,2.2vh,18px);background:radial-gradient(1100px 700px at 50% 0%,#3a2a17 0%,#17110a 62%,#0d0906 100%);"
+    + "padding:clamp(12px,3vh,28px) calc(var(--margine-sicuro) + 16px);text-align:center;font-family:inherit;color:#f3e7cf;overflow:auto";
   const h = document.createElement("div");
-  h.style.cssText = "font-size:clamp(12px,1.8vh,15px);letter-spacing:.14em;text-transform:uppercase;color:#f0cb35;margin-bottom:clamp(6px,1.4vh,12px)";
+  h.style.cssText = "font-size:clamp(15px,3.6vh,24px);letter-spacing:.16em;text-transform:uppercase;color:#f0cb35;font-weight:800";
   h.textContent = "I dieci cavalli che corrono il Palio";
   el.appendChild(h);
   const ul = document.createElement("div");
-  ul.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:clamp(3px,0.8vh,6px) 26px;font-size:clamp(13px,1.9vh,17px);font-weight:600;text-align:left";
+  ul.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:clamp(4px,1.6vh,14px) clamp(28px,7vw,80px);font-size:clamp(17px,4.8vh,30px);font-weight:700;text-align:left";
   // nomi dei cavalli in gara (ordine dei cavalli, non degli abbinamenti), senza numero
   const nomi = pairings.map((p) => p.horseName).sort((a, b) => a.localeCompare(b, "it"));
   nomi.forEach((nome, i) => {
@@ -8448,6 +8460,17 @@ function buildTrattaPresentation(pairings) {
     ul.appendChild(li);
   });
   el.appendChild(ul);
+  // Chi non vuole aspettare gli 8 secondi passa subito alle assegnazioni.
+  const avanti = document.createElement("button");
+  avanti.type = "button"; avanti.className = "cmp-btn";
+  avanti.style.cssText = "margin:0;font-size:clamp(14px,2.4vh,17px);padding:10px 26px";
+  avanti.textContent = "Vai all'assegnazione →";
+  avanti.addEventListener("click", () => {
+    const T = state.tratta && state.tratta.timeline;
+    if (T && T.phase === "presenta") T.timer = 0;     // il giro successivo passa alla chiamata
+    el.remove();
+  });
+  el.appendChild(avanti);
   document.body.appendChild(el);
 }
 
@@ -9097,7 +9120,7 @@ function ensureSceltaStyle() {
   background:rgba(26,18,6,.82);padding:5px 0;border-top:1px solid rgba(232,137,111,.5);
   border-bottom:1px solid rgba(232,137,111,.5);pointer-events:none}
 #sfGrid.locked .sf-card.taken{pointer-events:none}
-.sf-card{position:relative;text-align:left;background:rgba(255,246,225,.12);border:1px solid rgba(240,203,53,.5);
+.sf-card{position:relative;text-align:left;color:#f3e7cf;background:rgba(255,246,225,.12);border:1px solid rgba(240,203,53,.5);
   border-radius:14px;padding:12px 14px;cursor:pointer;transition:transform .1s ease,border-color .12s ease,opacity .2s}
 .sf-card:hover{transform:translateY(-3px);border-color:#f0cb35}
 .sf-card.taken{opacity:.82;cursor:default;border-color:rgba(255,255,255,.2)}
@@ -9365,8 +9388,8 @@ function ensureTrattaHudStyle() {
 @media (max-width:900px), (max-height:520px){
   #trattaPanel{
     display:grid;
-    left:calc(env(safe-area-inset-left,0px) + 6px);
-    right:calc(env(safe-area-inset-right,0px) + 6px);
+    left:calc(var(--margine-sicuro) + 10px);
+    right:calc(var(--margine-sicuro) + 10px);
     width:auto; top:66px;
     grid-template-columns:1fr 1fr;
     grid-template-rows:repeat(5,auto);
@@ -11151,16 +11174,22 @@ function updateMossa(dt, time) {
           // e SPINGONO FORTE (shove laterale marcato) contro chi trovano.
           const back = (Math.sin(time * 0.45 + horse.phase * 1.3) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 1.4);
           progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
-          laneGoal = clamp(side * (AI_LANE_LIMIT - 0.3) + side * (2.8 + agg * 1.2), -AI_LANE_LIMIT - 3, AI_LANE_LIMIT + 3); // spinta forte verso il lato
+          // Verso il lato, ma DENTRO la pista: prima puntavano 3 corsie oltre il bordo
+          // e si portavano dietro tutta la fila (sul telefono sparivano dall'inquadratura).
+          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.7 + agg * 0.15), -AI_LANE_LIMIT, AI_LANE_LIMIT);
           turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
         } else if (state.caosFront.indexOf(horse.id) !== -1) {
           // LE 6 ADDOSSO AI CANAPI: stringono da un lato e si accavallano fra loro,
           // ma NON arretrano — restano al fronte, così il canape resta pieno.
-          laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          // Si STRINGONO verso il lato, ma ognuna si sposta solo per il 40% della
+          // strada dalla sua posta: la fila resta in ordine, compatta e in vista.
+          // Prima andavano TUTTE sul bordo (side*(limite-1.2)): sembrava che i
+          // cavalli scappassero sul bordo della pista.
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.4) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
           progGoal = frontLine - Math.abs(Math.sin(time * 0.7 + horse.phase * 1.5)) * 0.5;   // appena uno scarto, restano sotto il canape
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 0.9;     // muso storto, ma non girate del tutto
         } else {
-          laneGoal = clamp(side * (AI_LANE_LIMIT - 1.2) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.4) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
           const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
           progGoal = frontLine - back;                                   // vanno anche dietro
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
@@ -11236,9 +11265,18 @@ function updateMossa(dt, time) {
       if (horse.allyBeneficiaryId && horse.objCanapi && (!horse.vendettaState || horse.vendettaState === "fatto")) {
         const ben = state.horses.find((o) => o.id === horse.allyBeneficiaryId && o.called && !o.entering && !o.isRincorsa);
         if (ben) {
-          const away = Math.sign(horse.lane - ben.lane) || 1;   // lato opposto al beneficiario
-          horse.shoveDir = away;        // spinta sostenuta: la applica il blocco SPINTA LATERALE
-          horse.shoveTimer = 1.0;       // rinnovata ogni frame → non si spegne mai finché aiuta
+          // Spinge SOLO quando serve: l'alleato gli sta accanto e fra i due c'e'
+          // ancora poco spazio, e senza allontanarsi troppo dalla propria posta.
+          // Prima la spinta non finiva mai: con molti accordi in campo (anche
+          // fra AI, 7 contrade su 9 in un palio di prova) tutte spingevano
+          // insieme e l'intera fila scivolava sul bordo dei materassi.
+          const distanza = Math.abs(horse.lane - ben.lane);
+          const dallaPosta = Math.abs(horse.mossaLane - (horse.postLane ?? horse.mossaLane));
+          if (distanza < 2.6 && dallaPosta < 2.5) {
+            const away = Math.sign(horse.lane - ben.lane) || 1;   // lato opposto al beneficiario
+            horse.shoveDir = away;        // spinta: la applica il blocco SPINTA LATERALE
+            horse.shoveTimer = 0.4;       // breve: si rinnova solo finche' il varco e' stretto
+          }
           progGoal = Math.min(progGoal, frontLine - 0.2);       // e non gli sta davanti
         }
       }
@@ -14707,7 +14745,7 @@ function buildReplayHud(winner, segLabel) {
   const cam = document.createElement("button");
   cam.type = "button";
   cam.textContent = "🎥 Inquadratura";
-  cam.style.cssText = "position:absolute;bottom:30px;right:calc(env(safe-area-inset-right,0px) + 18px);"
+  cam.style.cssText = "position:absolute;bottom:30px;right:calc(var(--margine-sicuro) + 18px);"
     + "pointer-events:auto;font:inherit;font-size:15px;cursor:pointer;border-radius:10px;padding:10px 18px;"
     + "border:1px solid rgba(240,203,53,.5);background:rgba(20,14,8,.72);color:#f3e7cf";
   cam.addEventListener("click", cycleCameraMode);
@@ -15167,8 +15205,8 @@ function invitaWebApp(poi) {
   ov.id = "webAppInvito";
   ov.style.cssText = "position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;"
     + "background:rgba(9,6,4,.82);backdrop-filter:blur(3px);padding:16px;"
-    + "padding-bottom:max(16px,env(safe-area-inset-bottom));padding-left:max(16px,env(safe-area-inset-left));"
-    + "padding-right:max(16px,env(safe-area-inset-right))";
+    + "padding-bottom:max(16px,env(safe-area-inset-bottom));padding-left:max(16px,var(--margine-sicuro));"
+    + "padding-right:max(16px,var(--margine-sicuro))";
   ov.innerHTML =
     '<div style="width:min(430px,94vw);max-height:92vh;overflow-y:auto;background:linear-gradient(180deg,#3a2a17 0%,#17110a 78%);'
     + 'border:1px solid rgba(240,203,53,.45);border-radius:16px;padding:18px 20px;text-align:center;color:#f3e7cf;'
@@ -16339,7 +16377,7 @@ function updateAccountChip() {
   if (!chip) {
     chip = document.createElement("div");
     chip.id = "accountChip";
-    chip.style.cssText = "position:fixed;top:10px;right:calc(env(safe-area-inset-right,0px) + 12px);z-index:120;display:flex;align-items:center;gap:10px;"
+    chip.style.cssText = "position:fixed;top:10px;right:calc(var(--margine-sicuro) + 12px);z-index:120;display:flex;align-items:center;gap:10px;"
       + "background:rgba(20,14,8,.72);border:1px solid rgba(240,203,53,.35);border-radius:999px;padding:6px 8px 6px 14px;"
       + "color:#f3e7cf;font-family:inherit;font-size:13.5px;backdrop-filter:blur(4px)";
     document.body.appendChild(chip);
@@ -17301,16 +17339,16 @@ body:not(.touch-device) .touch-controls{display:none !important}
 .touch-stick{display:none !important}
 .touch-gait,.touch-lat,.touch-steer{pointer-events:auto !important;position:absolute !important;width:54px !important;height:54px !important;border-radius:13px !important;border:1px solid rgba(216,169,58,.5) !important;background:rgba(30,22,12,.82) !important;color:#f3e7cf !important;font-size:22px !important;font-weight:800 !important;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;display:flex !important;align-items:center;justify-content:center}
 .touch-gait:active,.touch-lat:active,.touch-steer:active{background:rgba(216,169,58,.85) !important;color:#1a1206 !important;transform:scale(.96)}
-.touch-gait-up{left:calc(env(safe-area-inset-left,0px) + 66px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 130px) !important}
-.touch-gait-down{left:calc(env(safe-area-inset-left,0px) + 66px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 16px) !important}
-.touch-lat-left{left:calc(env(safe-area-inset-left,0px) + 10px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 73px) !important}
-.touch-lat-right{left:calc(env(safe-area-inset-left,0px) + 122px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 73px) !important}
-.touch-steer-left{left:auto !important;right:calc(env(safe-area-inset-right,0px) + 84px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
-.touch-steer-right{left:auto !important;right:calc(env(safe-area-inset-right,0px) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
+.touch-gait-up{left:calc(var(--margine-sicuro) + 66px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 130px) !important}
+.touch-gait-down{left:calc(var(--margine-sicuro) + 66px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 16px) !important}
+.touch-lat-left{left:calc(var(--margine-sicuro) + 10px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 73px) !important}
+.touch-lat-right{left:calc(var(--margine-sicuro) + 122px) !important;right:auto !important;bottom:calc(env(safe-area-inset-bottom,0px) + 73px) !important}
+.touch-steer-left{left:auto !important;right:calc(var(--margine-sicuro) + 84px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
+.touch-steer-right{left:auto !important;right:calc(var(--margine-sicuro) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 30px) !important}
 .touch-controls.race-mode .touch-lat{display:none !important}
-body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 50px) !important;bottom:auto !important;left:calc(env(safe-area-inset-left,0px) + 10px) !important;transform:scale(.74) !important;transform-origin:top left !important}
+body.touch-device .hud-bottom-left{top:calc(env(safe-area-inset-top,0px) + 50px) !important;bottom:auto !important;left:calc(var(--margine-sicuro) + 10px) !important;transform:scale(.74) !important;transform-origin:top left !important}
 body.touch-device .race-message{top:46% !important;left:27% !important;right:31% !important;font-size:17px !important;line-height:1.25 !important;padding:0 !important}
-.touch-nerb{width:112px !important;height:44px !important;left:auto !important;right:calc(env(safe-area-inset-right,0px) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:14px !important;font-weight:800 !important;letter-spacing:.1em !important;background:rgba(160,42,32,.86) !important;border-color:rgba(245,160,130,.6) !important;color:#fff5ec !important}
+.touch-nerb{width:112px !important;height:44px !important;left:auto !important;right:calc(var(--margine-sicuro) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:14px !important;font-weight:800 !important;letter-spacing:.1em !important;background:rgba(160,42,32,.86) !important;border-color:rgba(245,160,130,.6) !important;color:#fff5ec !important}
 .touch-nerb:active{background:rgba(200,60,46,.95) !important;transform:scale(.96)}
 body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;transform:translateX(-50%) !important;top:calc(env(safe-area-inset-top,0px) + 30px) !important;width:188px !important;height:116px !important}
 #rotateNotice{display:none}

@@ -6,6 +6,12 @@
   --panel: rgba(28, 22, 16, 0.7);
   --good: #4caf6e;
   --danger: #d8553f;
+  /* MARGINE SICURO: la striscia coperta dalla fotocamera dell'iPhone in
+     orizzontale. Si prende la piu' grande fra sinistra e destra e la si usa da
+     TUTTI E DUE i lati: cosi' il layout resta centrato e niente finisce sotto la
+     fotocamera, comunque si giri il telefono. Su PC vale 0. (--sa-prova serve
+     solo per simularla nelle prove.) */
+  --margine-sicuro: max(var(--sa-prova, 0px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
 }
 
 * {
@@ -359,18 +365,18 @@ kbd {
 
 .hud-top-left {
   top: 58px;               /* sotto il bottone "‹ Menu" in alto a sinistra */
-  left: calc(env(safe-area-inset-left, 0px) + 18px);
+  left: calc(var(--margine-sicuro) + 18px);
 }
 
 .hud-top-right {
   top: 18px;
-  right: calc(env(safe-area-inset-right, 0px) + 18px);
+  right: calc(var(--margine-sicuro) + 18px);
   text-align: right;
 }
 
 .hud-bottom-left {
   bottom: 18px;
-  left: calc(env(safe-area-inset-left, 0px) + 18px);
+  left: calc(var(--margine-sicuro) + 18px);
   min-width: 210px;
 }
 
@@ -469,7 +475,7 @@ kbd {
 .cam-button {
   position: absolute;
   top: 30px;
-  right: calc(env(safe-area-inset-right, 0px) + 104px);
+  right: calc(var(--margine-sicuro) + 104px);
   pointer-events: auto;
   width: 38px;
   height: 38px;
@@ -603,12 +609,12 @@ kbd {
 /* Freccette laterali piccole, in basso a DESTRA (spinta ai canapi).
    Rispettano la safe-area (notch/bordo arrotondato in landscape). */
 .touch-lat-right {
-  right: calc(env(safe-area-inset-right, 0px) + 22px);
+  right: calc(var(--margine-sicuro) + 22px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
 }
 
 .touch-lat-left {
-  right: calc(env(safe-area-inset-right, 0px) + 84px);
+  right: calc(var(--margine-sicuro) + 84px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
 }
 
@@ -617,7 +623,7 @@ kbd {
 .touch-nerb {
   width: 116px;
   height: 46px;
-  right: calc(env(safe-area-inset-right, 0px) + 22px);
+  right: calc(var(--margine-sicuro) + 22px);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
   border-radius: 12px;
   font-size: 15px;
@@ -635,7 +641,7 @@ kbd {
 /* Tastini ANDATURA, in basso a SINISTRA (▲ accelera · ▼ rallenta). Lo sterzo NON
    è più qui: si guida inclinando il dispositivo. Rispettano la safe-area. */
 .touch-gait {
-  left: calc(env(safe-area-inset-left, 0px) + 26px);
+  left: calc(var(--margine-sicuro) + 26px);
   width: 66px;
   height: 58px;
   border-radius: 13px;
@@ -667,7 +673,7 @@ body:not(.touch-device) .touch-controls {
 /* ---- HUD della rincorsa (solo per il giocatore di rincorsa) ---- */
 .rincorsa-hud {
   position: fixed;
-  right: calc(env(safe-area-inset-right, 0px) + 20px);
+  right: calc(var(--margine-sicuro) + 20px);
   bottom: 120px;
   padding: 16px 24px;
   border-radius: 14px;
@@ -701,7 +707,7 @@ body:not(.touch-device) .touch-controls {
 .rincorsa-watcher {
   position: fixed;
   top: 58px;               /* sotto il bottone "‹ Menu" */
-  left: calc(env(safe-area-inset-left, 0px) + 18px);
+  left: calc(var(--margine-sicuro) + 18px);
   width: 240px;
   height: 150px;
   border-radius: 8px;
@@ -749,7 +755,7 @@ body:not(.touch-device) .touch-controls {
    classifica e minimappa coprivano la corsa e l'Andatura stava sulle frecce. */
 @media (max-width: 900px), (max-height: 520px) and (orientation: landscape) {
   .rincorsa-hud {
-    right: calc(env(safe-area-inset-right, 0px) + 14px);
+    right: calc(var(--margine-sicuro) + 14px);
     bottom: 178px;
   }
   /* Telefono: riquadro rincorsa in alto a DESTRA (a sinistra copriva il pannello
@@ -758,7 +764,7 @@ body:not(.touch-device) .touch-controls {
     left: auto;
     /* a 10px dal bordo copriva il box GIRO e il tasto C della telecamera:
        ora si ferma alla loro sinistra */
-    right: calc(env(safe-area-inset-right, 0px) + 150px);
+    right: calc(var(--margine-sicuro) + 150px);
     top: calc(env(safe-area-inset-top, 0px) + 8px);
     width: 150px;
     height: 92px;
@@ -776,7 +782,7 @@ body:not(.touch-device) .touch-controls {
      va piu' a ridosso del Menu. */
   .hud-bottom-left {
     bottom: 150px;
-    left: calc(env(safe-area-inset-left, 0px) + 12px);
+    left: calc(var(--margine-sicuro) + 12px);
     min-width: 0;
     transform: scale(0.78);
     transform-origin: bottom left;
@@ -788,7 +794,7 @@ body:not(.touch-device) .touch-controls {
      pannello Andatura (su uno schermo alto 375px non c'e' posto per tutti e due). */
   .hud-top-left {
     top: 8px;
-    left: calc(env(safe-area-inset-left, 0px) + 104px);
+    left: calc(var(--margine-sicuro) + 104px);
     padding: 5px 12px;
     display: flex;
     align-items: baseline;
@@ -804,7 +810,7 @@ body:not(.touch-device) .touch-controls {
 #menuHomeBtn {
   position: fixed;
   top: 12px;
-  left: calc(env(safe-area-inset-left, 0px) + 12px);
+  left: calc(var(--margine-sicuro) + 12px);
   z-index: 75;
   pointer-events: auto;
   padding: 7px 14px;
@@ -1126,7 +1132,8 @@ textarea {
   #sfGrid {
     grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
     gap: 10px !important;                 /* piu' aria fra una card e l'altra */
-    width: 99vw !important;
+    /* dentro il margine sicuro (99vw finiva sotto la fotocamera dell'iPhone) */
+    width: calc(100vw - 2 * var(--margine-sicuro) - 16px) !important;
     flex: 0 0 auto !important;
     padding-bottom: 14px !important;      /* l'ultima riga non tocca il bordo */
   }
@@ -1148,11 +1155,15 @@ textarea {
   .sf-price { float: none !important; flex: 0 0 auto !important; font-size: 10.5px !important; padding: 1px 5px !important; }
   .sf-stat { font-size: 10px !important; margin: 0 !important; gap: 3px !important; }
   .sf-stat span { flex: 0 0 48px !important; }
-  /* NIENTE PALLINI da telefono: al loro posto il valore scritto, "3/5".
-     Cinque pallini per cinque statistiche per quattordici fantini, su uno
-     schermo da telefono, non si contano — un numero si legge e basta. */
-  .sf-pips { display: none !important; }
-  .sf-num { display: inline !important; font-size: 10.5px !important; }
+  /* STATISTICHE DA TELEFONO: i bollini gialli come su PC (il "3/5" scritto non
+     si legge a colpo d'occhio), ma piccoli e dentro la carta: ogni riga e'
+     etichetta su UNA riga sola ("Terzo giro" compreso) + cinque bollini che si
+     stringono da soli se la carta e' stretta. */
+  .sf-num { display: none !important; }
+  .sf-stat { font-size: 9.5px !important; gap: 4px !important; margin: 1px 0 !important; white-space: nowrap !important; }
+  .sf-stat span { flex: 0 0 46px !important; white-space: nowrap !important; overflow: hidden !important; opacity: .8 !important; }
+  .sf-pips { display: flex !important; gap: 2px !important; flex: 1 1 auto !important; min-width: 0 !important; }
+  .sf-pip { flex: 1 1 0 !important; max-width: 11px !important; min-width: 4px !important; height: 6px !important; border-radius: 2px !important; }
 
   /* Il box dei denari si accosta di piu' al bordo destro (16px → 6px):
      dentro lo schermo sembrava fuori posto. Dalla fotocamera lo tiene
@@ -1160,15 +1171,17 @@ textarea {
   :root { --money-gap: 6px; }
 
   /* Anche la scelta della contrada e le accoppiate stanno dentro l'area sicura. */
-  #screenSelect .panel,
-  #sfOverlay.accoppiate .sf-acc {
-    margin-left: env(safe-area-inset-left, 0px) !important;
-    margin-right: env(safe-area-inset-right, 0px) !important;
+  #screenSelect .panel {
+    margin-left: var(--margine-sicuro) !important;
+    margin-right: var(--margine-sicuro) !important;
   }
+  #sfOverlay.accoppiate .sf-acc { margin-left: auto !important; margin-right: auto !important; }
+  /* Titoli e sottotitoli delle schermate fantini/accoppiate: lontani dai bordi. */
+  #sfOverlay { padding-left: calc(var(--margine-sicuro) + 8px) !important; padding-right: calc(var(--margine-sicuro) + 8px) !important; }
 
   /* ── LE ACCOPPIATE: cinque a sinistra e cinque a destra, tutte a schermo. */
   #sfOverlay.accoppiate .sf-acc {
-    width: 99vw !important;
+    width: calc(100vw - 2 * var(--margine-sicuro) - 16px) !important;
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     grid-template-rows: repeat(5, auto) !important;
@@ -1320,7 +1333,7 @@ body.con-controller .controls-pad {
   #screenMenu .btn-primary { padding: 10px 34px; font-size: 15px; }
   /* Il tasto "‹ Menu" sta fisso in alto a sinistra: i riquadri della campagna
      (accordi, tratta...) si spostano a destra quanto basta per non finirci sotto. */
-  body #campaignOverlay { padding-left: calc(env(safe-area-inset-left, 0px) + 96px) !important; }
+  body #campaignOverlay { padding-left: calc(var(--margine-sicuro) + 96px) !important; padding-right: calc(var(--margine-sicuro) + 8px) !important; }
   /* Denari in alto a destra: su telefono solo moneta e cifra (prima "1523 denari ·
      Onda", 170px, finiva sopra i sottotitoli delle schermate). */
   #cmpMoney > span:nth-child(2) { font-size: 0 !important; }
@@ -1344,7 +1357,7 @@ body.con-controller .controls-pad {
      sopra l'altro, nella striscia libera in fondo. */
   .home-support {
     right: auto;
-    left: max(10px, env(safe-area-inset-left));
+    left: max(10px, var(--margine-sicuro));
     bottom: max(8px, env(safe-area-inset-bottom));
     transform: none;
     flex-direction: column;
@@ -1363,7 +1376,7 @@ body.con-controller .controls-pad {
   /* La rotella lascia l'angolo ai due bottoni e passa a destra. */
   .home-settings {
     left: auto;
-    right: max(10px, env(safe-area-inset-right));
+    right: max(10px, var(--margine-sicuro));
     bottom: max(8px, env(safe-area-inset-bottom));
   }
   /* La firma resta la riga piu' in basso al centro, ben staccata dal tufo. */
