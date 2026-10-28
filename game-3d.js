@@ -4508,7 +4508,7 @@ function recordPalioRun() {
       setAccount(acc);
       let pend = (parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0) + 1;
       localStorage.setItem("palio.acctPending", String(pend));
-      if (pend >= 5) {
+      if (pend >= 10) {   // 10 palii = 1 chiamata; il conteggio locale sale subito
         const n = pend;
         localStorage.setItem("palio.acctPending", "0");
         fetch(ACCOUNT_API, {
@@ -15325,7 +15325,7 @@ function segnaController() {
 const TELE_VER = "2026-10-25";
 const TELE_CODA = "palio.teleCoda";
 const TELE_APERTA = "palio.teleAperta";   // palio in corso quando la pagina e' finita in background
-const TELE_GRUPPO = 3;
+const TELE_GRUPPO = 5;   // 5 palii = 1 chiamata (la pagina che si chiude manda comunque il resto)
 const TELE_CODA_MAX = 40;
 function teleAttiva() {
   try { if (localStorage.getItem("palio.teleProva") === "1") return true; } catch (e) { /* niente */ }
@@ -15776,11 +15776,14 @@ function applyAcceptedHorses(map, storica) {
 // stanno uguali finché l'admin non tocca qualcosa, ma prima venivano riletti dal
 // server a OGNI caricamento pagina (~8-10 comandi a load). Ora si leggono al più
 // una volta ogni ACCEPTED_TTL_MS; per il resto si applicano dalla cache locale.
-const ACCEPTED_TTL_MS = 10 * 60 * 1000;   // 10 minuti
+const ACCEPTED_TTL_MS = 60 * 60 * 1000;   // 1 ora: cambiano solo quando l'admin accetta qualcosa
 function bustAcceptedCache() {   // l'admin ha cambiato qualcosa → forza riletture fresche
   ["palio.cache.horses", "palio.cache.jockeys", "palio.cache.overrides"].forEach((k) => {
     try { localStorage.removeItem(k); } catch (e) { /* niente */ }
   });
+  // ...anche dalla cache di Vercel, ma solo su QUESTO dispositivo (l'admin vede
+  // subito la modifica; per gli altri arriva entro 10 minuti).
+  try { sessionStorage.setItem("palio.saltaCache", "1"); } catch (e) { /* niente */ }
 }
 function cachedAccepted(key, action, extra, applyFn, pick, always, cb) {
   const done = () => { if (always) always(); if (cb) cb(); };
@@ -15791,8 +15794,13 @@ function cachedAccepted(key, action, extra, applyFn, pick, always, cb) {
       if (c && (Date.now() - (c.t || 0)) < ACCEPTED_TTL_MS) { if (c.d) applyFn(c.d); done(); return; }
     }
   } catch (e) { /* cache illeggibile: si rilegge dal server */ }
-  fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ action }, extra || {})) })
+  // GET e non POST: la risposta e' uguale per tutti, quindi la tiene la cache di
+  // Vercel e quasi nessuna visita avvia la funzione (la CPU delle funzioni e'
+  // la risorsa che a ottobre 2026 ha sforato la quota gratuita).
+  let url = ACCOUNT_API + "?leggi=" + encodeURIComponent(action);
+  if (extra && extra.kind) url += "&kind=" + encodeURIComponent(extra.kind);
+  try { if (sessionStorage.getItem("palio.saltaCache") === "1") url += "&nc=" + Date.now(); } catch (e) { /* niente */ }
+  fetch(url)
     .then((r) => r.json())
     .then((d) => {
       if (d && d.ok) {

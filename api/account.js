@@ -147,11 +147,30 @@ module.exports = async (req, res) => {
     return;
   }
 
-  // Niente piu' GET ?admin=<KEY>: la chiave nell'indirizzo finiva nei log di
-  // Vercel e nella cronologia del browser. L'elenco si chiede in POST (adminList).
+  // GET = solo le LETTURE PUBBLICHE, uguali per tutti (cavalli e fantini accettati,
+  // correzioni delle statistiche): le tiene la cache di Vercel per 10 minuti, cosi'
+  // quasi nessuna visita avvia la funzione. Niente piu' GET ?admin=<KEY>: la chiave
+  // nell'indirizzo finiva nei log e nella cronologia; l'admin passa in POST.
   if (req.method === "GET") {
-    res.status(405).json({ error: "method" });
-    return;
+    const q = req.query || {};
+    const leggi = String(q.leggi || "");
+    const LETTURE = { acceptedHorses: 1, accepted: 1, statOverrides: 1 };
+    if (!LETTURE[leggi]) { res.status(405).json({ error: "method" }); return; }
+    const corpo = { action: leggi, kind: q.kind ? String(q.kind) : undefined };
+    // Si mette in cache solo una risposta riuscita.
+    const json = res.json.bind(res);
+    res.json = (j) => {
+      if (j && j.ok) res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
+      return json(j);
+    };
+    try {
+      if (leggi === "statOverrides") return await statOverrides(res);
+      if (leggi === "acceptedHorses") { corpo.kind = "horse"; return await acceptedItems(corpo, res); }
+      return await acceptedItems(corpo, res);
+    } catch (e) {
+      res.status(500).json({ error: "server" });
+      return;
+    }
   }
   if (req.method !== "POST") {
     res.status(405).json({ error: "method" });

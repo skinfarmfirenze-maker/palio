@@ -133,10 +133,10 @@ module.exports = async (req, res) => {
     const albo = {};
     CATS.forEach((cat, i) => { albo[cat] = hashToObj(out[i] && out[i].result); });
     albo.totalePalii = Number(out[CATS.length] && out[CATS.length].result) || 0;
-    // La lettura e' uguale per tutti: la tiene la cache di Vercel per 60 secondi
-    // (e la riusa fino a 10 minuti mentre la rinfresca). Cosi' la maggior parte
-    // delle visite non avvia nessuna funzione.
-    res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=600");
+    // La lettura e' uguale per tutti: la tiene la cache di Vercel per 5 minuti
+    // (e la riusa fino a 30 mentre la rinfresca). Cosi' quasi nessuna visita
+    // avvia la funzione.
+    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=1800");
     res.status(200).json(albo);
   } catch (e) {
     // In caso di errore store: rispondi vuoto senza rompere il gioco.
