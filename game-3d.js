@@ -5483,6 +5483,7 @@ function setEstrazioneLine(text, color) {
 function estrazioneSkip() {
   const E = state.estrazione, T = E && E.timeline;
   if (!T) return;
+  if (T.drawnIdx < E.drawn.length) return;   // finché non si sa chi corre, non si salta
   while (T.drawnIdx < E.drawn.length) {
     exposeFlag(E.drawn[T.drawnIdx], 1, E.diritto.length + T.drawnIdx, true);
     T.drawnIdx += 1;
@@ -5573,6 +5574,12 @@ function ensureEstrazioneCrowd() {
 function updateEstrazione(dt, time) {
   const E = state.estrazione, T = E && E.timeline;
   if (!T) return;
+  // "Salta" compare solo quando sono uscite TUTTE le Contrade che corrono il
+  // Palio: il sorteggio di chi corre si guarda sempre fino in fondo.
+  if (!T.done) {
+    const sk = document.getElementById("estrSkipBtn");
+    if (sk) sk.style.display = T.drawnIdx < E.drawn.length ? "none" : "";
+  }
   T.shake = Math.max(0, T.shake - dt * 1.6);
 
   // Srotolamento progressivo delle bandiere appena esposte.
@@ -5690,7 +5697,7 @@ function buildEstrazioneHud() {
     tipo.label + (tipo.data ? " — " + tipo.data : "") +
     ' · Palazzo Comunale' + ctx + '</p></div>' +
     '<div class="es-bottom"><div id="estrLine"></div><div class="es-btns">' +
-    '<button type="button" id="estrSkipBtn">Salta l’estrazione</button>' +
+    '<button type="button" id="estrSkipBtn" style="display:none">Salta l’estrazione</button>' +
     '<button type="button" id="estrGoBtn" class="go" style="display:none">Vai alla Tratta →</button>' +
     '</div></div>';
   document.body.appendChild(hud);
@@ -8468,9 +8475,12 @@ function buildTrattaPresentation(pairings) {
   avanti.type = "button"; avanti.className = "cmp-btn";
   avanti.style.cssText = "margin:0;font-size:clamp(14px,2.4vh,17px);padding:10px 26px";
   avanti.textContent = "Vai all'assegnazione →";
+  avanti.id = "trattaPresAvanti";
+  avanti.style.visibility = "hidden";   // compare dopo TRATTA_NO_SALTA secondi (updateTratta)
   avanti.addEventListener("click", () => {
     const T = state.tratta && state.tratta.timeline;
-    if (T && T.phase === "presenta") T.timer = 0;     // il giro successivo passa alla chiamata
+    if (!T || (T.trascorso || 0) < TRATTA_NO_SALTA) return;
+    if (T.phase === "presenta") T.timer = 0;     // il giro successivo passa alla chiamata
     el.remove();
   });
   el.appendChild(avanti);
@@ -8623,9 +8633,11 @@ function trattaAllRevealed() {
   if (go) go.style.display = "";
 }
 
+const TRATTA_NO_SALTA = 4;   // secondi iniziali della Tratta in cui non si salta
 function trattaSkip() {
   const T = state.tratta.timeline;
   if (!T) return;
+  if ((T.trascorso || 0) < TRATTA_NO_SALTA) return;
   const pres = document.getElementById("trattaPresenta"); if (pres) pres.remove();
   // Cartelli in corso via (compreso l'eventuale parziale), pannello completato.
   T.labels.forEach(disposeTrattaLabel);
@@ -9281,6 +9293,14 @@ function endSceltaFantino() {
 function updateTratta(dt, time) {
   const T = state.tratta && state.tratta.timeline;
   if (!T) return;
+  // I primi 4 secondi non si salta niente: ne' la presentazione dei cavalli ne'
+  // il sorteggio. Poi compaiono i due tasti.
+  T.trascorso = (T.trascorso || 0) + dt;
+  if (T.phase !== "done" && T.trascorso >= TRATTA_NO_SALTA && !T.saltaVisibile) {
+    T.saltaVisibile = true;
+    const sk = document.getElementById("trattaSkipBtn"); if (sk) sk.style.display = "";
+    const av = document.getElementById("trattaPresAvanti"); if (av) av.style.visibility = "";
+  }
   // Estrazione in DUE TEMPI: wait → CAVALLO (nome+fascia) → pausa → CONTRADA.
   if (T.phase !== "done") {
     T.timer -= dt;
@@ -9420,7 +9440,7 @@ function buildTrattaHud() {
     '<div class="tt-title"><h2>La Tratta</h2><p>Il sorteggio dei cavalli alle Contrade — cortile del Palazzo Pubblico</p></div>' +
     '<div id="trattaPanel"><div class="tp-head">Accoppiate</div></div>' +
     '<div class="tt-bottom"><div id="trattaLine"></div><div class="tt-btns">' +
-    '<button type="button" id="trattaSkipBtn">Salta il sorteggio</button>' +
+    '<button type="button" id="trattaSkipBtn" style="display:none">Salta il sorteggio</button>' +
     '<button type="button" id="trattaGoBtn" class="go" style="display:none">Vai avanti →</button>' +
     '</div></div>';
   document.body.appendChild(hud);
