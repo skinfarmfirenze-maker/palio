@@ -17148,7 +17148,7 @@ function maybeOpenAdmin() {
   // ── DATI DELLE CORSE ──────────────────────────────────────────────────────
   // Il server restituisce i CONTI gia' fatti sugli ultimi N giorni: qui solo
   // impaginazione. Ogni riquadro risponde a una domanda su cosa migliorare.
-  const loadTele = (giorni) => {
+  const loadTele = (giorni, fresco) => {
     state.teleGiorniAdmin = giorni;
     const box = $("adminTele");
     if (!box) return;
@@ -17157,9 +17157,18 @@ function maybeOpenAdmin() {
     });
     box.style.opacity = ".7"; box.textContent = "Caricamento…";
     fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "teleStats", adminKey, giorni }) })
+      body: JSON.stringify({ action: "teleStats", adminKey, giorni, fresco: !!fresco }) })
       .then((r) => r.json())
-      .then((j) => { if (!j || !j.ok) { box.textContent = "Errore nel caricamento dei dati."; return; } box.style.opacity = "1"; box.innerHTML = renderTele(j); })
+      .then((j) => {
+        if (!j || !j.ok) { box.textContent = "Errore nel caricamento dei dati."; return; }
+        box.style.opacity = "1";
+        // I conti si tengono 30 minuti sul server (meno CPU). "Ricalcola" li rifa' subito.
+        const ora = j.calcolato ? new Date(j.calcolato).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" }) : "";
+        box.innerHTML = '<div style="opacity:.75;font-size:12px;margin:2px 2px 8px">Dati da 1 dispositivo su 3 (campione)'
+          + (ora ? ' · conti delle ' + ora : '') + ' · <a href="#" id="teleRicalcola" style="color:#f0cb35">Ricalcola</a></div>' + renderTele(j);
+        const rc = document.getElementById("teleRicalcola");
+        if (rc) rc.addEventListener("click", (e) => { e.preventDefault(); loadTele(giorni, true); });
+      })
       .catch(() => { box.textContent = "Errore nel caricamento dei dati."; });
   };
   const nomeContrada = (id) => ((CONTRADE.find((c) => c.id === id) || {}).name || id || "—");
