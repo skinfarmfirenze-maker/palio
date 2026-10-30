@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Linea di corsa</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 24px 16px; background: #1d1710; color: #f3e7cf; font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; display: grid; gap: 14px; }
+  h1 { font-size: 22px; margin: 0; color: #f0c84a; }
+  p { margin: 0; }
+  .tasti { display: flex; gap: 10px; flex-wrap: wrap; }
+  button { font: inherit; font-weight: 600; padding: 12px 20px; border-radius: 10px; border: 0; background: #f0c84a; color: #1d1710; cursor: pointer; }
+  button.secondo { background: transparent; color: #f0c84a; border: 1px solid #f0c84a; }
+  #esito { min-height: 1.5em; color: #9fd28a; }
+  textarea { width: 100%; box-sizing: border-box; height: 160px; background: #120e09; color: #cdbf9f; border: 1px solid #4a3c28; border-radius: 8px; font: 12px/1.4 ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Linea di corsa di questo dispositivo</h1>
+  <p id="riassunto"></p>
+  <div class="tasti">
+    <button id="scarica">Scarica il file</button>
+    <button id="copia" class="secondo">Copia il testo</button>
+  </div>
+  <p id="esito"></p>
+  <textarea id="testo" readonly></textarea>
+</main>
+<script>
+  // Esporta SOLO le traiettorie che le Contrade imparano (niente account, niente dati personali).
+  const CHIAVI = ["palioIdealLine_v3", "palioIdealAndatura_v2", "palioIdealSpeed_v2", "palio.tracce.v1", "palio.traccia.maestra.v1"];
+  const dati = {};
+  CHIAVI.forEach((k) => {
+    try { const v = localStorage.getItem(k); dati[k] = v == null ? null : JSON.parse(v); } catch (e) { dati[k] = null; }
+  });
+  const linea = Array.isArray(dati.palioIdealLine_v3) ? dati.palioIdealLine_v3.filter((v) => v != null).length : 0;
+  const tracce = Array.isArray(dati["palio.tracce.v1"]) ? dati["palio.tracce.v1"].length : 0;
+  const maestra = dati["palio.traccia.maestra.v1"] ? "sì" : "no";
+  document.getElementById("riassunto").textContent =
+    `Linea registrata: ${linea} tratti su 120 · Corse salvate: ${tracce} · Giro vincente: ${maestra}`;
+  const testo = JSON.stringify(dati);
+  document.getElementById("testo").value = testo;
+  const esito = document.getElementById("esito");
+  document.getElementById("scarica").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([testo], { type: "application/json" }));
+    a.download = "palio-linea.json";
+    a.click();
+    esito.textContent = "Scaricato: palio-linea.json (nella cartella Download).";
+  };
+  document.getElementById("copia").onclick = async () => {
+    try { await navigator.clipboard.writeText(testo); esito.textContent = "Copiato."; }
+    catch (e) { document.getElementById("testo").select(); esito.textContent = "Seleziona il testo qui sotto e copialo a mano."; }
+  };
+</script>
+</body>
+</html>
