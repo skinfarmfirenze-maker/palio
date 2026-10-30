@@ -5919,8 +5919,8 @@ function resumeCampaign() {
   });
 }
 
-// ── FREEZE PALIATA VELOCE: max 1 ogni 10 minuti per giocatore (Mario Rossi: illimitato).
-const PALIATA_COOLDOWN_MS = 10 * 60 * 1000;
+// ── FREEZE PALIATA VELOCE: max 1 ogni 20 minuti per giocatore (Mario Rossi: illimitato).
+const PALIATA_COOLDOWN_MS = 20 * 60 * 1000;
 // Lo sviluppatore: account "Mario Rossi" SU UN DISPOSITIVO dove e' stato fatto
 // almeno una volta l'accesso al portale admin con la password vera. Prima bastava
 // il nome, e "Mario Rossi" e' fra i nomi piu' comuni d'Italia: chiunque si
@@ -5994,7 +5994,7 @@ function openModeChooser() {
         const wait = paliataVeloceAttesaMs();
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
-          toastMsg(`Puoi correre una Paliata veloce ogni 10 minuti. Riprova fra ${min} min.`);
+          toastMsg(`Puoi correre una Paliata veloce ogni 20 minuti. Riprova fra ${min} min.`);
           teleEvento("attesa", "veloce");
           return;
         }

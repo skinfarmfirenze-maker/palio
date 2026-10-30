@@ -12,7 +12,7 @@
 
 export const EN = {
   // ── Home e menu ───────────────────────────────────────────────────────────
-  "Videogioco ufficiale sul Palio di Siena": "Official Palio di Siena video game",
+  "Videogioco sul Palio di Siena": "A video game about the Palio di Siena",
   "Approvato dal Consorzio per la Tutela del Palio di Siena": "Approved by the Consorzio per la Tutela del Palio di Siena",
   "È gratuito, per tutti": "It's free, for everyone",
   "Gioca": "Play",
