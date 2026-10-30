@@ -2826,8 +2826,8 @@ const __palioAudio = {};
 // PRECARICAMENTO: tutti i file audio decodificati IN ANTICIPO, così a mossa e
 // all'arrivo non c'è la pausa di decodifica del primo play (= l'audio che "salta").
 const PALIO_SOUND_FILES = [
-  "MARCIADELPALIOCONTAMBURI.mp3", "NITRITO1.mp3", "NITRITO3.mp3", "NITRITO4.mp3",
-  "PASSOAVITTORIA.mp3", "SUNTO-NOTIFICASMS.mp3", "appalusi.m4a", "busta.m4a",
+  "MARCIADELPALIOCONTAMBURI.m4a", "NITRITO1.mp3", "NITRITO3.mp3", "NITRITO4.mp3",
+  "PASSOAVITTORIA.m4a", "SUNTO-NOTIFICASMS.mp3", "appalusi.m4a", "busta.m4a",
   "corsa.m4a", "finale.m4a", "fine.m4a", "galoppo.m4a", "ingresso.m4a", "intro.m4a",
   "start.m4a", "tamburi.m4a",
   "aquila.m4a", "bruco.m4a", "chiocciola.m4a", "civetta.m4a", "drago.m4a", "giraffa.m4a",
@@ -2844,7 +2844,7 @@ const PALIO_SOUND_CORE = [
   "intro.m4a", "busta.m4a", "finale.m4a", "appalusi.m4a",
 ];
 // tamburi.m4a NON si suona piu' da nessuna parte (la marcia della preparazione e'
-// MARCIADELPALIOCONTAMBURI.mp3): stava qui e si scaricava 140 KB a ogni visita per
+// MARCIADELPALIOCONTAMBURI.m4a): stava qui e si scaricava 140 KB a ogni visita per
 // niente. appalusi.m4a invece e' l'esultanza dei bomboloni alla Tratta: 57 KB,
 // precaricati perche' l'applauso deve partire nell'istante della chiamata.
 let __soundsPreloaded = false;
@@ -5511,7 +5511,7 @@ function beginEstrazione(tipoId, precomputed) {
   playTrombetti("chiarine");   // le chiarine aprono il rito
   // Marcia del Palio coi tamburi (primi 12 secondi) ad accompagnare il rito.
   stopPalioSounds();
-  playPalioSound("MARCIADELPALIOCONTAMBURI.mp3", { volume: 0.5, stopAfter: 12 });
+  playPalioSound("MARCIADELPALIOCONTAMBURI.m4a", { volume: 0.5, stopAfter: 12 });
   setEstrazioneLine(state.estrazione.diritto.length
     ? "Di diritto (esposte dal mattino): " + state.estrazione.diritto.map((c) => c.name).join(", ")
     : "Palio straordinario: tutte e dieci le Contrade si sorteggiano", "#f0cb35");
@@ -8971,7 +8971,7 @@ function beginSceltaFantino() {
   // Marcia del Palio (coi tamburi) in SOTTOFONDO per tutta la preparazione: da qui
   // — scelta/ingaggio del fantino → accordi → corruzione — in loop, finché non
   // suona il Sunto alla mossa (startMossa fa stopPalioSounds e la interrompe).
-  try { playPalioSound("MARCIADELPALIOCONTAMBURI.mp3", { volume: 0.42, loop: true }); } catch (e) { /* niente */ }
+  try { playPalioSound("MARCIADELPALIOCONTAMBURI.m4a", { volume: 0.42, loop: true }); } catch (e) { /* niente */ }
   // Countdown 45s: puoi scegliere e CAMBIARE il fantino finché non scade (o finché
   // non premi Conferma). Allo scadere si chiude con la scelta corrente (vedi
   // finalizeScelta, che assegna d'ufficio se non hai scelto).
@@ -14387,7 +14387,7 @@ function presentVictory() {
     try { playPalioSound("finale.m4a", { volume: 0.6 }); } catch (e) { /* niente */ }
   }, FINE_PRIMA_DEL_FINALE * 1000);
   // Passo alla Vittoria sotto; sfuma dopo 45s per non restare acceso sui risultati.
-  try { playPalioSound("PASSOAVITTORIA.mp3", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
+  try { playPalioSound("PASSOAVITTORIA.m4a", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
   setTimeout(() => { try { fadeCrowdBed(2.2); } catch (e) {} }, 2600);   // il brusio della corsa sfuma sotto
   setTimeout(() => { try { fadeGaloppo(2.2); } catch (e) {} }, 2600);    // …e lo zoccolio con lui
   showScreen("results");
@@ -14629,7 +14629,7 @@ function startWinnerReplay() {
   // l'arrivo) e sopra restava il Passo alla Vittoria, che e' la musica della
   // premiazione: per settanta secondi di corsa si sentiva la musica sbagliata,
   // e negli ultimi venticinque il silenzio, perche' dura quarantacinque.
-  try { fadePalioSound("PASSOAVITTORIA.mp3", 0.6); } catch (e) { /* niente */ }
+  try { fadePalioSound("PASSOAVITTORIA.m4a", 0.6); } catch (e) { /* niente */ }
   try { startCrowdBed(0.3); } catch (e) { /* niente */ }
   try { startGaloppo(0.34); } catch (e) { /* niente */ }
   // MUSICA SOTTO IL REPLAY: parte insieme al brusio, a volume basso perche' il
@@ -14766,7 +14766,7 @@ function endWinnerReplay() {
   try { fadeCrowdBed(1.2); } catch (e) { /* niente */ }
   try { fadeGaloppo(1.2); } catch (e) { /* niente */ }
   if (REPLAY_MUSICA) { try { fadePalioSound(REPLAY_MUSICA, 1.2); } catch (e) { /* niente */ } }
-  try { playPalioSound("PASSOAVITTORIA.mp3", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
+  try { playPalioSound("PASSOAVITTORIA.m4a", { volume: 0.85, stopAfter: 45 }); } catch (e) { /* niente */ }
   // Torna la vista che avevi in corsa: il replay non te la cambia.
   if (state.cameraModePrimaDelReplay) {
     state.cameraMode = state.cameraModePrimaDelReplay;

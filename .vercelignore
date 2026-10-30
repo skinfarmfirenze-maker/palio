@@ -52,3 +52,6 @@ cavallo-flessione.html
 
 # Configurazione locale degli strumenti di sviluppo: non serve online.
 .claude/
+
+# Stemmi: online solo i .webp (5x piu leggeri); i PNG restano come sorgenti.
+assets/stemmi/*.png

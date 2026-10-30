@@ -683,7 +683,7 @@ function disegnaStemmaIncollato(g, cx, cy, rxPx, ryPx, contrada, aniso, alCarico
     ovale(0.975, 0.975); g.stroke();
     if (alCarico) alCarico();
   };
-  img.src = "assets/stemmi/" + contrada.id + ".png";
+  img.src = "assets/stemmi/" + contrada.id + ".webp";
 }
 
 // ══ 2b. STEMMA sul dorso ══════════════════════════════════════════════════════
@@ -734,7 +734,7 @@ export function texturaStemma(contrada, disegnaEmblema) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
 
-  // EMBLEMA VERO della Contrada: PNG ritagliato dalla bandiera (assets/stemmi/),
+  // EMBLEMA VERO della Contrada: WebP ritagliato dalla bandiera (assets/stemmi/; i PNG sono le sorgenti, non pubblicate),
   // disegnato dentro il campo appena l'immagine arriva. Se il file manca, resta
   // l'ovale araldico semplice: nessun errore, solo meno dettaglio.
   const img = new Image();
@@ -753,7 +753,7 @@ export function texturaStemma(contrada, disegnaEmblema) {
     tex.needsUpdate = true;
     if (typeof texturaStemma.onEmblema === "function") texturaStemma.onEmblema(contrada.id);
   };
-  img.src = "assets/stemmi/" + contrada.id + ".png";
+  img.src = "assets/stemmi/" + contrada.id + ".webp";
   return tex;
 }
 
