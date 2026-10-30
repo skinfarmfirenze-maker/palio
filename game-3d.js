@@ -510,11 +510,18 @@ const renderer = new THREE.WebGLRenderer({ antialias: !_touchBoot, powerPreferen
 // volta, finche' non torna fluido: prima meno pixel da disegnare (su uno schermo
 // piccolo quasi non si vede), poi via le ombre. Il livello si ricorda sul
 // dispositivo, cosi' il palio dopo parte gia' leggero. Chi va bene non cambia.
-const QUALITA_KEY = "palio.qualita";
+// v2: azzerato. Sui TELEFONI la v1 scendeva fino a 0.6 (sotto 1 pixel per punto)
+// appena il fotogramma calava sotto i 40, e molti iPhone vanno a 30 fissi
+// (risparmio energetico): restavano tutti sfocati per sempre. Ora sul telefono
+// si scende al massimo di un gradino, e solo se va davvero a scatti.
+const QUALITA_KEY = "palio.qualita.v2";
 const PIXEL_BASE = Math.min(window.devicePixelRatio || 1, _touchBoot ? 1.25 : 1.5);
 const QUALITA_SCALA = [1, 0.85, 0.72, 0.6];          // frazione della risoluzione di partenza
+const QUALITA_MAX = _touchBoot ? 1 : QUALITA_SCALA.length - 1;   // telefono: al massimo 0.85
+const QUALITA_FPS_MIN = _touchBoot ? 24 : 40;                     // sotto questi fotogrammi si scende
 let qualitaLivello = (() => {
-  try { const n = parseInt(localStorage.getItem(QUALITA_KEY) || "0", 10); return n >= 0 && n < QUALITA_SCALA.length ? n : 0; }
+  try { localStorage.removeItem("palio.qualita"); } catch (e) { /* niente */ }
+  try { const n = parseInt(localStorage.getItem(QUALITA_KEY) || "0", 10); return n >= 0 && n <= QUALITA_MAX ? n : 0; }
   catch (e) { return 0; }
 })();
 let soleOmbre = null;                                 // la luce che proietta le ombre (vedi la scena)
@@ -15154,7 +15161,7 @@ function fovPerSchermo(fovVerticale) {
 }
 
 function applicaQualita(livello) {
-  qualitaLivello = Math.max(0, Math.min(QUALITA_SCALA.length - 1, livello));
+  qualitaLivello = Math.max(0, Math.min(QUALITA_MAX, livello));
   renderer.setPixelRatio(Math.max(0.5, PIXEL_BASE * QUALITA_SCALA[qualitaLivello]));
   if (soleOmbre) soleOmbre.castShadow = qualitaLivello < 2;
   try { localStorage.setItem(QUALITA_KEY, String(qualitaLivello)); } catch (e) { /* niente */ }
@@ -15178,7 +15185,7 @@ function qualitaFotogramma() {
   if (Q.ms < 3000) return;
   const fps = (Q.n * 1000) / Q.ms;
   Q.ms = 0; Q.n = 0;
-  if (fps < 40 && qualitaLivello < QUALITA_SCALA.length - 1) {
+  if (fps < QUALITA_FPS_MIN && qualitaLivello < QUALITA_MAX) {
     if (Q.sopraMs < 0) Q.bloccaSalita = true;         // era appena risalito: resta giu'
     applicaQualita(qualitaLivello + 1);
     Q.sopraMs = 0; Q.attesaMs = 2000;
