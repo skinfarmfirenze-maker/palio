@@ -148,7 +148,7 @@ module.exports = async (req, res) => {
   }
 
   // GET = solo le LETTURE PUBBLICHE, uguali per tutti (cavalli e fantini accettati,
-  // correzioni delle statistiche): le tiene la cache di Vercel per 10 minuti, cosi'
+  // correzioni delle statistiche): le tiene la cache di Vercel per 1 ora, cosi'
   // quasi nessuna visita avvia la funzione. Niente piu' GET ?admin=<KEY>: la chiave
   // nell'indirizzo finiva nei log e nella cronologia; l'admin passa in POST.
   if (req.method === "GET") {
@@ -160,7 +160,7 @@ module.exports = async (req, res) => {
     // Si mette in cache solo una risposta riuscita.
     const json = res.json.bind(res);
     res.json = (j) => {
-      if (j && j.ok) res.setHeader("Cache-Control", "public, s-maxage=600, stale-while-revalidate=3600");
+      if (j && j.ok) res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=21600");
       return json(j);
     };
     try {
@@ -753,7 +753,7 @@ const TELE_CAMPI = {
   caduti: ["n", 0, 10], minSella: ["n", 0, 10], vince: ["s", 14], vinceFascia: ["s", 10], vinceFantino: ["s", 24], vinceCavallo: ["s", 40],
   nerbate: ["n", 0, 999], fps: ["n", 0, 240], fpsMin: ["n", 0, 240], lenti: ["n", 0, 100],
   camere: ["o", 8], posStoria: ["a", 80], spot: ["n", 0, 99], denari: ["n", -99999, 999999], nPalio: ["n", 0, 99999],
-  qual: ["n", 0, 3],
+  qual: ["n", 0, 3], lite: ["n", 0, 1],
 };
 function pulisciRiga(r) {
   if (!r || typeof r !== "object") return null;
@@ -778,10 +778,11 @@ function pulisciRiga(r) {
 async function teleSalva(body, res) {
   const corse = Array.isArray(body.corse) ? body.corse.slice(0, 20) : [];
   const adesso = Date.now();
-  const righe = corse.map(pulisciRiga).filter(Boolean)
+  // Le righe "lite" (i dispositivi fuori dal campione, 2 su 3) servono SOLO
+  // all'Albo qui sotto: non entrano nella lista delle statistiche.
+  const righe = corse.map(pulisciRiga).filter((r) => r && !r.lite)
     .map((r) => JSON.stringify(Object.assign(r, { ts: adesso })))
     .filter((t) => t.length <= 1200);
-  if (!righe.length) { res.status(200).json({ ok: true, n: 0 }); return; }
   const k = teleKey(giornoRoma(new Date(adesso)));
   // ALBO GLOBALE: viaggia con le righe (prima erano due chiamate a /api/albo per
   // ogni palio). +1 ai palii per ogni corsa partita, +1 a contrada/cavallo/fantino
@@ -796,12 +797,40 @@ async function teleSalva(body, res) {
     if (r.vinceCavallo && nomeValido(r.vinceCavallo)) albo.push(["HINCRBY", "palio:albo:cavallo", r.vinceCavallo, 1]);
     if (r.vinceFantino && nomeValido(r.vinceFantino)) albo.push(["HINCRBY", "palio:albo:fantino", r.vinceFantino, 1]);
   });
-  const [{ result: len }] = await redisPipeline([["LPUSH", k, ...righe], ...albo]);
+  // ACCOUNT: palii corsi e vittorie viaggiano nello stesso pacchetto (prima
+  // erano due chiamate a parte, "palio" ogni 10 palii e "win" a ogni vittoria).
+  const acc = body.account && typeof body.account === "object" ? body.account : null;
+  const email = acc ? normEmail(acc.email) : "";
+  let accCmds = [];
+  if (email) {
+    let n = parseInt(acc.palii, 10); if (!(n >= 0)) n = 0; if (n > 100) n = 100;
+    const vinte = (Array.isArray(acc.vinti) ? acc.vinti : []).slice(0, 50)
+      .map((c) => String(c || "").trim().toLowerCase());
+    const [{ result: exists }] = await redisPipeline([["SISMEMBER", ACCOUNTS_SET, email]]);
+    if (Number(exists) === 1) {
+      const ok = oraKey(new Date(adesso));
+      accCmds.push(["HINCRBY", acctKey(email), "palii", n], ["HINCRBY", acctKey(email), "vinti", vinte.length]);
+      if (n) accCmds.push(["INCRBY", ok, n], ["EXPIRE", ok, ORA_TTL]);
+      vinte.forEach((c) => { if (CONTRADE_IDS.has(c)) accCmds.push(["HINCRBY", winsKey(email), c, 1]); });
+    }
+  }
+  const cmds = [...(righe.length ? [["LPUSH", k, ...righe]] : []), ...albo, ...accCmds];
+  if (!cmds.length) { res.status(200).json({ ok: true, n: 0 }); return; }
+  const out = await redisPipeline(cmds);
   const extra = [];
-  if (Number(len) <= righe.length) extra.push(["EXPIRE", k, TELE_TTL]);           // prima riga del giorno
-  if (Number(len) > TELE_TETTO_GIORNO) extra.push(["LTRIM", k, 0, TELE_TETTO_GIORNO - 1]);
+  if (righe.length) {
+    const len = Number(out[0] && out[0].result);
+    if (len <= righe.length) extra.push(["EXPIRE", k, TELE_TTL]);           // prima riga del giorno
+    if (len > TELE_TETTO_GIORNO) extra.push(["LTRIM", k, 0, TELE_TETTO_GIORNO - 1]);
+  }
   if (extra.length) await redisPipeline(extra);
-  res.status(200).json({ ok: true, n: righe.length });
+  const risp = { ok: true, n: righe.length };
+  if (accCmds.length) {
+    const i0 = out.length - accCmds.length;
+    risp.palii = Number(out[i0] && out[i0].result) || 0;
+    risp.vinti = Number(out[i0 + 1] && out[i0 + 1].result) || 0;
+  }
+  res.status(200).json(risp);
 }
 
 // Statistiche per l'admin: legge gli ultimi N giorni e restituisce i CONTI, non
@@ -809,6 +838,14 @@ async function teleSalva(body, res) {
 async function teleStats(body, res) {
   if (!(await adminOk(body, res))) return;
   let giorni = parseInt(body.giorni, 10); if (!(giorni >= 1)) giorni = 1; if (giorni > 30) giorni = 30;
+  // CONTI GIA' FATTI: rileggere e rifare i conti su migliaia di righe e' la cosa
+  // che costa piu' CPU di tutto il server. Il risultato si tiene 30 minuti; il
+  // tasto "Aggiorna" dell'admin (fresco: true) lo rifa' subito.
+  const cacheKey = `palio:tele:conti:${giorni}`;
+  if (!body.fresco) {
+    const [{ result: pronto }] = await redisPipeline([["GET", cacheKey]]);
+    if (pronto) { res.setHeader("Content-Type", "application/json"); res.status(200).send(pronto); return; }
+  }
   const righe = [];
   let troncato = false;
   for (let i = 0; i < giorni; i++) {
@@ -818,7 +855,10 @@ async function teleStats(body, res) {
     if (lista.length >= TELE_LETTURA_GIORNO) troncato = true;
     lista.forEach((t) => { try { righe.push(JSON.parse(t)); } catch (e) { /* riga rotta: si salta */ } });
   }
-  res.status(200).json({ ok: true, giorni, troncato, ...aggregaTele(righe) });
+  const testo = JSON.stringify({ ok: true, giorni, troncato, calcolato: Date.now(), ...aggregaTele(righe) });
+  await redisPipeline([["SET", cacheKey, testo, "EX", 1800]]);
+  res.setHeader("Content-Type", "application/json");
+  res.status(200).send(testo);
 }
 
 function aggregaTele(tutte) {

@@ -13,6 +13,10 @@
 export const EN = {
   // ── Home e menu ───────────────────────────────────────────────────────────
   "Videogioco sul Palio di Siena": "A video game about the Palio di Siena",
+  "💻 Gioca da PC": "💻 Play on a computer",
+  "La grafica è migliore e puoi correre un palio ogni 20 minuti invece che ogni ora.": "The graphics are better and you can run a Palio every 20 minutes instead of every hour.",
+  "Continua dal telefono": "Keep playing on the phone",
+  "💻 Da computer si gioca meglio: grafica piena e un palio ogni 20 minuti": "💻 It plays better on a computer: full graphics and a Palio every 20 minutes",
   "Approvato dal Consorzio per la Tutela del Palio di Siena": "Approved by the Consorzio per la Tutela del Palio di Siena",
   "È gratuito, per tutti": "It's free, for everyone",
   "Gioca": "Play",

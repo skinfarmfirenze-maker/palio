@@ -4531,7 +4531,10 @@ function recordPalioRun() {
       setAccount(acc);
       let pend = (parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0) + 1;
       localStorage.setItem("palio.acctPending", String(pend));
-      if (pend >= 10) {   // 10 palii = 1 chiamata; il conteggio locale sale subito
+      // Coi dati corse attivi i palii viaggiano DENTRO il loro pacchetto (teleInvia):
+      // nessuna chiamata a parte. La chiamata "palio" resta solo dove i dati corse
+      // sono spenti (dispositivo dello sviluppatore).
+      if (pend >= 10 && !teleAttiva()) {   // 10 palii = 1 chiamata; il conteggio locale sale subito
         const n = pend;
         localStorage.setItem("palio.acctPending", "0");
         fetch(ACCOUNT_API, {
@@ -5444,7 +5447,39 @@ function clearPalazzoFlags() {
 }
 
 // ── Cerimonia ────────────────────────────────────────────────────────────────
+// ── "GIOCA DA PC" ────────────────────────────────────────────────────────────
+// Da telefono si gioca troppo (a fine ottobre 2026: 11.711 palii contro 3.351 da
+// PC) e lì la grafica è per forza ridotta. A OGNI palio, su telefono, compare
+// questo invito — per tutti, anche per lo sviluppatore. Non blocca: si chiude
+// col tasto e il palio va avanti.
+function invitoGiocaDaPC() {
+  if (!IS_TOUCH_DEVICE) return;
+  document.getElementById("invitoPC")?.remove();
+  const ov = document.createElement("div");
+  ov.id = "invitoPC";
+  ov.style.cssText = "position:fixed;inset:0;z-index:10040;display:flex;align-items:center;justify-content:center;"
+    + "background:rgba(8,6,4,.72);padding:16px calc(var(--margine-sicuro) + 16px)";
+  const box = document.createElement("div");
+  box.style.cssText = "max-width:420px;text-align:center;background:#1d1710;border:1px solid #f0cb35;border-radius:14px;"
+    + "padding:18px 22px;color:#f3e7cf;font-family:inherit;display:flex;flex-direction:column;gap:10px;align-items:center";
+  const t = document.createElement("div");
+  t.style.cssText = "font-size:19px;font-weight:800;color:#f0cb35";
+  t.textContent = "💻 Gioca da PC";
+  const p = document.createElement("div");
+  p.style.cssText = "font-size:15px;line-height:1.4";
+  p.textContent = "La grafica è migliore e puoi correre un palio ogni 20 minuti invece che ogni ora.";
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "cmp-btn";
+  b.style.cssText = "margin:4px 0 0;min-height:44px;padding:10px 24px";
+  b.textContent = "Continua dal telefono";
+  b.addEventListener("click", () => ov.remove());
+  box.append(t, p, b);
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
 function beginEstrazione(tipoId, precomputed) {
+  invitoGiocaDaPC();
   ensureAudio();
   if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
   clearConfetti();
@@ -5933,8 +5968,12 @@ function resumeCampaign() {
   });
 }
 
-// ── FREEZE PALIATA VELOCE: max 1 ogni 20 minuti per giocatore (Mario Rossi: illimitato).
-const PALIATA_COOLDOWN_MS = 20 * 60 * 1000;
+// ── FREEZE PALIATA VELOCE: max 1 ogni 20 minuti da COMPUTER, 1 all'ora da TELEFONO
+// (Mario Rossi: illimitato). Il gioco si vuole giocato soprattutto da computer:
+// grafica piena e molto meno peso sul telefono; l'attesa piu' lunga ce li spinge.
+const ATTESA_MIN = _touchBoot ? 60 : 20;
+const ATTESA_TESTO = _touchBoot ? "ogni ora da telefono (da computer ogni 20 minuti)" : "ogni 20 minuti";
+const PALIATA_COOLDOWN_MS = ATTESA_MIN * 60 * 1000;
 // Lo sviluppatore: account "Mario Rossi" SU UN DISPOSITIVO dove e' stato fatto
 // almeno una volta l'accesso al portale admin con la password vera. Prima bastava
 // il nome, e "Mario Rossi" e' fra i nomi piu' comuni d'Italia: chiunque si
@@ -5963,8 +6002,8 @@ function segnaPaliataVeloce() {
   const key = "palio.lastVeloce" + (acc && acc.email ? "_" + acc.email : "");
   try { localStorage.setItem(key, String(Date.now())); } catch (e) { /* niente */ }
 }
-// Campagna: max 1 ogni 20 minuti per giocatore (Mario Rossi: illimitato).
-const CAMPAGNA_COOLDOWN_MS = 20 * 60 * 1000;
+// Campagna: stessa attesa della Paliata veloce (Mario Rossi: illimitato).
+const CAMPAGNA_COOLDOWN_MS = ATTESA_MIN * 60 * 1000;
 function campagnaAttesaMs() {
   const acc = getAccount();
   if (isMarioRossi(acc)) return 0;
@@ -6008,7 +6047,7 @@ function openModeChooser() {
         const wait = paliataVeloceAttesaMs();
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
-          toastMsg(`Puoi correre una Paliata veloce ogni 20 minuti. Riprova fra ${min} min.`);
+          toastMsg(`Puoi correre una Paliata veloce ${ATTESA_TESTO}. Riprova fra ${min} min.`, 5200);
           teleEvento("attesa", "veloce");
           return;
         }
@@ -6024,7 +6063,7 @@ function openModeChooser() {
         const wait = campagnaAttesaMs();
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
-          toastMsg(`Puoi iniziare una Campagna ogni 20 minuti. Riprova fra ${min} min.`);
+          toastMsg(`Puoi iniziare una Campagna ${ATTESA_TESTO}. Riprova fra ${min} min.`, 5200);
           teleEvento("attesa", "campagna");
           return;
         }
@@ -14303,7 +14342,15 @@ function presentVictory() {
   // +1 ai palii VINTI dell'account SE ha vinto il giocatore reale (non assisti/AI).
   try {
     const acc = getAccount();
-    if (acc && acc.email && winner && isHuman(winner)) {
+    if (acc && acc.email && winner && isHuman(winner) && teleAttiva()) {
+      // La vittoria viaggia col prossimo pacchetto dei dati corse (teleInvia):
+      // il profilo sale subito qui, il server la riceve insieme alle corse.
+      acc.vinti = (Number(acc.vinti) || 0) + 1; setAccount(acc);
+      try {
+        const v = JSON.parse(localStorage.getItem(ACCT_VINTI_PENDING) || "[]");
+        v.push(winner.id); localStorage.setItem(ACCT_VINTI_PENDING, JSON.stringify(v.slice(-50)));
+      } catch (e) { /* niente */ }
+    } else if (acc && acc.email && winner && isHuman(winner)) {
       fetch(ACCOUNT_API, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "win", email: acc.email, contrada: winner.id }),
@@ -15465,7 +15512,23 @@ function segnaController() {
 const TELE_VER = "2026-10-25";
 const TELE_CODA = "palio.teleCoda";
 const TELE_APERTA = "palio.teleAperta";   // palio in corso quando la pagina e' finita in background
-const TELE_GRUPPO = 5;   // 5 palii = 1 chiamata (la pagina che si chiude manda comunque il resto)
+const TELE_GRUPPO = 10;  // 10 palii = 1 chiamata
+// CAMPIONE: solo 1 dispositivo su 3 manda le righe complete per le statistiche.
+// Gli altri mandano righe "lite" con il solo vincitore, che servono all'Albo e
+// ai conteggi dell'account. La scelta si fa una volta e resta sul dispositivo.
+const TELE_CAMPIONE_KEY = "palio.teleCampione";
+const ACCT_VINTI_PENDING = "palio.acctVintiPending";
+const TELE_CODA_DA = "palio.teleCodaDa";          // da quando c'e' qualcosa in coda
+function teleNelCampione() {
+  try {
+    let c = localStorage.getItem(TELE_CAMPIONE_KEY);
+    if (c !== "1" && c !== "0") { c = Math.random() < 1 / 3 ? "1" : "0"; localStorage.setItem(TELE_CAMPIONE_KEY, c); }
+    return c === "1";
+  } catch (e) { return false; }
+}
+function teleLite(r) {
+  return { v: r.v, lite: 1, esito: r.esito, fase: r.fase, vince: r.vince, vinceCavallo: r.vinceCavallo, vinceFantino: r.vinceFantino };
+}
 const TELE_CODA_MAX = 40;
 function teleAttiva() {
   try { if (localStorage.getItem("palio.teleProva") === "1") return true; } catch (e) { /* niente */ }
@@ -15632,18 +15695,50 @@ function teleLeggiCoda() {
 }
 function teleScriviCoda(c) { try { localStorage.setItem(TELE_CODA, JSON.stringify(c.slice(-TELE_CODA_MAX))); } catch (e) { /* niente */ } }
 function teleAccoda(riga) {
+  if (!riga) return;
+  if (!teleNelCampione()) {
+    if (riga.esito === "attesa") return;            // fuori campione: serve solo all'Albo
+    riga = teleLite(riga);
+  }
   const c = teleLeggiCoda();
+  if (!c.length) { try { localStorage.setItem(TELE_CODA_DA, String(Date.now())); } catch (e) { /* niente */ } }
   c.push(riga);
   teleScriviCoda(c);
   if (c.length >= TELE_GRUPPO) teleInvia(false);
+}
+// Palii e vittorie dell'account in attesa di partire col pacchetto.
+function teleAccountInSospeso() {
+  try {
+    const acc = getAccount();
+    if (!acc || !acc.email) return null;
+    const palii = parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0;
+    const vinti = JSON.parse(localStorage.getItem(ACCT_VINTI_PENDING) || "[]");
+    if (!palii && !vinti.length) return null;
+    return { email: acc.email, palii, vinti };
+  } catch (e) { return null; }
+}
+function teleAccountConsegnato(a) {
+  if (!a) return;
+  try {
+    const p = parseInt(localStorage.getItem("palio.acctPending") || "0", 10) || 0;
+    localStorage.setItem("palio.acctPending", String(Math.max(0, p - a.palii)));
+    const v = JSON.parse(localStorage.getItem(ACCT_VINTI_PENDING) || "[]");
+    localStorage.setItem(ACCT_VINTI_PENDING, JSON.stringify(v.slice(a.vinti.length)));
+  } catch (e) { /* niente */ }
 }
 let teleInviando = false;
 function teleInvia(chiusura) {
   const c = teleLeggiCoda();
   if (!c.length || teleInviando) return;
   const pacco = c.slice(0, 20);
-  const body = JSON.stringify({ action: "tele", corse: pacco });
-  const togli = () => { teleScriviCoda(teleLeggiCoda().slice(pacco.length)); };
+  const account = teleAccountInSospeso();
+  const body = JSON.stringify(account ? { action: "tele", corse: pacco, account } : { action: "tele", corse: pacco });
+  const togli = () => {
+    const resto = teleLeggiCoda().slice(pacco.length);
+    teleScriviCoda(resto);
+    if (!resto.length) { try { localStorage.removeItem(TELE_CODA_DA); } catch (e) { /* niente */ } }
+    teleAccountConsegnato(account);
+  };
   // Pagina che si chiude: sendBeacon arriva anche se la pagina muore subito dopo.
   if (chiusura && navigator.sendBeacon) {
     try { if (navigator.sendBeacon(ACCOUNT_API, body)) togli(); } catch (e) { /* niente */ }
@@ -15651,7 +15746,14 @@ function teleInvia(chiusura) {
   }
   teleInviando = true;
   fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true })
-    .then((r) => { if (r.ok) togli(); })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => {
+      if (!j || !j.ok) return;
+      togli();
+      if (account && typeof j.palii === "number") {
+        try { const acc = getAccount(); if (acc && acc.email === account.email) { acc.palii = j.palii; acc.vinti = j.vinti; setAccount(acc); } } catch (e) { /* niente */ }
+      }
+    })
     .catch(() => { /* resta in coda: riparte al prossimo gruppo */ })
     .finally(() => { teleInviando = false; });
 }
@@ -15663,7 +15765,13 @@ function teleAvvia() {
     const sospesa = localStorage.getItem(TELE_APERTA);
     if (sospesa) { localStorage.removeItem(TELE_APERTA); const r = JSON.parse(sospesa); if (r && r.esito) teleAccoda(r); }
   } catch (e) { /* niente */ }
-  if (teleLeggiCoda().length) teleInvia(false);        // quello rimasto dall'ultima volta
+  // Quello rimasto dall'ultima volta parte solo se e' un gruppo pieno o se aspetta
+  // da piu' di un giorno: ogni chiamata in meno e' CPU di Vercel risparmiata.
+  {
+    const n = teleLeggiCoda().length;
+    let da = 0; try { da = parseInt(localStorage.getItem(TELE_CODA_DA) || "0", 10) || 0; } catch (e) { /* niente */ }
+    if (n >= TELE_GRUPPO || (n && Date.now() - da > 864e5)) teleInvia(false);
+  }
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
       const t = state.tele;
@@ -15673,7 +15781,7 @@ function teleAvvia() {
         const r = teleRiga(t, "uscita", state.mode);
         if (r) { try { localStorage.setItem(TELE_APERTA, JSON.stringify(r)); } catch (e) { /* niente */ } }
       }
-      teleInvia(true);
+      if (teleLeggiCoda().length >= 3) teleInvia(true);   // per 1-2 righe non si sveglia il server
     } else {
       try { localStorage.removeItem(TELE_APERTA); } catch (e) { /* niente */ }   // tornato: non era un abbandono
     }
@@ -15924,7 +16032,7 @@ function bustAcceptedCache() {   // l'admin ha cambiato qualcosa → forza rilet
     try { localStorage.removeItem(k); } catch (e) { /* niente */ }
   });
   // ...anche dalla cache di Vercel, ma solo su QUESTO dispositivo (l'admin vede
-  // subito la modifica; per gli altri arriva entro 10 minuti).
+  // subito la modifica; per gli altri arriva entro 1 ora).
   try { sessionStorage.setItem("palio.saltaCache", "1"); } catch (e) { /* niente */ }
 }
 function cachedAccepted(key, action, extra, applyFn, pick, always, cb) {

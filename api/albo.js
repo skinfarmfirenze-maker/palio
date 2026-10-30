@@ -133,10 +133,10 @@ module.exports = async (req, res) => {
     const albo = {};
     CATS.forEach((cat, i) => { albo[cat] = hashToObj(out[i] && out[i].result); });
     albo.totalePalii = Number(out[CATS.length] && out[CATS.length].result) || 0;
-    // La lettura e' uguale per tutti: la tiene la cache di Vercel per 5 minuti
-    // (e la riusa fino a 30 mentre la rinfresca). Cosi' quasi nessuna visita
-    // avvia la funzione.
-    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=1800");
+    // La lettura e' uguale per tutti: la tiene la cache di Vercel per 1 ora
+    // (e la riusa fino a 6 mentre la rinfresca). Cosi' quasi nessuna visita
+    // avvia la funzione: l'Albo si aggiorna a ogni ora, non a ogni palio.
+    res.setHeader("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=21600");
     res.status(200).json(albo);
   } catch (e) {
     // In caso di errore store: rispondi vuoto senza rompere il gioco.

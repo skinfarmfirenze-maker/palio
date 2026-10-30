@@ -1426,3 +1426,10 @@ body.con-controller .controls-pad {
 /* La targhetta "chi ha preso il fantino" vuota si vedeva come un trattino scuro
    sopra il prezzo (PC e telefono): se non c'e' niente da dire, non c'e'. */
 .sf-taken:empty { display: none !important; }
+
+/* Solo su telefono: invito a giocare da computer (grafica piena, attesa piu' corta). */
+.solo-telefono { display: none; }
+body.touch-device .solo-telefono {
+  display: block; margin: 4px auto 0; max-width: 34em;
+  font-size: 12px; line-height: 1.3; color: #f0cb35; text-wrap: balance;
+}
