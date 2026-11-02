@@ -212,6 +212,7 @@ module.exports = async (req, res) => {
     if (action === "tele") return await teleSalva(body, res);
     if (action === "teleStats") return await teleStats(body, res);
     if (action === "adminList") return await adminList(body, res);
+    if (action === "alboAllinea") return await alboAllinea(body, res);
     res.status(400).json({ error: "bad-action" });
   } catch (e) {
     res.status(500).json({ error: "server" });
@@ -789,8 +790,11 @@ async function teleSalva(body, res) {
   // vincitori per ogni arrivo. Gli stessi controlli dell'Albo: solo contrade vere
   // e nomi validi.
   const albo = [];
+  // Il totale dei palii corsi: se c'e' l'account, conta i SUOI palii (sono gli
+  // stessi della somma nell'admin); senza account si conta come prima, riga per riga.
+  const conAccount = body.account && typeof body.account === "object" && normEmail(body.account.email);
   corse.map(pulisciRiga).filter(Boolean).forEach((r) => {
-    if (r.esito === "arrivo" || r.fase === "race") albo.push(["INCRBY", "palio:totalePalii", 1]);
+    if (!conAccount && (r.esito === "arrivo" || r.fase === "race")) albo.push(["INCRBY", "palio:totalePalii", 1]);
     if (r.esito !== "arrivo") return;
     if (!r.vince || !CONTRADE_IDS.has(r.vince)) return;   // un arrivo vero ha sempre una contrada vera
     albo.push(["HINCRBY", "palio:albo:contrada", r.vince, 1]);
@@ -810,6 +814,7 @@ async function teleSalva(body, res) {
     if (Number(exists) === 1) {
       const ok = oraKey(new Date(adesso));
       accCmds.push(["HINCRBY", acctKey(email), "palii", n], ["HINCRBY", acctKey(email), "vinti", vinte.length]);
+      if (n) albo.push(["INCRBY", "palio:totalePalii", n]);
       if (n) accCmds.push(["INCRBY", ok, n], ["EXPIRE", ok, ORA_TTL]);
       vinte.forEach((c) => { if (CONTRADE_IDS.has(c)) accCmds.push(["HINCRBY", winsKey(email), c, 1]); });
     }
@@ -831,6 +836,40 @@ async function teleSalva(body, res) {
     risp.vinti = Number(out[i0 + 1] && out[i0 + 1].result) || 0;
   }
   res.status(200).json(risp);
+}
+
+// ALLINEA L'ALBO al totale vero dei palii corsi (somma dei palii degli account).
+// L'Albo contava solo i palii arrivati in corsa, e per un periodo nemmeno quelli:
+// era rimasto indietro di circa 15 mila. Si alza SOLO (mai un numero che scende):
+// il totale va al valore dato, e le vittorie mancanti si spartiscono fra contrade,
+// cavalli e fantini nelle stesse proporzioni che hanno gia' (stima, non conteggio).
+// Lo lancia l'admin dal pannello, con la password.
+async function alboAllinea(body, res) {
+  if (!(await adminOk(body, res))) return;
+  const voluto = parseInt(body.totale, 10);
+  const CATS = ["contrada", "cavallo", "fantino"];
+  const out = await redisPipeline([["GET", "palio:totalePalii"], ...CATS.map((c) => ["HGETALL", `palio:albo:${c}`])]);
+  const attuale = Number(out[0] && out[0].result) || 0;
+  if (!(voluto > attuale) || voluto > attuale * 3) { res.status(400).json({ error: "totale", attuale }); return; }
+  const cmds = [["INCRBY", "palio:totalePalii", voluto - attuale]];
+  const aggiunte = {};
+  CATS.forEach((cat, i) => {
+    const h = hashToObj(out[i + 1] && out[i + 1].result);
+    const chiavi = Object.keys(h).filter((k) => Number(h[k]) > 0);
+    const somma = chiavi.reduce((a, k) => a + Number(h[k]), 0);
+    if (!somma) return;
+    // Le vittorie stanno ai palii come oggi (chi lascia prima del traguardo non da' un vincitore).
+    const daAggiungere = Math.round(somma * (voluto / attuale)) - somma;
+    if (daAggiungere <= 0) return;
+    // Ripartizione proporzionale coi resti piu' grandi: la somma torna esatta.
+    const quote = chiavi.map((k) => { const x = daAggiungere * Number(h[k]) / somma; return { k, n: Math.floor(x), r: x - Math.floor(x) }; });
+    let resto = daAggiungere - quote.reduce((a, q) => a + q.n, 0);
+    quote.sort((a, b) => b.r - a.r).forEach((q) => { if (resto > 0) { q.n += 1; resto -= 1; } });
+    quote.forEach((q) => { if (q.n > 0) cmds.push(["HINCRBY", `palio:albo:${cat}`, q.k, q.n]); });
+    aggiunte[cat] = daAggiungere;
+  });
+  await redisPipeline(cmds);
+  res.status(200).json({ ok: true, prima: attuale, dopo: voluto, aggiunte });
 }
 
 // Statistiche per l'admin: legge gli ultimi N giorni e restituisce i CONTI, non

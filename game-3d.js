@@ -17125,6 +17125,7 @@ function maybeOpenAdmin() {
       + `<span>Palii corsi (somma): <b style="color:#7fd98c">${totPalii}</b></span>`
       + `<span>Ultime 24h: <b id="adminPalii24" style="color:#7fd98c">…</b></span>`
       + `<span>Palii vinti (somma): <b style="color:#f0cb35">${totVinti}</b></span>`
+      + `<button type="button" id="adminAlbo" title="Porta il totale dell'Albo a ${totPalii} palii e spartisce le vittorie mancanti nelle proporzioni di oggi" style="font:inherit;font-size:13px;font-weight:700;padding:6px 14px;border-radius:8px;border:1px solid rgba(127,217,140,.5);background:rgba(127,217,140,.1);color:#f3e7cf;cursor:pointer">🏆 Allinea Albo</button>`
       + `<button type="button" id="adminRefresh" style="font:inherit;font-size:13px;font-weight:700;padding:6px 16px;border-radius:8px;border:1px solid rgba(240,203,53,.5);background:rgba(240,203,53,.12);color:#f3e7cf;cursor:pointer">🔄 Aggiorna</button></div>`
       + metrics
       // ── TAB IN CIMA (non scalano mai sotto la classifica) ────────────────────
@@ -17203,6 +17204,23 @@ function maybeOpenAdmin() {
     // wiring dopo l'innerHTML: refresh + click sulle righe (dettaglio contrade)
     const refBtn = $("adminRefresh");
     if (refBtn) refBtn.addEventListener("click", load);
+    // ALLINEA ALBO: il totale pubblico dei palii corsi va alla somma degli account;
+    // le vittorie mancanti si spartiscono nelle proporzioni attuali. Solo in salita.
+    const alboBtn = $("adminAlbo");
+    if (alboBtn) alboBtn.addEventListener("click", () => {
+      if (!confirm(`Portare l'Albo a ${totPalii} palii corsi? Le vittorie mancanti di contrade, cavalli e fantini vengono aggiunte nelle proporzioni di oggi. I numeri salgono e basta: non si torna indietro.`)) return;
+      alboBtn.disabled = true; alboBtn.textContent = "…";
+      fetch(ACCOUNT_API, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "alboAllinea", adminKey, totale: totPalii }) })
+        .then((r) => r.json())
+        .then((j) => {
+          if (j && j.ok) {
+            alboBtn.textContent = `✅ Albo ${j.prima} → ${j.dopo}`;
+            try { localStorage.removeItem("palio.alboTs"); } catch (e) { /* niente */ }
+          } else { alboBtn.disabled = false; alboBtn.textContent = j && j.error === "totale" ? `Albo già a ${j.attuale}` : "Errore"; }
+        })
+        .catch(() => { alboBtn.disabled = false; alboBtn.textContent = "Errore di rete"; });
+    });
     $("adminOut").querySelectorAll(".adminRow").forEach((tr) => {
       tr.addEventListener("click", () => showPlayerWins(tr.getAttribute("data-email"), tr.getAttribute("data-nome")));
     });
