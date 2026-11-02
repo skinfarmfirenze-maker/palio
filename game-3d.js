@@ -4044,12 +4044,121 @@ function drawMinimap() {
 // Si apre dalla rotellina in basso a sinistra della home. Due sole scelte, ma
 // pesanti: quale Palio si corre (che cambia cavalli e fantini) e quanto puo'
 // durare la mossa. Si applicano subito e restano salvate sul dispositivo.
+// ── COMANDI DA TASTIERA PERSONALIZZABILI (solo PC) ─────────────────────────────
+// Ogni azione ha come nome il suo tasto di fabbrica (KeyA, KeyL, …): il resto del
+// gioco continua a ragionare con quelli. Qui si traduce il tasto PREMUTO nel tasto
+// di fabbrica dell'azione a cui il giocatore l'ha assegnato.
+const TASTI_KEY = "palio.tasti";
+const AZIONI_TASTI = [
+  { id: "KeyA", nome: "Sterza / gira a sinistra" },
+  { id: "KeyL", nome: "Sterza / gira a destra" },
+  { id: "KeyM", nome: "Accelera (andatura su)" },
+  { id: "Space", nome: "Rallenta (andatura giù)" },
+  { id: "KeyS", nome: "Nerbata a sinistra" },
+  { id: "KeyK", nome: "Nerbata a destra" },
+  { id: "KeyQ", nome: "Spinta a sinistra (canapi)" },
+  { id: "KeyP", nome: "Spinta a destra (canapi)" },
+  { id: "KeyC", nome: "Cambia camera" },
+];
+const TASTI_VIETATI = new Set(["Enter", "NumpadEnter", "Escape", "Tab", "MetaLeft", "MetaRight", "ContextMenu"]);
+let tastiScelti = null;          // { azione: tasto fisico }
+let tastiInversi = null;         // { tasto fisico: azione }
+function leggiTasti() {
+  if (tastiScelti) return tastiScelti;
+  let salvati = {};
+  try { salvati = JSON.parse(localStorage.getItem(TASTI_KEY) || "{}") || {}; } catch (e) { salvati = {}; }
+  tastiScelti = {};
+  AZIONI_TASTI.forEach((a) => { tastiScelti[a.id] = typeof salvati[a.id] === "string" ? salvati[a.id] : a.id; });
+  tastiInversi = {};
+  Object.keys(tastiScelti).forEach((az) => { tastiInversi[tastiScelti[az]] = az; });
+  return tastiScelti;
+}
+function salvaTasti(t) {
+  try { localStorage.setItem(TASTI_KEY, JSON.stringify(t)); } catch (e) { /* niente */ }
+  tastiScelti = null; leggiTasti(); aggiornaAiutoTasti();
+}
+// Il tasto premuto → l'azione (col suo nome di fabbrica). null = tasto che oggi
+// non fa niente perche' la sua azione e' stata spostata su un altro tasto.
+function tastoLogico(code) {
+  leggiTasti();
+  if (tastiInversi[code]) return tastiInversi[code];
+  if (tastiScelti[code] !== undefined) return null;                 // tasto di fabbrica di un'azione spostata
+  if (code === "KeyW") return tastiScelti.KeyM === "KeyM" ? "KeyM" : null;   // W = accelera, finche' M non e' spostato
+  return code;
+}
+function nomeTasto(code) {
+  if (!code) return "—";
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad\d$/.test(code)) return "Num " + code.slice(6);
+  const n = { Space: "Spazio", ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", ShiftLeft: "Maiusc sx", ShiftRight: "Maiusc dx",
+    ControlLeft: "Ctrl sx", ControlRight: "Ctrl dx", AltLeft: "Alt sx", AltRight: "Alt dx", Backspace: "Cancella", Comma: ",", Period: ".",
+    Minus: "-", Equal: "=", Semicolon: "ò", Quote: "à", BracketLeft: "è", BracketRight: "+", Backslash: "ù", Slash: "-", Backquote: "\\" };
+  return n[code] || code;
+}
+// L'aiuto comandi in home mostra i tasti scelti, non quelli di fabbrica.
+function aggiornaAiutoTasti() {
+  const box = document.querySelector(".controls-hint");
+  if (!box) return;
+  const t = leggiTasti();
+  const k = (az) => "<kbd>" + escapeHtml(nomeTasto(t[az])) + "</kbd>";
+  box.innerHTML =
+    '<div class="ctrl-row"><strong>Mossa:</strong> ' + k("KeyA") + "/" + k("KeyL") + " gira &nbsp; " + k("KeyM") + "/" + k("Space") + " velocità (1=indietro · 2=fermo · 3-5 avanti)</div>"
+    + '<div class="ctrl-row"><strong>Gara:</strong> ' + k("KeyM") + " accelera &nbsp; " + k("Space") + " rallenta &nbsp; " + k("KeyA") + "/" + k("KeyL") + " sterza</div>"
+    + '<div class="ctrl-row"><kbd>Invio</kbd> avanti/salta &nbsp; <kbd>↑</kbd><kbd>↓</kbd> scegli &nbsp; ' + k("KeyC") + " cambia camera</div>";
+  try { traduciAlbero(box); } catch (e) { /* niente */ }
+}
+// Riquadro "Comandi" delle Impostazioni (solo PC): clic su un'azione, poi il tasto.
+function sezioneTasti(ov) {
+  const box = ov.querySelector("#tastiBox");
+  if (!box) return;
+  const disegna = (inAttesa) => {
+    const t = leggiTasti();
+    box.innerHTML = AZIONI_TASTI.map((a) => '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">'
+      + '<span style="font-size:14px">' + a.nome + '</span>'
+      + '<button type="button" data-tasto="' + a.id + '" style="font:inherit;font-weight:800;min-width:96px;padding:7px 12px;border-radius:8px;cursor:pointer;'
+      + (inAttesa === a.id ? "border:1px solid #f0cb35;background:rgba(240,203,53,.22);color:#f0cb35" : "border:1px solid rgba(240,203,53,.28);background:rgba(255,246,225,.06);color:#f3e7cf")
+      + '">' + (inAttesa === a.id ? "Premi un tasto…" : escapeHtml(nomeTasto(t[a.id]))) + "</button></div>").join("")
+      + '<div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:4px">'
+      + '<span id="tastiNota" style="font-size:12.5px;opacity:.7">Invio, Esc e Tab restano fissi.</span>'
+      + '<button type="button" id="tastiReset" style="font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid rgba(240,203,53,.28);background:none;color:#f3e7cf;cursor:pointer">Ripristina</button></div>';
+    box.querySelectorAll("[data-tasto]").forEach((b) => b.addEventListener("click", () => attendi(b.dataset.tasto)));
+    box.querySelector("#tastiReset").addEventListener("click", () => { salvaTasti({}); disegna(null); });
+  };
+  const attendi = (azione) => {
+    disegna(azione);
+    const prendi = (e) => {
+      e.preventDefault(); e.stopImmediatePropagation();
+      window.removeEventListener("keydown", prendi, true);
+      if (e.code === "Escape" || !e.code) { disegna(null); return; }
+      if (TASTI_VIETATI.has(e.code)) {
+        disegna(null);
+        const n = box.querySelector("#tastiNota"); if (n) n.textContent = nomeTasto(e.code) + " non si può usare: resta fisso.";
+        return;
+      }
+      // Se il tasto era gia' di un'altra azione, le due si scambiano il posto.
+      const t = { ...leggiTasti() };
+      const altra = Object.keys(t).find((az) => t[az] === e.code && az !== azione);
+      if (altra) t[altra] = t[azione];
+      t[azione] = e.code;
+      salvaTasti(t);
+      disegna(null);
+      if (altra) { const n = box.querySelector("#tastiNota"); if (n) n.textContent = "Scambiato con: " + (AZIONI_TASTI.find((a) => a.id === altra) || {}).nome; }
+    };
+    window.addEventListener("keydown", prendi, true);
+  };
+  disegna(null);
+}
+
 function openSettingsScreen() {
   if (document.getElementById("settingsOv")) return;
   const s = leggiImpostazioni();
   const ov = document.createElement("div");
   ov.id = "settingsOv";
-  ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;align-items:center;justify-content:center;"
+  // Niente align-items:center: se il pannello e' piu' alto dello schermo (coi comandi
+  // da tastiera succede) il titolo finirebbe tagliato SOPRA, dove non si scorre.
+  // margin:auto sul contenuto lo centra e lascia scorrere tutto.
+  ov.style.cssText = "position:fixed;inset:0;z-index:9997;display:flex;"
     + "background:rgba(9,6,3,.82);color:#f3e7cf;font-family:inherit;padding:22px;overflow:auto";
   const card = "background:rgba(255,246,225,.06);border:1px solid rgba(240,203,53,.28);border-radius:12px;padding:13px 15px;"
     + "cursor:pointer;text-align:left;font:inherit;color:#f3e7cf;width:100%;box-sizing:border-box;transition:border-color .15s";
@@ -4059,7 +4168,7 @@ function openSettingsScreen() {
     { id: "moderno", tit: "Palio moderno", sub: "Dal Duemila in poi \u2014 da Trecciolino ai giorni nostri" },
   ];
   ov.innerHTML =
-    '<div style="width:min(520px,96vw);display:flex;flex-direction:column;gap:16px">'
+    '<div style="width:min(' + (IS_TOUCH_DEVICE ? 520 : 640) + 'px,96vw);margin:auto;display:flex;flex-direction:column;gap:16px">'
     + '<div style="font-size:clamp(19px,4vw,26px);font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#f0cb35;text-align:center">Impostazioni</div>'
     + '<div style="display:flex;flex-direction:column;gap:8px">'
     +   '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.75">Quale Palio si corre</div>'
@@ -4075,6 +4184,10 @@ function openSettingsScreen() {
     +   '</div>'
     +   '<div style="font-size:12.5px;opacity:.7">Oltre questo tempo il mossiere dà il via comunque.</div>'
     + '</div>'
+    + (IS_TOUCH_DEVICE ? "" : '<div style="display:flex;flex-direction:column;gap:8px">'
+    +   '<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.75">Comandi da tastiera</div>'
+    +   '<div id="tastiBox" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:6px 18px"></div>'
+    + '</div>')
     + '<button type="button" id="settingsClose" style="font:inherit;font-size:16px;font-weight:800;padding:12px 30px;border-radius:10px;'
     +   'border:none;background:#f0cb35;color:#1a1206;cursor:pointer;align-self:center">Chiudi</button>'
     + '</div>';
@@ -4092,6 +4205,7 @@ function openSettingsScreen() {
   ov.querySelectorAll("[data-min]").forEach((b) => b.addEventListener("click", () => {
     applica({ ...leggiImpostazioni(), mossaMinuti: parseInt(b.dataset.min, 10) });
   }));
+  sezioneTasti(ov);
   ov.querySelector("#settingsClose").addEventListener("click", () => ov.remove());
   ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
 }
@@ -15489,8 +15603,8 @@ function bindEvents() {
     // Frecce: scorrono i pulsanti dei menu (comodo anche senza gamepad).
     if (!isRaceMode() && (event.key === "ArrowLeft" || event.key === "ArrowUp")) { event.preventDefault(); uiMoveFocus(-1); return; }
     if (!isRaceMode() && (event.key === "ArrowRight" || event.key === "ArrowDown")) { event.preventDefault(); uiMoveFocus(1); return; }
-    const code = event.code;
-    if (!["KeyA", "KeyL", "KeyW", "KeyS", "KeyM", "KeyK", "Space", "KeyC", "Tab", "KeyQ", "KeyP"].includes(code)) return;
+    const code = tastoLogico(event.code);   // tasti personalizzati (Impostazioni) → azione
+    if (!code || !["KeyA", "KeyL", "KeyW", "KeyS", "KeyM", "KeyK", "Space", "KeyC", "Tab", "KeyQ", "KeyP"].includes(code)) return;
     event.preventDefault();
     if (code === "KeyC") {
       if (event.repeat) return;
@@ -15527,6 +15641,7 @@ function bindEvents() {
   });
   window.addEventListener("keyup", (event) => {
     state.keys.delete(event.code);
+    const az = tastoLogico(event.code); if (az) state.keys.delete(az);
   });
   // Freccette laterali (basso a destra): spinta di lato ai canapi (Q/P).
   ui.touchControls.querySelectorAll("[data-touch]").forEach((button) => {
@@ -17664,6 +17779,7 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
 
 function init() {
   try { avviaTraduzione(); } catch (e) { /* la lingua non deve mai fermare il gioco */ }
+  try { if (!IS_TOUCH_DEVICE) aggiornaAiutoTasti(); } catch (e) { /* aiuto comandi: non blocca */ }
   try { teleAvvia(); } catch (e) { /* i dati non devono mai fermare il gioco */ }
   applicaImpostazioni();  // epoca (cavalli+fantini) e durata massima della mossa
   maybeOpenAdmin();       // ?admin → pannello amministratore (sopra tutto)
