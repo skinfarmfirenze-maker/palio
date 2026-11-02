@@ -5492,6 +5492,7 @@ function invitoGiocaDaPC() {
 }
 
 function beginEstrazione(tipoId, precomputed) {
+  segnaPalioIniziato();   // conta per il tetto dei 10 palii in 5 ore
   invitoGiocaDaPC();
   ensureAudio();
   if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
@@ -6009,6 +6010,39 @@ function paliataVeloceAttesaMs() {
   const elapsed = Date.now() - last;
   return elapsed < PALIATA_COOLDOWN_MS ? (PALIATA_COOLDOWN_MS - elapsed) : 0;   // ms rimanenti (0 = ok)
 }
+// ── TETTO: max 10 palii ogni 5 ore PER ACCOUNT (Simone, nov 2026). Vale per
+// Paliata veloce e Campagna insieme, oltre all'attesa fra un palio e l'altro.
+// Si conta sul dispositivo, per email dell'account: chi cambia dispositivo
+// riparte da zero (contarlo sul server costerebbe una chiamata a ogni palio).
+const LIMITE_PALII = 10;
+const LIMITE_FINESTRA_MS = 5 * 60 * 60 * 1000;
+function chiavePaliiRecenti() {
+  const acc = getAccount();
+  return "palio.paliiRecenti" + (acc && acc.email ? "_" + acc.email : "");
+}
+function paliiRecenti() {
+  try {
+    const t = JSON.parse(localStorage.getItem(chiavePaliiRecenti()) || "[]");
+    const da = Date.now() - LIMITE_FINESTRA_MS;
+    return Array.isArray(t) ? t.filter((x) => Number(x) > da) : [];
+  } catch (e) { return []; }
+}
+function limitePaliiAttesaMs() {
+  if (isMarioRossi(getAccount())) return 0;
+  const t = paliiRecenti();
+  if (t.length < LIMITE_PALII) return 0;
+  return Math.max(0, Math.min(...t) + LIMITE_FINESTRA_MS - Date.now());
+}
+function segnaPalioIniziato() {
+  if (isMarioRossi(getAccount())) return;
+  const t = paliiRecenti(); t.push(Date.now());
+  try { localStorage.setItem(chiavePaliiRecenti(), JSON.stringify(t.slice(-LIMITE_PALII))); } catch (e) { /* niente */ }
+}
+function testoAttesaLimite(ms) {
+  const min = Math.max(1, Math.ceil(ms / 60000));
+  const quando = min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`;
+  return `Hai corso ${LIMITE_PALII} palii nelle ultime 5 ore: è il massimo. Riprova fra ${quando}.`;
+}
 function segnaPaliataVeloce() {
   const acc = getAccount();
   if (isMarioRossi(acc)) return;
@@ -6057,6 +6091,8 @@ function openModeChooser() {
     };
     row.append(
       col("Paliata veloce", "Un singolo palio, subito in pista.", "#c22530", () => {
+        const tetto = limitePaliiAttesaMs();
+        if (tetto > 0) { toastMsg(testoAttesaLimite(tetto), 5600); teleEvento("attesa", "limite"); return; }
         const wait = paliataVeloceAttesaMs();
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
@@ -6073,6 +6109,8 @@ function openModeChooser() {
         closeCampaignOverlay(); openSelectScreen();
       }),
       col("Campagna", "Diventa Capitano: 8 palii in 4 anni.", "#2e6b46", () => {
+        const tetto = limitePaliiAttesaMs();
+        if (tetto > 0) { toastMsg(testoAttesaLimite(tetto), 5600); teleEvento("attesa", "limite"); return; }
         const wait = campagnaAttesaMs();
         if (wait > 0) {
           const min = Math.max(1, Math.ceil(wait / 60000));
@@ -6349,6 +6387,15 @@ function nextCampaignPalio() {
   const cmp = state.campaign;
   if (!cmp || !cmp.active) return;
   if (cmp.palioIndex >= campaignTotalPalii(cmp)) { showCampaignFinal(); return; }
+  // Tetto dei 10 palii in 5 ore: la Campagna resta salvata e si riprende dopo.
+  const tetto = limitePaliiAttesaMs();
+  if (tetto > 0) {
+    try { saveCampaignProgress(); } catch (e) { /* niente */ }
+    toastMsg(testoAttesaLimite(tetto) + " La Campagna è salvata.", 6400);
+    teleEvento("attesa", "limite");
+    openModeChooser();
+    return;
+  }
   cmp.recorded = false;
   cmp.corrupted = {};        // corruzioni azzerate a ogni nuovo palio
   cmp.corruptOrders = {};    // ordini dati ai fantini corrotti (per id): finalità scelte
