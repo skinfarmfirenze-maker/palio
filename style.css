@@ -1433,3 +1433,32 @@ body.touch-device .solo-telefono {
   display: block; margin: 4px auto 0; max-width: 34em;
   font-size: 12px; line-height: 1.3; color: #f0cb35; text-wrap: balance;
 }
+
+/* Energia in home: 10 fulmini = 10 palii ogni 5 ore. In alto a sinistra (a destra c'e' l'account). */
+#energiaHome {
+  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); left: calc(var(--margine-sicuro) + 12px);
+  z-index: 120; display: none; align-items: center; gap: 8px;
+  background: rgba(20, 14, 8, .72); border: 1px solid rgba(240, 203, 53, .35); border-radius: 999px;
+  padding: 6px 12px; color: #f3e7cf; font-size: 13px; backdrop-filter: blur(4px);
+  font-variant-numeric: tabular-nums;
+}
+#energiaHome .energia-fulmini { display: flex; gap: 1px; font-size: 13px; line-height: 1; }
+#energiaHome .fulmine { filter: drop-shadow(0 0 3px rgba(240, 203, 53, .55)); }
+#energiaHome .fulmine.vuoto { filter: grayscale(1) brightness(.45); opacity: .55; }
+#energiaHome .energia-conto { font-weight: 800; color: #f0cb35; }
+#energiaHome .energia-ricarica { opacity: .75; font-size: 12px; }
+/* Telefono: lo spazio in alto e' poco (c'e' il pannello) → solo "⚡ 7/10". */
+@media (max-height: 520px) and (orientation: landscape), (pointer: coarse) and (max-width: 900px) {
+  #energiaHome { padding: 4px 10px; gap: 4px; font-size: 13px; }
+  #energiaHome .energia-fulmini, #energiaHome .energia-ricarica { display: none; }
+  #energiaHome .energia-conto::before { content: "⚡ "; }
+  /* Il pannello della home parte SOTTO l'energia e il nome dell'account. */
+  #screenMenu { padding-top: calc(env(safe-area-inset-top, 0px) + 56px) !important; padding-bottom: 6px !important; align-items: flex-start !important; }
+  #screenMenu .lede { margin-bottom: 2px; }
+  #screenMenu .solo-telefono { margin-top: 2px; font-size: 11px; }
+  #screenMenu .controls-touch { margin-top: 6px !important; }
+  #screenMenu .lede { margin-top: 4px; }
+  /* Gioca e Albo affiancati: il pannello si accorcia e non tocca i tasti negli angoli. */
+  #screenMenu .menu-actions { flex-direction: row; justify-content: center; align-items: center; }
+  #screenMenu #alboButton { margin-top: 0; }
+}

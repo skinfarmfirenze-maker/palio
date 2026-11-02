@@ -3953,6 +3953,7 @@ function showScreen(name) {
   // mossa, gara, risultati, ecc. → name diverso da "menu") va nascosto.
   const chip = document.getElementById("accountChip");
   if (chip) chip.style.display = (name === "menu") ? "flex" : "none";
+  try { aggiornaEnergia(); } catch (e) { /* niente */ }
 }
 
 function setHudVisible(visible) {
@@ -6038,6 +6039,35 @@ function segnaPalioIniziato() {
   const t = paliiRecenti(); t.push(Date.now());
   try { localStorage.setItem(chiavePaliiRecenti(), JSON.stringify(t.slice(-LIMITE_PALII))); } catch (e) { /* niente */ }
 }
+// ENERGIA in home: i 10 palii delle 5 ore come 10 fulmini. Ne parte 1 a ogni
+// palio e ognuno torna 5 ore dopo essere stato usato.
+function aggiornaEnergia() {
+  let el = document.getElementById("energiaHome");
+  const menu = ui.screens && ui.screens.menu && ui.screens.menu.classList.contains("active");
+  if (!menu) { if (el) el.style.display = "none"; return; }
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "energiaHome";
+    el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+  }
+  const libero = isMarioRossi(getAccount());
+  const usati = libero ? [] : paliiRecenti();
+  const pieni = Math.max(0, LIMITE_PALII - usati.length);
+  let fulmini = "";
+  for (let i = 0; i < LIMITE_PALII; i++) fulmini += `<span class="fulmine${i < pieni ? "" : " vuoto"}">⚡</span>`;
+  let ricarica = "";
+  if (pieni < LIMITE_PALII && usati.length) {
+    const ms = Math.max(0, Math.min(...usati) + LIMITE_FINESTRA_MS - Date.now());
+    const min = Math.max(1, Math.ceil(ms / 60000));
+    ricarica = `<span class="energia-ricarica">+1 fra ${min >= 60 ? Math.floor(min / 60) + " h " + (min % 60) + " min" : min + " min"}</span>`;
+  }
+  el.innerHTML = `<span class="energia-fulmini" aria-hidden="true">${fulmini}</span>`
+    + `<span class="energia-conto">${pieni}/${LIMITE_PALII}</span>${ricarica}`;
+  el.title = `Energia: ${pieni} palii su ${LIMITE_PALII}. Ogni palio ne usa uno, che torna dopo 5 ore.`;
+  el.style.display = "flex";
+}
+setInterval(() => { try { aggiornaEnergia(); } catch (e) { /* niente */ } }, 30000);
 function testoAttesaLimite(ms) {
   const min = Math.max(1, Math.ceil(ms / 60000));
   const quando = min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`;
