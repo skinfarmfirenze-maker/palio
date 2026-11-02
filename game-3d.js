@@ -4560,6 +4560,9 @@ function loadVictoryAlbo() {
 }
 // Scarica l'albo GLOBALE dal server e lo rende la fonte di verità (mirror in
 // localStorage come cache/fallback). Silenzioso se offline o store non configurato.
+// L'Albo sul server e' in cache per 1 ora: richiederlo piu' spesso costa una
+// richiesta a Vercel per niente. Sul dispositivo si tiene 30 minuti.
+const ALBO_CACHE_MS = 30 * 60 * 1000;
 async function fetchGlobalAlbo(force) {
   // CACHE 45s per-device (anche fra reload): l'albo GET faceva 4 letture a OGNI
   // caricamento pagina; con i giocatori che rientrano in massa e i redeploy che
@@ -4568,7 +4571,7 @@ async function fetchGlobalAlbo(force) {
   try {
     if (!force) {
       const ts = parseInt(localStorage.getItem("palio.alboTs") || "0", 10) || 0;
-      if (Date.now() - ts < 45000) {
+      if (Date.now() - ts < ALBO_CACHE_MS) {
         const a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY));
         if (a && typeof a === "object") { globalAlbo = normalizeAlbo(a); return globalAlbo; }
       }
@@ -4617,13 +4620,23 @@ function alboVuoto(srv) {
 }
 function fetchAlboGlobale(cb, tentativi) {
   const n = tentativi || 0;
+  // Letto da meno di 30 minuti: si usa quello (il server non avrebbe niente di nuovo).
+  if (!n) {
+    try {
+      const ts = parseInt(localStorage.getItem("palio.alboTs") || "0", 10) || 0;
+      const a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY));
+      if (Date.now() - ts < ALBO_CACHE_MS && a && typeof a === "object" && !alboVuoto(a)) {
+        globalAlbo = normalizeAlbo(a); if (cb) cb(globalAlbo); return;
+      }
+    } catch (e) { /* si legge dal server */ }
+  }
   try {
     fetch(ALBO_API)
       .then((r) => (r.ok ? r.json() : null))
       .then((srv) => {
         if (srv && !srv._error && !srv._nostore && !alboVuoto(srv)) {
           globalAlbo = normalizeAlbo(srv);
-          try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); } catch (e) { /* niente */ }
+          try { localStorage.setItem(VICTORY_ALBO_KEY, JSON.stringify(globalAlbo)); localStorage.setItem("palio.alboTs", String(Date.now())); } catch (e) { /* niente */ }
           if (cb) cb(globalAlbo);
         } else if (n < 2) { setTimeout(() => fetchAlboGlobale(cb, n + 1), 260); }   // risposta vuota: ritenta poche volte
       })
