@@ -6127,20 +6127,28 @@ function paliataVeloceAttesaMs() {
 }
 // ── TETTO: max 10 palii ogni 5 ore PER ACCOUNT (Simone, nov 2026). Vale per
 // Paliata veloce e Campagna insieme, oltre all'attesa fra un palio e l'altro.
-// Si conta sul dispositivo, per email dell'account: chi cambia dispositivo
-// riparte da zero (contarlo sul server costerebbe una chiamata a ogni palio).
+// Si conta DUE volte sul dispositivo: per l'account e per il dispositivo stesso.
+// Vale il piu' stretto dei due, cosi' cambiare account sullo stesso telefono non
+// ricarica l'energia. (Contarlo sul server costerebbe una chiamata a ogni palio.)
 const LIMITE_PALII = 10;
 const LIMITE_FINESTRA_MS = 5 * 60 * 60 * 1000;
 function chiavePaliiRecenti() {
   const acc = getAccount();
   return "palio.paliiRecenti" + (acc && acc.email ? "_" + acc.email : "");
 }
-function paliiRecenti() {
+const CHIAVE_PALII_DISPOSITIVO = "palio.paliiRecenti.dispositivo";
+function paliiRecentiDi(chiave) {
   try {
-    const t = JSON.parse(localStorage.getItem(chiavePaliiRecenti()) || "[]");
+    const t = JSON.parse(localStorage.getItem(chiave) || "[]");
     const da = Date.now() - LIMITE_FINESTRA_MS;
     return Array.isArray(t) ? t.filter((x) => Number(x) > da) : [];
   } catch (e) { return []; }
+}
+// Il conto che pesa di piu' fra account e dispositivo.
+function paliiRecenti() {
+  const acc = paliiRecentiDi(chiavePaliiRecenti());
+  const disp = paliiRecentiDi(CHIAVE_PALII_DISPOSITIVO);
+  return disp.length > acc.length ? disp : acc;
 }
 function limitePaliiAttesaMs() {
   if (isMarioRossi(getAccount())) return 0;
@@ -6150,8 +6158,10 @@ function limitePaliiAttesaMs() {
 }
 function segnaPalioIniziato() {
   if (isMarioRossi(getAccount())) return;
-  const t = paliiRecenti(); t.push(Date.now());
-  try { localStorage.setItem(chiavePaliiRecenti(), JSON.stringify(t.slice(-LIMITE_PALII))); } catch (e) { /* niente */ }
+  [chiavePaliiRecenti(), CHIAVE_PALII_DISPOSITIVO].forEach((k) => {
+    const t = paliiRecentiDi(k); t.push(Date.now());
+    try { localStorage.setItem(k, JSON.stringify(t.slice(-LIMITE_PALII))); } catch (e) { /* niente */ }
+  });
 }
 // ENERGIA in home: i 10 palii delle 5 ore come 10 fulmini. Ne parte 1 a ogni
 // palio e ognuno torna 5 ore dopo essere stato usato.
@@ -16680,6 +16690,7 @@ function ensureAccountGate() {
     "troppi-tentativi": "Troppi tentativi: riprova fra un quarto d'ora.",
     "no-store": "Servizio account non disponibile. Riprova più tardi.",
     "iscrizioni-chiuse": SIGNUP_BLOCK_MSG,
+    "troppi-account-oggi": "Oggi sono stati creati troppi account a Siena, riprova domani.",
   }[code] || "Errore. Riprova.");
 
   const doLogin = () => {

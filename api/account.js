@@ -219,6 +219,7 @@ module.exports = async (req, res) => {
   }
 };
 
+const ACCOUNT_AL_GIORNO = 15;
 async function signup(body, res) {
   // Iscrizioni chiuse dal 23 agosto 2026 (demo riservata) e RIAPERTE con il gioco:
   // dal 25 ottobre 2026 alle 10:00 di Roma (= 09:00 UTC) chiunque puo' iscriversi.
@@ -248,6 +249,12 @@ async function signup(body, res) {
   // Email già registrata?
   const [{ result: exists }] = await redisPipeline([["SISMEMBER", ACCOUNTS_SET, email]]);
   if (Number(exists) === 1) { res.status(409).json({ error: "email-esiste" }); return; }
+
+  // TETTO GIORNALIERO (Simone, nov 2026): al massimo 15 account nuovi al giorno
+  // in tutto, giorno di Roma. Si conta solo chi ha passato tutti i controlli.
+  const kGiorno = `palio:signup:giorno:${giornoRoma(new Date())}`;
+  const [{ result: nGiorno }] = await redisPipeline([["INCR", kGiorno], ["EXPIRE", kGiorno, 2 * 86400]]);
+  if (Number(nGiorno) > ACCOUNT_AL_GIORNO) { res.status(429).json({ error: "troppi-account-oggi" }); return; }
 
   await segnaTentativo(kIscr);
   const salt = crypto.randomBytes(16).toString("hex");

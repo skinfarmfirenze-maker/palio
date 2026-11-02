@@ -13,6 +13,7 @@
 export const EN = {
   // ── Home e menu ───────────────────────────────────────────────────────────
   "Videogioco sul Palio di Siena": "A video game about the Palio di Siena",
+  "Oggi sono stati creati troppi account a Siena, riprova domani.": "Too many accounts were created in Siena today, try again tomorrow.",
   "💻 Gioca da PC": "💻 Play on a computer",
   "La grafica è migliore e puoi correre un palio ogni 20 minuti invece che ogni ora.": "The graphics are better and you can run a Palio every 20 minutes instead of every hour.",
   "Continua dal telefono": "Keep playing on the phone",
