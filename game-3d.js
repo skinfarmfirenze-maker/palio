@@ -971,8 +971,8 @@ function preparaStrettoie() {
   STRETTOIE = [
     [0.1, -0.09], [51.6, 1.85], [81.1, 3.0],
     [SM_IN - 40.0, 2.95], [SM_IN - 28.1, 3.65], [SM_IN - 18.3, 4.15], [SM_IN - 1.6, 4.70],
-    [SM_IN + 13.9, 1.50], [SM_OUT - 6.9, 1.15], [SM_OUT + 3.4, 4.15], [SM_OUT + 29.2, 7.95],
-    [CAS_IN - 18.0, 3.50], [CAS_IN, 3.20], [CAS_OUT + 0.5, 6.85], [CAS_OUT + 20.1, 3.25],
+    [SM_IN + 13.9, 1.50], [SM_OUT - 12.3, -1.70], [SM_OUT + 3.4, 4.15], [SM_OUT + 29.2, 7.95],
+    [CAS_IN - 18.0, 3.50], [CAS_IN, 3.20], [CAS_OUT + 0.5, 6.85], [CAS_OUT + 20.8, 4.70],
     [CAS_OUT + 30.7, 2.05], [CAS_OUT + 48.0, 0.05],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
@@ -1410,10 +1410,12 @@ function buildScene() {
     // nella piazza vera non ci sono blocchi di pietra davanti al colonnino, e così
     // la staccionata interna può stare accostata al bordo com'è nella realtà.
     [-1].forEach((side) => {
-      const larg = TRACK_HALF_WIDTH + 0.2 + (side < 0 ? mossaFlareAt(s.cum) : 0);
+      // Seguono il bordo VERO (svasatura meno strettoia) e la quota della pista:
+      // a distanza fissa finivano in pista dove si allarga e sotto i palchi dove stringe.
+      const larg = TRACK_HALF_WIDTH + 0.2 + (side < 0 ? mossaFlareAt(s.cum) - trackNarrowAt(s.cum) : 0);
       const p = s.point.clone().addScaledVector(s.normal, side * larg);
       const block = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.32, 0.32), materials.stone);
-      block.position.set(p.x, 0.18, p.z);
+      block.position.set(p.x, trackHeightAt(s.cum) + 0.18, p.z);
       block.rotation.y = s.yaw;
       block.castShadow = true;
       block.receiveShadow = true;
