@@ -12937,7 +12937,10 @@ function updatePlayer(dt, time) {
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
     // rischi la caduta (impatto dalla velocità laterale al momento del contatto).
-    riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge), "steccato");
+    // Solo se vai VERSO quel muro: se è la strettoia a venirti incontro mentre
+    // tu rientri, il bordo ti accompagna dentro senza farti cadere.
+    const versoMuro = player.lane > edge ? player.laneVelocity > 0 : player.laneVelocity < 0;
+    if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
     registraPuntoTraccia(player);   // la linea che tiene finisce nella traccia di questo palio
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
@@ -13343,6 +13346,13 @@ function updateAiHorse(horse, dt, time) {
   // Il limite ESTERNO segue gli imbuti (San Martino/cappella/Casato): dove i
   // palchi entrano, le AI vengono strizzate verso l'interno come il giocatore.
   const aiOuterLim = outerLimitAt(horse.progress);
+  // ── GUARDARE AVANTI: il muro non deve arrivare addosso ─────────────────────
+  // Con le strettoie del 7/11 il bordo esterno entra anche di 8 unità al secondo
+  // (uscita di San Martino) e di 4 nel Casato. Chi stava largo veniva spinto dal
+  // muro all'ultimo istante. Qui la corsia da raggiungere rispetta già il bordo
+  // dei prossimi metri: la Contrada si stacca dai palchi PRIMA che stringano.
+  let aiOuterAvanti = aiOuterLim;
+  for (let k = 2; k <= AI_STRETTOIA_AVANTI; k += 2) aiOuterAvanti = Math.min(aiOuterAvanti, outerLimitAt(horse.progress + k));
   // ── GOMITO A GOMITO ───────────────────────────────────────────────────────
   // Fra due Contrade affiancate non c'era NIENTE che le tenesse separate: il
   // codice dei sorpassi guarda solo chi sta DAVANTI, quindi due che puntavano
@@ -13366,7 +13376,7 @@ function updateAiHorse(horse, dt, time) {
     });
     if (spinta) horse.targetLane += clamp(spinta, -2.4, 2.4) * dt * 2.2;
   }
-  horse.targetLane = clamp(horse.targetLane, -aiOuterLim, AI_LANE_LIMIT);
+  horse.targetLane = clamp(horse.targetLane, -aiOuterAvanti, AI_LANE_LIMIT);
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
   let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
@@ -13412,8 +13422,12 @@ function updateAiHorse(horse, dt, time) {
   // e arrivata forte di lato (di solito per una spinta/tamponamento) → rischio
   // caduta. Il muro esterno è quello EFFETTIVO degli imbuti: è proprio lì
   // (San Martino coi materassi) che si picchia di più.
-  if ((horse.lane >= AI_LANE_LIMIT - 0.06 || horse.lane <= -(aiOuterLim - 0.06)) && Math.abs(horse.laneVelocity) > RAIL_HIT_MIN) {
-    riskFall(horse, fallImpactBordo(horse.laneVelocity, horse.lane >= AI_LANE_LIMIT - 0.06), "steccato");
+  // Conta solo se il cavallo va VERSO il muro: se è il muro a venirgli incontro
+  // (strettoia) e lui viene spostato verso l'interno, non è un urto.
+  const controColonnino = horse.lane >= AI_LANE_LIMIT - 0.06 && horse.laneVelocity > RAIL_HIT_MIN;
+  const controPalchi = horse.lane <= -(aiOuterLim - 0.06) && horse.laneVelocity < -RAIL_HIT_MIN;
+  if (controColonnino || controPalchi) {
+    riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino), "steccato");
   }
 
   // Nessun freno di curva nemmeno per le AI: il giocatore non ce l'ha piu', e
@@ -14688,6 +14702,7 @@ const INGRESSO_LARGO = 1.6;   // unita' verso l'esterno in avvicinamento (era 3.
 // La traiettoria che tiene Mario Rossi: largo prima, strettissimo all'apice, e
 // dal Casato si esce ancora stretti. Le fanno solo le Contrade col fantino bravo
 // in curva; le altre restano sulla linea rotonda qui sopra.
+const AI_STRETTOIA_AVANTI = 20;  // unita' di pista che le AI guardano avanti per le strettoie (~1 s)
 const AI_VELOCITA_LATERALE = 12;   // unita'/s di spostamento LATERALE (in avanti si va a 16-20).
                                    // Sotto i 12 non farebbero in tempo a chiudere la curva: il
                                    // taglio ingresso→apice e' di ~16 unita' e la curva dura ~1.3s.
