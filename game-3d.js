@@ -909,7 +909,10 @@ function mossaOuterEdge() {
   const L = track.length || 1;
   let minFlare = Infinity;
   for (let p = RINCORSA_START_PROGRESS - 5.0; p <= MOSSA_FRONT_LIMIT; p += 0.25) {
-    minFlare = Math.min(minFlare, mossaFlareAt(positiveMod(p, L)));
+    // la svasatura MENO la strettoia: dal 7/11 il profilo di Simone stringe anche
+    // nel tratto prima del canape, e la rincorsa non deve finire fuori dal manto.
+    const q = positiveMod(p, L);
+    minFlare = Math.min(minFlare, mossaFlareAt(q) - trackNarrowAt(q));
   }
   return TRACK_HALF_WIDTH + (Number.isFinite(minFlare) ? minFlare : 0);
 }
@@ -953,20 +956,38 @@ function computeTrackNarrows() {
   [SM_IN, SM_OUT] = spans[0];                          // prima curva incontrata correndo = San Martino
   [CAS_IN, CAS_OUT] = spans[spans.length - 1];         // ultima = Casato
   NARROW_READY = true;
+  preparaStrettoie();
+}
+// ── PROFILO DELLE STRETTOIE ──────────────────────────────────────────────────
+// Disegnato da Simone sull'editor «Strettoie del Campo» (7/11/2026). Ogni punto è
+// [posizione, strettoia]: la strettoia è quanto il bordo ESTERNO entra rispetto al
+// tufo pieno (23); negativa = allarga. Fra due punti consecutivi la curva è uno
+// smoothstep, a giro chiuso (l'ultimo punto si raccorda col primo scavalcando il via).
+// I punti vicino alle curve sono legati a SM_IN/SM_OUT/CAS_IN/CAS_OUT: se il
+// tracciato cambia, le strettoie lo seguono. Quelli sull'arco della Fonte Gaia sono
+// assoluti. Le costanti NARROW_* qui sopra restano: NARROW_RELEASE serve alla palizzata.
+let STRETTOIE = [];
+function preparaStrettoie() {
+  STRETTOIE = [
+    [0.1, -0.09], [51.6, 1.85], [81.1, 3.0],
+    [SM_IN - 40.0, 2.95], [SM_IN - 28.1, 3.65], [SM_IN - 18.3, 4.15], [SM_IN - 1.6, 4.70],
+    [SM_IN + 13.9, 1.50], [SM_OUT - 6.9, 1.15], [SM_OUT + 3.4, 4.15], [SM_OUT + 29.2, 7.95],
+    [CAS_IN - 18.0, 3.50], [CAS_IN, 3.20], [CAS_OUT + 0.5, 6.85], [CAS_OUT + 20.1, 3.25],
+    [CAS_OUT + 30.7, 2.05], [CAS_OUT + 48.0, 0.05],
+  ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
 function trackNarrowAt(cum) {
-  if (!NARROW_READY || !track.length || !Number.isFinite(cum)) return 0;
-  const d = positiveMod(cum, track.length);
-  const ss = (a, b, x) => { const t = clamp((x - a) / Math.max(0.001, b - a), 0, 1); return t * t * (3 - 2 * t); };
-  if (d < SM_IN - NARROW_FUNNEL_IN) return 0;
-  if (d < SM_IN) return NARROW_SM * ss(SM_IN - NARROW_FUNNEL_IN, SM_IN, d);
-  if (d < SM_OUT) return NARROW_SM;
-  if (d < SM_OUT + 14) return lerp(NARROW_SM, NARROW_CAPPELLA, ss(SM_OUT, SM_OUT + 14, d));   // la cappella
-  if (d < CAS_IN - 18) return NARROW_CAPPELLA;
-  if (d < CAS_IN) return lerp(NARROW_CAPPELLA, NARROW_CASATO, ss(CAS_IN - 18, CAS_IN, d));
-  if (d < CAS_OUT) return NARROW_CASATO;
-  if (d < CAS_OUT + NARROW_RELEASE) return NARROW_CASATO * (1 - ss(CAS_OUT, CAS_OUT + NARROW_RELEASE, d));
-  return 0;
+  if (!NARROW_READY || !track.length || !Number.isFinite(cum) || STRETTOIE.length < 2) return 0;
+  const L = track.length, P = STRETTOIE, n = P.length;
+  const d = positiveMod(cum, L);
+  let i = -1;
+  for (let k = 0; k < n; k += 1) { if (P[k][0] <= d) i = k; else break; }
+  const a = P[(i + n) % n], b = P[(i + 1) % n];
+  let ca = a[0], cb = b[0];
+  if (i === -1) ca -= L;            // prima del primo punto: il tratto che scavalca il via
+  else if (i === n - 1) cb += L;    // dopo l'ultimo punto: idem
+  const t = clamp((d - ca) / Math.max(0.001, cb - ca), 0, 1);
+  return a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
 }
 // Limite di corsia ESTERNO effettivo a una data progressione di gara.
 function outerLimitAt(progress) { return AI_LANE_LIMIT - trackNarrowAt(positiveMod(progress || 0, track.length || 1)); }
@@ -1018,7 +1039,7 @@ function addPalchi(...objs) {
 // della scenografia — palancata, colonnino — segue il tufo.
 const SCENA_PALCHI = new Set(["Palchi", "PubblicoPalchi", "PalchiComparse", "PubblicoComparse",
   "SteccatoEsterno", "VerrocchioMossiere", "PalcoCapitani", "PonteCapitani", "FollaInPiedi"]);
-const SCENA_PIETRA = new Set(["CappellaDiPiazza", "Entrone"]);
+const SCENA_PIETRA = new Set(["CappellaDiPiazza", "Entrone", "SagratoPalazzo"]);
 function setAllestimento(fase) {
   const tufo = fase !== "nuda";
   const palchi = fase === "palio";
@@ -1375,7 +1396,10 @@ function buildScene() {
         { cum: SM_IN - 3.5, larghezza: 6, impalcatura: true, figure: 6 },
         { cum: CAS_OUT + 25.5, larghezza: 6, impalcatura: false },
       ] : [],
-      palazzo: { cum: getStraightCenterP() },
+      // filo = la facciata del Palazzo Pubblico: il gruppo sta a TRACK_HALF_WIDTH + 3.2
+      // e il fronte sporge di 1.5 (misurato: 13.2 dall'asse). Cappella ed Entrone
+      // si ancorano li', non alla palancata: se la pista stringe non si staccano.
+      palazzo: { cum: getStraightCenterP(), filo: TRACK_HALF_WIDTH + 1.7 },
     }).gruppo;
     scene.add(state.scenaPiazza);
   } catch (e) { console.error("scenografia piazza:", e); }
@@ -17821,11 +17845,12 @@ function init() {
     precomputeTrack();
     // Ora che la pista esiste, verrocchino e corsia della rincorsa si spostano sul
     // nuovo bordo esterno svasato: è lo spazio che libera le poste.
+    // Prima si individuano le due curve per il profilo di larghezza variabile.
+    // DEVE stare PRIMA di buildScene (i ribbon e le barriere leggono trackNarrowAt)
+    // e PRIMA delle corsie qui sotto (mossaOuterEdge sottrae le strettoie).
+    computeTrackNarrows();
     VERROCCHINO_LANE = verrocchinoLane();
     RINCORSA_LANE = rincorsaLane();
-    // …e si individuano le due curve per il profilo di larghezza variabile.
-    // DEVE stare PRIMA di buildScene: i ribbon e le barriere leggono trackNarrowAt.
-    computeTrackNarrows();
     loadIdealLine();
     fetchGlobalAlbo();   // carica l'albo GLOBALE condiviso (async, non blocca il boot)
     fetchAcceptedHorses(() => fetchStatOverrides());   // cavalli accettati, poi gli override stat admin
