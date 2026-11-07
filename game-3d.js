@@ -1918,9 +1918,12 @@ function buildCurvePadding() {
   // una fila di scatole alte 1.02 con la fascia rossa, e fra un cuscino e l'altro
   // si vedevano le giunzioni. Al Casato materassi non ce ne sono, nella realta'
   // come qui: li' c'e' la palizzata, costruita qui sotto.
+  // Tratto (Simone): DOPO la curva, dall'uscita di San Martino verso il Palazzo,
+  // fino a prima del sagrato della Cappella. Solo grafica: le cadute usano tutto
+  // il muro esterno, non questo intervallo.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_IN - 1, a: SM_OUT + 17 }));
+      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 10, a: SM_OUT + 25 }));
     } catch (e) { console.error("materassi San Martino:", e); }
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
