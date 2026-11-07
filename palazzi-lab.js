@@ -335,14 +335,30 @@ export function costruisciPalazzi(ctx, opz = {}) {
   camp.forEach((s) => { maxLargo = Math.max(maxLargo, ctx.largoEsterno(s)); });
   const R = opz.filo ?? (maxLargo + (opz.fondoPalchi ?? 5.31) + (opz.gap ?? MISP.gap));
 
+  // Il filo segue la NORMALE della pista, come palancata e palchi (stazioni()).
+  // Prima era RADIALE (dal centro della piazza): su rettilinei e arco è la
+  // stessa cosa, ma nelle curve a 90° la radiale diverge dalla normale fino a
+  // ~35° e alla fine della curva fa un salto. Lì R valeva molto meno lungo la
+  // normale e il palazzo di San Martino, un blocco dritto da un capo all'altro
+  // della curva, stava a 10,8 dall'asse: DENTRO i palchi, e con la pista
+  // allargata dentro la pista. Lungo la normale l'anello è la curva parallela
+  // al bordo, liscia, sempre R oltre l'asse: oltre il fondo dei palchi ovunque.
   const staz = [];
   for (let i = 0; i <= camp.length; i += 1) {
     const s = camp[i % camp.length];
-    const f = ctx.fuori(s.point).clone();
+    const radiale = ctx.fuori(s.point);
+    const f = (s.normal && s.normal.isVector3)
+      ? s.normal.clone().multiplyScalar(s.normal.dot(radiale) >= 0 ? 1 : -1)
+      : radiale.clone();
     const p = s.point.clone().addScaledVector(f, R);
     p.y = ctx.quota(s);
     staz.push({ p, f, cum: s.cum, giro: (i % camp.length) / camp.length });
   }
+  // Direzione del filo a ogni stazione: serve per spezzare i palazzi in curva.
+  staz.forEach((st, i) => {
+    const pr = staz[Math.max(0, i - 1)].p, nx = staz[Math.min(staz.length - 1, i + 1)].p;
+    st.t = nx.clone().sub(pr).setY(0).normalize();
+  });
   let corsa = 0;
   staz.forEach((st, i) => { if (i > 0) corsa += st.p.distanceTo(staz[i - 1].p); st.s = corsa; });
 
@@ -385,14 +401,29 @@ export function costruisciPalazzi(ctx, opz = {}) {
             const g1 = b.giro >= a.giro ? b.giro : b.giro + 1;
             return gg >= a.giro && gg <= g1;
           })) piani = 3;
-          blocchi.push({
-            a, b, stile: e.stile, piani, larghezza,
-            tinta: 0.5, tintaHex: e.tinta,
-            tintaIdx: e.tinta,                       // chiave texture per-palazzo
-            campate: Math.max(2, Math.round(larghezza / 3.0)),
-            torre: !!e.torre && blocchi.every((q) => q.tintaIdx !== e.tinta || !q.torre),
-            sporgi: (ti % 3) * 0.7                   // arretramenti fissi, non casuali
-          });
+          // Un palazzo che gira una curva diventa più FACCE dritte che seguono il
+          // filo (una nuova ogni ~12° di svolta, mai più corte di 6): un blocco
+          // unico tirato da un capo all'altro della curva tagliava la corda e
+          // rientrava di ~9 unità a metà, dentro i palchi.
+          const tagli = [iA];
+          for (let k = iA + 1; k < iB; k += 1) {
+            const da = staz[tagli[tagli.length - 1]];
+            if (staz[k].s - da.s >= 6 && staz[iB].s - staz[k].s >= 6 && da.t.dot(staz[k].t) < Math.cos(THREE.MathUtils.degToRad(12))) tagli.push(k);
+          }
+          tagli.push(iB);
+          const torre = !!e.torre && blocchi.every((q) => q.tintaIdx !== e.tinta || !q.torre);
+          for (let k = 0; k < tagli.length - 1; k += 1) {
+            const fa = staz[tagli[k]], fb = staz[tagli[k + 1]];
+            const lf = fb.s - fa.s;
+            blocchi.push({
+              a: fa, b: fb, stile: e.stile, piani, larghezza: lf,
+              tinta: 0.5, tintaHex: e.tinta,
+              tintaIdx: e.tinta,                       // chiave texture per-palazzo
+              campate: Math.max(2, Math.round(lf / 3.0)),
+              torre: torre && k === 0,
+              sporgi: (ti % 3) * 0.7                   // arretramenti fissi, non casuali
+            });
+          }
         }
         iA = iB;
       }
