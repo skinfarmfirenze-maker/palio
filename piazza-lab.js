@@ -1697,7 +1697,9 @@ export function costruisciFollaCentro(ctx, opz = {}) {
 // PARETE di protezione chiara e imbottita, non un cordolo: sezioni verticali
 // cucite, quasi bianche, leggermente reclinate all'indietro, sporche di tufo
 // alla base. Sostituiscono il loop dei box in buildCurvePadding: il gioco
-// chiama costruisciMaterassi(ctx, { da: SM_IN − 1, a: SM_OUT + 17 }).
+// chiama costruisciMaterassi(ctx, { da: SM_OUT − 10, a: SM_OUT + 25 }).
+// Simone (7/11): «dopo la curva, verso il Palazzo» — partono all'uscita della
+// curva e finiscono poco prima del sagrato della Cappella (pal.tutto da −24.8).
 export function texturaMaterassi({ risoluzione = 512 } = {}) {
   // BIANCHI E CONTINUI (Simone): niente cuciture a vista, niente trapuntatura —
   // una parete chiara uniforme, solo un velo di ombreggiatura e il tufo in basso.
