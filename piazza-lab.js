@@ -106,6 +106,43 @@ function dentroVarchi(cum, varchi, giro) {
   });
 }
 
+// Nastro a terra fra due distanze dall'asse pista che possono variare lungo il
+// giro (`dentro`, `fuori`: funzioni del campione), a quota pista, solo fra `da` e
+// `a`. Serve dove una cosa segue la palancata e l'altra no (il Palazzo).
+function costruisciNastroFisso(ctx, { da, a, dentro, fuori, materiale, y = 0.02 }) {
+  const camp = ctx.campioni;
+  const giro = camp[camp.length - 1].cum + (camp[1].cum - camp[0].cum);
+  const pos = [], idx = [];
+  let prec = -1;
+  camp.forEach((s) => {
+    if (!dentroVarchi(s.cum, [{ da, a }], giro)) { prec = -1; return; }
+    const radiale = ctx.fuori(s.point);
+    const lat = (s.normal && s.normal.isVector3)
+      ? s.normal.clone().multiplyScalar(s.normal.dot(radiale) >= 0 ? 1 : -1)
+      : radiale.clone();
+    const q = ctx.quota(s) + y;
+    const p1 = s.point.clone().addScaledVector(lat, dentro(s));
+    const p2 = s.point.clone().addScaledVector(lat, Math.max(dentro(s) + 0.05, fuori(s)));
+    const k = pos.length / 3;
+    pos.push(p1.x, q, p1.z, p2.x, q, p2.z);
+    if (prec >= 0) idx.push(prec, prec + 1, k, k, prec + 1, k + 1);
+    prec = k;
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  // le facce devono guardare in alto: se l'avvolgimento le gira in giù, le inverto
+  const n = geo.getAttribute("normal");
+  if (n.count && n.getY(0) < 0) { for (let i = 0; i < idx.length; i += 3) [idx[i + 1], idx[i + 2]] = [idx[i + 2], idx[i + 1]]; geo.setIndex(idx); geo.computeVertexNormals(); }
+  geo.computeBoundingSphere();
+  const m = new THREE.Mesh(geo, materiale);
+  m.receiveShadow = true;
+  const g = new THREE.Group();
+  g.add(m);
+  return g;
+}
+
 function stazioni(ctx, { lato, extra = 0, passo = 3 }) {
   const camp = ctx.campioni;
   const out = [];
@@ -943,8 +980,21 @@ export function costruisciPiazza(ctx, opz = {}) {
       pubComparse.name = "PubblicoComparse";
       g.add(pubComparse);
     }
-    g.add(costruisciCappella(ctx, { cum: pal.cappella.centro, ...opz.cappella, ...cond }));
-    g.add(costruisciEntrone(ctx, { cum: pal.entrone.centro, ...opz.entrone, ...cond }));
+    const filo = opz.palazzo.filo;
+    g.add(costruisciCappella(ctx, { cum: pal.cappella.centro, filo, ...opz.cappella, ...cond }));
+    g.add(costruisciEntrone(ctx, { cum: pal.entrone.centro, filo, ...opz.entrone, ...cond }));
+    // SAGRATO DEL PALAZZO: il Palazzo è un edificio rigido, la palancata no. Dove
+    // la pista stringe davanti al Palazzo, fra palancata e facciata si apriva il
+    // terreno ribassato del gioco: qui si stende il selciato fino al muro.
+    if (filo != null) {
+      const sagrato = costruisciNastroFisso(ctx, {
+        da: pal.tutto.da - 1, a: pal.tutto.a + 1,
+        dentro: (s) => ctx.largoEsterno(s) + 0.1, fuori: () => filo + 0.6,
+        materiale: opaco({ color: 0x8b7a63, roughness: 1 })
+      });
+      sagrato.name = "SagratoPalazzo";
+      g.add(sagrato);
+    }
   }
 
   const varchiPalancata = [];
@@ -1033,9 +1083,10 @@ function riferimentoA(ctx, cum) {
   const fuori = (migliore.normal && migliore.normal.isVector3)
     ? migliore.normal.clone().multiplyScalar(migliore.normal.dot(radiale) >= 0 ? 1 : -1)
     : radiale.clone();
-  const bordo = migliore.point.clone().addScaledVector(fuori, ctx.largoEsterno(migliore));
+  const largo = ctx.largoEsterno(migliore);
+  const bordo = migliore.point.clone().addScaledVector(fuori, largo);
   bordo.y = ctx.quota(migliore);
-  return { bordo, fuori, lungo, yaw: Math.atan2(fuori.x, fuori.z), giro };
+  return { bordo, fuori, lungo, yaw: Math.atan2(fuori.x, fuori.z), giro, largo };
 }
 
 // ── LA CAPPELLA DI PIAZZA ────────────────────────────────────────────────────
@@ -1051,10 +1102,16 @@ export function costruisciCappella(ctx, opz = {}) {
   const buio = opaco({ color: 0x342a1c, roughness: 0.95 });   // ombra calda, non nero assoluto
 
   const L = opz.larghezza ?? 8.2;      // fronte lungo la pista
-  const D = opz.profondita ?? 2.6;     // sporgenza dalla facciata verso la pista
   const HP = opz.altezzaPilastri ?? 5.6;
   const HB = 0.9;                      // basamento
   const daBordo = opz.daBordo ?? 0.55; // il fronte sta appena dietro la palancata
+  // Sporgenza dalla facciata verso la pista. Con `filo` (distanza della facciata
+  // del Palazzo dall'asse pista) la cappella va dalla palancata fino al muro: se
+  // la pista stringe davanti alla Torre, la cappella si allunga verso la pista
+  // invece di staccarsi dal Palazzo lasciando un buco.
+  const D = opz.filo != null
+    ? Math.max(opz.profondita ?? 2.6, opz.filo - rif.largo - daBordo - 0.05)
+    : (opz.profondita ?? 2.6);
 
   const box = (w, h, d, mat, x, y, z) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -1078,6 +1135,13 @@ export function costruisciCappella(ctx, opz = {}) {
   });
   // Pilastri posteriori (contro la facciata) e volta bassa.
   [-L / 2 + 0.45, L / 2 - 0.45].forEach((x) => box(0.7, HP, 0.7, marmo, x, HB + HP / 2, -D + 0.35));
+  // Cappella profonda: pilastri anche sui fianchi, ogni ~3 unità, così non
+  // resta un tetto sospeso su due file di pilastri lontane.
+  const campate = Math.ceil((D - 0.8) / 3.2);
+  for (let k = 1; k < campate; k += 1) {
+    const z = -0.45 - k * (D - 0.8) / campate;
+    [-L / 2 + 0.45, L / 2 - 0.45].forEach((x) => box(0.7, HP, 0.7, marmo, x, HB + HP / 2, z));
+  }
   // Trabeazione + fregio + cornice aggettante.
   box(L + 0.5, 0.55, D + 0.5, marmo, 0, HB + HP + 0.27, -D / 2);
   box(L + 0.2, 0.35, D + 0.2, marmoOmbra, 0, HB + HP + 0.72, -D / 2);
@@ -1114,7 +1178,10 @@ export function costruisciEntrone(ctx, opz = {}) {
   // estratta spariva dietro l'arco (segnalato da Simone). Cima totale ≈ 5.3.
   const W = opz.larghezza ?? 3.4;      // luce del portale
   const H = opz.altezza ?? 3.3;        // all'imposta dell'arco
-  const daFacciata = opz.daFacciata ?? 3.2;   // il portale sta NEL filo della facciata
+  // Il portale sta NEL filo della facciata. Con `filo` (distanza della facciata
+  // dall'asse pista) lo si mette lì, appena sporgente, comunque stretta la pista;
+  // senza, resta a 3.2 dalla palancata come prima.
+  const daFacciata = opz.filo != null ? opz.filo - rif.largo - 0.3 : (opz.daFacciata ?? 3.2);
 
   const box = (w, h, d, mat, x, y, z, ry = 0) => {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
