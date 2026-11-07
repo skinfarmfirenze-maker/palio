@@ -999,8 +999,8 @@ function trackNarrowAt(cum) {
 let INTERNI = [];
 function preparaInterni() {
   INTERNI = [
-    [51.1, -0.05], [SM_IN - 50.1, 2.05], [SM_IN - 38.8, 1.65], [SM_IN - 24.6, 0.00],
-    [CAS_IN + 8.8, -0.50], [CAS_OUT + 25.8, 2.90], [CAS_OUT + 49.8, 0.35],
+    [51.1, -0.05], [SM_IN - 50.1, 2.05], [SM_IN - 38.8, 1.65], [SM_IN - 25.5, 1.50],
+    [CAS_IN + 8.8, -0.50], [CAS_OUT + 25.8, 2.90], [CAS_OUT + 51.4, 1.55],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
 function trackInnerAt(cum) {
@@ -9893,7 +9893,11 @@ function startMossa(fromTratta = false) {
   // stacco) e al primo scarto laterale si toccano, ma la fila COPRE il canape
   // invece di ammucchiarsi. A 1.40 stavano tutti stretti nella metà interna e
   // rimaneva mezza pista vuota; a 2.35 (ancora prima) non si sfioravano mai.
-  const lineLanes = [9.9, 8.0, 6.1, 4.2, 2.3, 0.4, -1.5, -3.4, -5.3];
+  // Ancorate al limite interno reale ai canapi (MOSSA_LANE_IN, dipende dal
+  // colonnino): con un array fisso la posta 0 finiva SUL colonnino, il clamp la
+  // tirava a MOSSA_LANE_IN e restava a 1.2 dalla posta 1 (< MOSSA_POST_GAP) →
+  // compenetrati e il solutore non si assestava mai.
+  const lineLanes = Array.from({ length: 9 }, (_, k) => MOSSA_LANE_IN - 0.3 - 1.9 * k);
   const rincorsaPost = state.horses.length - 1;
   // ── COPERTURA DELLE POSTE (shuffle bag): in ogni blocco di 20 palii corsi dal
   // giocatore gli capitano TUTTE e 10 le posizioni al canapo almeno una volta (la
