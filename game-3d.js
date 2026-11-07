@@ -7079,7 +7079,9 @@ function astaBid(id, amount) {
   if (A.rincorsaId && RIVALS[id] && RIVALS[id][A.rincorsaId]) { A.rifiuto = "rivale"; return false; }
   // #1: MOSSA GARANTITA a chi l'ha pagata pre-palio → per scavalcarlo serve > 2x la sua posta.
   const protegge = A.prepaidHolder && A.bestBidder === A.prepaidHolder && id !== A.prepaidHolder;
-  const soglia = protegge ? 2 * (A.prepaidAmount || 0) : A.best;
+  // Mai sotto l'ultima offerta: se il prepagante ha già rilanciato oltre il doppio
+  // della sua posta, la soglia vera è la sua offerta (era il bug 610 → «Offri 510»).
+  const soglia = protegge ? Math.max(A.best, 2 * (A.prepaidAmount || 0)) : A.best;
   // Il motivo del rifiuto va DICHIARATO: prima qualunque no diventava "non hai
   // abbastanza denari", anche quando i denari c'erano e il problema era un altro.
   if (amount <= soglia) { A.rifiuto = "bassa"; A.sogliaRifiuto = soglia; return false; }
@@ -7128,7 +7130,7 @@ function updateAstaAI(dt) {
   const tetto = decisa ? budget * 0.92 : Math.min(budget * 0.30, A.best + 40);
   // #1: se c'è un prepagante protetto, per scavalcarlo il rilancio minimo è > 2× la sua posta.
   const protegge = A.prepaidHolder && A.bestBidder === A.prepaidHolder && h.id !== A.prepaidHolder;
-  const next = (protegge ? 2 * (A.prepaidAmount || 0) : A.best) + ASTA_STEP;
+  const next = (protegge ? Math.max(A.best, 2 * (A.prepaidAmount || 0)) : A.best) + ASTA_STEP;
   if (next > tetto) return;
   if (!decisa && Math.random() > 0.30) return;
   if (astaBid(h.id, next) && A.bestBidder !== (state.campaign.contrada || {}).id && state.messageTimer <= 0) {
@@ -7255,7 +7257,7 @@ function refreshAstaUI() {
   const inTesta = A.bestBidder === mioId;
   const rivaleERincorsa = !!(A.rincorsaId && RIVALS[mioId] && RIVALS[mioId][A.rincorsaId]);   // #2: non compri la mossa dalla tua rivale
   const proteggePrepagante = !!(A.prepaidHolder && A.bestBidder === A.prepaidHolder && mioId !== A.prepaidHolder);   // #1
-  const floorBid = proteggePrepagante ? 2 * (A.prepaidAmount || 0) : A.best;   // soglia da scavalcare
+  const floorBid = proteggePrepagante ? Math.max(A.best, 2 * (A.prepaidAmount || 0)) : A.best;   // soglia da scavalcare, mai sotto l'ultima offerta
   const rilanci = [10, 50, 100];   // 3 tasti: +10 / +50 / +100, MOSTRATI come cifra assoluta
   const rivId = cmp.rival ? cmp.rival.id : null;
   const rivInGara = rivId && state.horses.some((h) => h.id === rivId && !h.isRincorsa);
@@ -7301,7 +7303,7 @@ function refreshAstaUI() {
     const A2 = state.asta;
     if (!A2 || A2.chiusa) return;
     const prot = !!(A2.prepaidHolder && A2.bestBidder === A2.prepaidHolder && mioId !== A2.prepaidHolder);
-    const base = prot ? 2 * (A2.prepaidAmount || 0) : A2.best;
+    const base = prot ? Math.max(A2.best, 2 * (A2.prepaidAmount || 0)) : A2.best;
     // Se nel frattempo la base e' salita, NON si offre alla cieca: si avverte, il
     // pannello si aggiorna e il giocatore vede la cifra nuova prima di decidere.
     if (base !== floorBid) {
