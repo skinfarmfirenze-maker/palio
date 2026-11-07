@@ -957,6 +957,7 @@ function computeTrackNarrows() {
   [CAS_IN, CAS_OUT] = spans[spans.length - 1];         // ultima = Casato
   NARROW_READY = true;
   preparaStrettoie();
+  preparaInterni();
 }
 // ── PROFILO DELLE STRETTOIE ──────────────────────────────────────────────────
 // Disegnato da Simone sull'editor «Strettoie del Campo» (7/11/2026). Ogni punto è
@@ -969,9 +970,10 @@ function computeTrackNarrows() {
 let STRETTOIE = [];
 function preparaStrettoie() {
   STRETTOIE = [
-    [0.1, -0.09], [51.6, 1.85], [81.1, 3.0],
+    [0.1, -0.09], [51.6, 1.85], [81.1, 3.00],
     [SM_IN - 40.0, 2.95], [SM_IN - 28.1, 3.65], [SM_IN - 18.3, 4.15], [SM_IN - 1.6, 4.70],
-    [SM_IN + 13.9, 1.50], [SM_OUT - 12.3, -1.70], [SM_OUT + 3.4, 4.15], [SM_OUT + 29.2, 7.95],
+    [SM_IN + 7.9, 2.60], [SM_IN + 13.0, 0.15], [SM_OUT - 12.3, -1.70], [SM_OUT - 6.6, 0.40],
+    [SM_OUT - 2.8, 2.35], [SM_OUT + 2.9, 4.05], [SM_OUT + 13.5, 5.80], [SM_OUT + 20.8, 7.55],
     [CAS_IN - 18.0, 3.50], [CAS_IN, 3.20], [CAS_OUT + 0.5, 6.85], [CAS_OUT + 20.8, 4.70],
     [CAS_OUT + 30.7, 2.05], [CAS_OUT + 48.0, 0.05],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
@@ -988,6 +990,42 @@ function trackNarrowAt(cum) {
   else if (i === n - 1) cb += L;    // dopo l'ultimo punto: idem
   const t = clamp((d - ca) / Math.max(0.001, cb - ca), 0, 1);
   return a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
+}
+// ── PROFILO DEL COLONNINO (bordo INTERNO) ────────────────────────────────────
+// Disegnato da Simone sull'editor (7/11/2026). Ogni punto è [posizione, rientro]:
+// rientro + = il colonnino entra in pista, − = arretra verso la piazza. Stessa
+// matematica delle strettoie (smoothstep fra punti consecutivi, a giro chiuso).
+// Bordo interno = TRACK_HALF_WIDTH − trackInnerAt(cum).
+let INTERNI = [];
+function preparaInterni() {
+  INTERNI = [
+    [51.1, -0.05], [SM_IN - 50.1, 2.05], [SM_IN - 38.8, 1.65], [SM_IN - 24.6, 0.00],
+    [CAS_IN + 8.8, -0.50], [CAS_OUT + 25.8, 2.90], [CAS_OUT + 49.8, 0.35],
+  ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
+}
+function trackInnerAt(cum) {
+  if (!NARROW_READY || !track.length || !Number.isFinite(cum) || INTERNI.length < 2) return 0;
+  const L = track.length, P = INTERNI, n = P.length;
+  const d = positiveMod(cum, L);
+  let i = -1;
+  for (let k = 0; k < n; k += 1) { if (P[k][0] <= d) i = k; else break; }
+  const a = P[(i + n) % n], b = P[(i + 1) % n];
+  let ca = a[0], cb = b[0];
+  if (i === -1) ca -= L;
+  else if (i === n - 1) cb += L;
+  const t = clamp((d - ca) / Math.max(0.001, cb - ca), 0, 1);
+  return a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
+}
+// Bordo interno della pista (offset positivo dall'asse) e limite di corsia INTERNO.
+function bordoInternoAt(cum) { return TRACK_HALF_WIDTH - trackInnerAt(cum); }
+function innerLimitAt(progress) { return AI_LANE_LIMIT - trackInnerAt(positiveMod(progress || 0, track.length || 1)); }
+// Alla mossa il colonnino entra un poco: i clamp della mossa usano questo limite.
+let MOSSA_LANE_IN = AI_LANE_LIMIT;
+function calcolaMossaLaneIn() {
+  let maxIn = 0;
+  // Solo dove stanno i cavalli fra i canapi: la rincorsa corre dal lato ESTERNO.
+  for (let p = MOSSA_BACK_LIMIT - 1.0; p <= MOSSA_FRONT_LIMIT + 1; p += 0.25) maxIn = Math.max(maxIn, trackInnerAt(positiveMod(p, track.length || 1)));
+  MOSSA_LANE_IN = AI_LANE_LIMIT - maxIn;
 }
 // Limite di corsia ESTERNO effettivo a una data progressione di gara.
 function outerLimitAt(progress) { return AI_LANE_LIMIT - trackNarrowAt(positiveMod(progress || 0, track.length || 1)); }
@@ -1316,7 +1354,7 @@ function buildScene() {
   // Il bordo ESTERNO segue la svasatura dei canapi E il profilo di larghezza
   // variabile (imbuti di San Martino/cappella/Casato); l'interno resta fisso.
   const bordoEsterno = (s) => -TRACK_HALF_WIDTH - mossaFlareAt(s.cum) + trackNarrowAt(s.cum);
-  addAllestimento(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, materials.tufo, 0.035));
+  addAllestimento(createRibbonMesh(bordoEsterno, (s) => bordoInternoAt(s.cum), materials.tufo, 0.035));
   // SPONDE dell'altimetria: raccordano la pista abbassata (San Martino → Casato)
   // al piano circostante, che resta a quota 0. Bordo vicino alla pista = quota
   // pista, bordo lontano = quota 0. Senza, il nastro abbassato finiva SOTTO la
@@ -1328,7 +1366,7 @@ function buildScene() {
   addAllestimento(createRibbonMesh((s) => bordoEsterno(s) - 1.5, (s) => bordoEsterno(s) - 0.25, materials.tufoDark, 0.025, hPista, hPista));
   // Striscia interna = SPONDA: dal bordo pista (quota pista) su fino alla
   // conchiglia del centro, che resta a quota 0 col suo pubblico.
-  addAllestimento(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, materials.tufoDark, 0.025, hPista, hZero));
+  addAllestimento(createRibbonMesh((s) => bordoInternoAt(s.cum) + 0.25, (s) => bordoInternoAt(s.cum) + 1.5, materials.tufoDark, 0.025, hPista, hZero));
   // LA PIAZZA SENZA IL PALIO: lo stesso anello, ma di mattoni come il resto del
   // Campo. Sta sotto al tufo e si vede solo quando il tufo non c'e' (estrazione).
   {
@@ -1337,9 +1375,9 @@ function buildScene() {
     const matPiazza = new THREE.MeshStandardMaterial({ map: mattoni, color: 0xa89684, roughness: 0.97, metalness: 0 });
     const nuda = new THREE.Group();
     nuda.name = "PiazzaSenzaPalio";
-    nuda.add(createRibbonMesh(bordoEsterno, TRACK_HALF_WIDTH, matPiazza, 0.030));
+    nuda.add(createRibbonMesh(bordoEsterno, (s) => bordoInternoAt(s.cum), matPiazza, 0.030));
     nuda.add(createRibbonMesh((s) => bordoEsterno(s) - 1.5, (s) => bordoEsterno(s) - 0.25, matPiazza, 0.022, hPista, hPista));
-    nuda.add(createRibbonMesh(TRACK_HALF_WIDTH + 0.25, TRACK_HALF_WIDTH + 1.5, matPiazza, 0.022, hPista, hZero));
+    nuda.add(createRibbonMesh((s) => bordoInternoAt(s.cum) + 0.25, (s) => bordoInternoAt(s.cum) + 1.5, matPiazza, 0.022, hPista, hZero));
     nuda.visible = false;
     scene.add(nuda);
     state.piazzaNuda = nuda;
@@ -1347,7 +1385,15 @@ function buildScene() {
   // #2 — BORDO DI TRAVERTINO BIANCO (colonnino): la fascia chiara di marmo che cinge
   // il Campo fra il tufo della pista e il lastricato, come nella realtà. Solo grafica.
   const travMat = new THREE.MeshStandardMaterial({ color: 0xe9e3d3, roughness: 0.68, metalness: 0 });
-  scene.add(createRibbonMesh(TRACK_HALF_WIDTH + 1.5, TRACK_HALF_WIDTH + 2.0, travMat, 0.045, hZero, hZero));
+  scene.add(createRibbonMesh((s) => bordoInternoAt(s.cum) + 1.5, (s) => bordoInternoAt(s.cum) + 2.0, travMat, 0.045, hZero, hZero));
+  // Dove il colonnino ENTRA in pista resta un vuoto fra il travertino e la
+  // conchiglia (che è fissa): lo riempie una fascia di mattoni come il Campo.
+  {
+    const mattoniRaccordo = makeHerringboneTexture();
+    mattoniRaccordo.repeat.set(24, 2);
+    const matRaccordo = new THREE.MeshStandardMaterial({ map: mattoniRaccordo, color: 0xa89684, roughness: 0.97, metalness: 0 });
+    scene.add(createRibbonMesh((s) => bordoInternoAt(s.cum) + 2.0, (s) => Math.max(bordoInternoAt(s.cum) + 2.0, TRACK_HALF_WIDTH + 2.3), matRaccordo, 0.006, hZero, hZero));
+  }
 
   buildTufoScuffs();
   buildCampoLandmarks();
@@ -1359,7 +1405,7 @@ function buildScene() {
     campioni: track.samples,
     fuori: campoOutward,
     largoEsterno: (s) => TRACK_HALF_WIDTH + mossaFlareAt(s.cum) - trackNarrowAt(s.cum),
-    largoInterno: () => TRACK_HALF_WIDTH,
+    largoInterno: (s) => bordoInternoAt(s.cum),
     quota: (s) => trackHeightAt(s.cum),
   };
   scenaCtxRef = scenaCtx;   // lo usa anche buildCurvePadding per la palizzata del Casato
@@ -1688,7 +1734,7 @@ function buildStartLine() {
   // varco fra la fune e lo steccato.
   const estCanape = -(TRACK_HALF_WIDTH + flareQui + 0.72);
   const a = s.point.clone().addScaledVector(s.normal, estCanape).addScaledVector(s.tangent, -0.8);
-  const b = s.point.clone().addScaledVector(s.normal, TRACK_HALF_WIDTH).addScaledVector(s.tangent, -0.8);
+  const b = s.point.clone().addScaledVector(s.normal, bordoInternoAt(s.cum)).addScaledVector(s.tangent, -0.8);
   state.canapi = new THREE.Group();
   // UN CANAPE SOLO, di canapa. Prima ce n'erano due, e il secondo era ROSSO:
   // davanti ai cavalli, in Piazza, di canape ce n'e' uno — e la fune e' di
@@ -1720,15 +1766,16 @@ function buildVerrocchino() {
   // sinistra del paletto (verso il bordo sinistro) resta aperto: è il varco da cui
   // la rincorsa si lancia.
   const ropeInner = back.point.clone().addScaledVector(back.normal, VERROCCHINO_LANE).setY(0.52);
-  const ropeRight = back.point.clone().addScaledVector(back.normal, TRACK_HALF_WIDTH).setY(0.52);
+  const bordoInBack = bordoInternoAt(back.cum);
+  const ropeRight = back.point.clone().addScaledVector(back.normal, bordoInBack).setY(0.52);
   group.add(makeCylinderBetween(ropeInner, ropeRight, 0.05, materials.rope));
   // Doppino a terra: attraversa tutta la pista e segna la linea del secondo canapo.
   const groundA = back.point.clone().addScaledVector(back.normal, -TRACK_HALF_WIDTH).setY(0.1);
-  const groundB = back.point.clone().addScaledVector(back.normal, TRACK_HALF_WIDTH).setY(0.1);
+  const groundB = back.point.clone().addScaledVector(back.normal, bordoInBack).setY(0.1);
   group.add(makeCylinderBetween(groundA, groundB, 0.022, materials.rope));
 
   // Palo del canapo posteriore al bordo destro.
-  const rightBase = back.point.clone().addScaledVector(back.normal, TRACK_HALF_WIDTH);
+  const rightBase = back.point.clone().addScaledVector(back.normal, bordoInBack);
   const rightPost = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.04, 8), materials.wood);
   rightPost.position.set(rightBase.x, 0.52, rightBase.z);
   rightPost.castShadow = true;
@@ -1890,7 +1937,7 @@ function buildCurveChevrons() {
     const s = track.samples[i];
     if (s.curve < 0.48) continue;
     const side = Math.sign(s.signedCurve || 1);
-    const p = s.point.clone().addScaledVector(s.normal, side * (TRACK_HALF_WIDTH + 1.18));
+    const p = s.point.clone().addScaledVector(s.normal, side > 0 ? bordoInternoAt(s.cum) + 1.18 : side * (TRACK_HALF_WIDTH + 1.18));
     const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.86, 0.08), materials.wood);
     post.position.set(p.x, 0.45, p.z);
     post.castShadow = true;
@@ -10266,7 +10313,7 @@ function startMossa(fromTratta = false) {
     // OFFSET FISSO equidistante sull'anello; la posizione la dà l'angolo base + offset.
     h.tondinoOffset = (k / ring.length) * TAU;
     const p = TONDINO_CP + Math.cos(h.tondinoOffset) * TONDINO_RP;
-    const l = TONDINO_CL + Math.sin(h.tondinoOffset) * TONDINO_RL;
+    const l = Math.min(TONDINO_CL + Math.sin(h.tondinoOffset) * TONDINO_RL, bordoInternoAt(positiveMod(p, track.length || 1)) - 1.6);
     h.mossaProgress = p;
     h.progress = p;
     h.mossaLane = l;
@@ -10506,7 +10553,10 @@ function tondinoBehavior(horse, dt, time) {
   horse.mossaProgress += (goalP - horse.mossaProgress) * ease;
   horse.mossaLane += (goalL - horse.mossaLane) * ease;
   horse.mossaProgress = clamp(horse.mossaProgress, TONDINO_CP - TONDINO_RP - 2, MOSSA_BACK_LIMIT - 0.5);
-  horse.mossaLane = clamp(horse.mossaLane, -TONDINO_LANE_MAX, TONDINO_LANE_MAX);
+  // Dietro i canapi il colonnino entra in pista (profilo del 7/11): l'ovale si
+  // schiaccia lì, per restare a 1.6 dal bordo interno vero.
+  const tondinoIn = Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(horse.mossaProgress, track.length || 1)) - 1.6);
+  horse.mossaLane = clamp(horse.mossaLane, -TONDINO_LANE_MAX, tondinoIn);
   horse.progress = horse.mossaProgress;
   horse.lane = horse.mossaLane;
   horse.laneVelocity = (horse.lane - prevLane) / Math.max(dt, 0.001);
@@ -11174,7 +11224,7 @@ function updateMossa(dt, time) {
       const along = mvX * s.tangent.x + mvZ * s.tangent.z;   // componente sulla pista
       const across = mvX * s.normal.x + mvZ * s.normal.z;    // componente laterale
       horse.mossaProgress = clamp(horse.mossaProgress + along, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
-      horse.mossaLane = clamp(horse.mossaLane + across, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+      horse.mossaLane = clamp(horse.mossaLane + across, -AI_LANE_LIMIT, MOSSA_LANE_IN);
       // ── ADDOSSO AL CANAPE: spingi in avanti (andatura ≥3) contro il canapo
       // frontale. A 3-4 ti FERMI (niente sgambettìo sul posto); a 5 lo FORZI →
       // "…ha forzato il canape" e le Contrade partono con MOSSA FALSA.
@@ -11211,7 +11261,7 @@ function updateMossa(dt, time) {
       // FARSI LARGO spingendo i vicini (la contesa pesata su mossa×difesa×potenza
       // decide chi cede), senza lo "scatto" di lato del vecchio 2.6.
       const lateral = (controls.latRight ? 1 : 0) - (controls.latLeft ? 1 : 0);
-      if (lateral) horse.mossaLane = clamp(horse.mossaLane + lateral * dt * 1.9, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+      if (lateral) horse.mossaLane = clamp(horse.mossaLane + lateral * dt * 1.9, -AI_LANE_LIMIT, MOSSA_LANE_IN);
     } else {
       // ── Comportamento per POSTA (0 = più interna … 8 = più esterna) ───────
       // Corsia: + = verso l'interno (centro campo), − = verso l'esterno (muro).
@@ -11487,7 +11537,7 @@ function updateMossa(dt, time) {
           progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
           // Verso il lato, ma DENTRO la pista: prima puntavano 3 corsie oltre il bordo
           // e si portavano dietro tutta la fila (sul telefono sparivano dall'inquadratura).
-          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.3 + agg * 0.1), -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.3 + agg * 0.1), -AI_LANE_LIMIT, MOSSA_LANE_IN);
           turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
         } else if (state.caosFront.indexOf(horse.id) !== -1) {
           // LE 6 ADDOSSO AI CANAPI: stringono da un lato e si accavallano fra loro,
@@ -11497,11 +11547,11 @@ function updateMossa(dt, time) {
           // sembrare tutte addossate su un lato. La fila resta larga come le poste.
           // Prima andavano TUTTE sul bordo (side*(limite-1.2)): sembrava che i
           // cavalli scappassero sul bordo della pista.
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, MOSSA_LANE_IN);
           progGoal = frontLine - Math.abs(Math.sin(time * 0.7 + horse.phase * 1.5)) * 0.5;   // appena uno scarto, restano sotto il canape
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 0.9;     // muso storto, ma non girate del tutto
         } else {
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, MOSSA_LANE_IN);
           const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
           progGoal = frontLine - back;                                   // vanno anche dietro
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
@@ -11599,7 +11649,7 @@ function updateMossa(dt, time) {
       // Rincorsa dell'obiettivo RALLENTATA (1.6→0.9 e 2.0→1.1): il cavallo si
       // sposta e si gira con calma. NON toccare invece followRate più sotto:
       // quella è la velocità di RECUPERO della posta dopo una spinta.
-      horse.mossaLane += (clamp(laneGoal, -AI_LANE_LIMIT, AI_LANE_LIMIT) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
+      horse.mossaLane += (clamp(laneGoal, -AI_LANE_LIMIT, MOSSA_LANE_IN) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
       // (La nerbata non arretra più: la spinta laterale è nel blocco NERBATO comune sotto.)
       horse.mossaProgress = clamp(progGoal, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
       horse.mossaTurn += (turnGoal - horse.mossaTurn) * clamp(dt * 1.1, 0, 1);
@@ -11643,7 +11693,7 @@ function updateMossa(dt, time) {
       const sd = horse.turnsSide || 1;
       horse.mossaTurn = sd * TURNS_ANGOLO;                        // muso girato fisso
       horse.mossaProgress = horse.turnsHoldProg ?? horse.mossaProgress;   // non avanza né arretra
-      horse.mossaLane = clamp(horse.mossaLane + sd * dt * 1.7, -AI_LANE_LIMIT, AI_LANE_LIMIT); // preme di lato
+      horse.mossaLane = clamp(horse.mossaLane + sd * dt * 1.7, -AI_LANE_LIMIT, MOSSA_LANE_IN); // preme di lato
       horse.shoveDir = sd;                                        // spinge il vicino da quel lato
       horse.canapeStop = false;
       horse.behaviorState = "turns";
@@ -11685,7 +11735,7 @@ function updateMossa(dt, time) {
     // vince durante i 4 secondi. NON arretra più (accumulava tutti i cavalli dietro).
     if ((horse.nerbLock || 0) > 0 && !horse.isRincorsa && horse.called && !horse.entering) {
       const nsd = horse.nerbSide || 1;
-      horse.mossaLane = clamp(horse.mossaLane + nsd * dt * 1.7, -AI_LANE_LIMIT, AI_LANE_LIMIT); // preme di lato
+      horse.mossaLane = clamp(horse.mossaLane + nsd * dt * 1.7, -AI_LANE_LIMIT, MOSSA_LANE_IN); // preme di lato
       horse.mossaTurn += (nsd * 0.4 - horse.mossaTurn) * clamp(dt * 3, 0, 1);    // muso un filo verso la spinta
       horse.shoveDir = nsd;                                                       // spinge il vicino da quel lato
       horse.canapeStop = false;
@@ -11704,7 +11754,7 @@ function updateMossa(dt, time) {
         const seg = Math.floor(((tt + off) % 21) / 7);      // 0=destra · 1=sinistra · 2=centro
         if (seg === 0 || seg === 1) {
           const sd = seg === 0 ? 1 : -1;
-          horse.mossaLane = clamp(horse.mossaLane + sd * dt * 2.3, -AI_LANE_LIMIT, AI_LANE_LIMIT);
+          horse.mossaLane = clamp(horse.mossaLane + sd * dt * 2.3, -AI_LANE_LIMIT, MOSSA_LANE_IN);
           horse.mossaTurn += (sd * 0.5 - horse.mossaTurn) * clamp(dt * 3, 0, 1);
           horse.shoveDir = sd;
         } else {
@@ -11880,7 +11930,7 @@ function updateRincorsa(rincorsa, dt) {
     const strafe = (c.latRight ? 1 : 0) - (c.latLeft ? 1 : 0);
     const outer = -(mossaOuterEdge() - 0.8);
     rincorsa.rincorsaSpeed = along / Math.max(dt, 0.001);   // il progress lo avanza il codice comune sotto
-    rincorsa.lane = clamp((rincorsa.lane ?? RINCORSA_LANE) + across + strafe * dt * 2.4, outer, AI_LANE_LIMIT);
+    rincorsa.lane = clamp((rincorsa.lane ?? RINCORSA_LANE) + across + strafe * dt * 2.4, outer, MOSSA_LANE_IN);
     rincorsa.mossaLane = rincorsa.lane;
     rincorsa.mossaSubState = along > 0.02 ? "charging" : "runup";
     rincorsa.humanSteered = true;             // la corsia non viene più forzata (vedi sotto)
@@ -12591,8 +12641,8 @@ function resolveMossaCrowd(dt) {
       // muoversi per davvero. La divisione resta la stessa — chi e' piu' forte
       // cede meno — quindi il 10% in piu' se lo prende chi spinge meglio.
       const tot = 2 * lPush * SPINTA_CANAPI;
-        back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), -AI_LANE_LIMIT, AI_LANE_LIMIT);
-        front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), -AI_LANE_LIMIT, AI_LANE_LIMIT);
+        back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
+        front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
         // Chi viene spinto NON rientra subito alla sua posta: marcalo così il ritorno
         // (§3) lo salta finché è in contatto → la spinta RESTA.
         if (backSpinge) { front.spintoTimer = 0.6; nervPress(front, back.id); }
@@ -12936,7 +12986,7 @@ function updatePlayer(dt, time) {
   // Il muro ESTERNO (lane negativa = palchi/materassi) segue il profilo di
   // larghezza: negli imbuti ti viene incontro. L'interno (colonnini) è fisso.
   // 10,9 come le AI: era rimasto a 10,85 quando abbiamo alzato il loro.
-  const edge = TRACK_HALF_WIDTH - 0.6;
+  const edge = TRACK_HALF_WIDTH - 0.6 - trackInnerAt(positiveMod(player.progress, track.length || 1));   // il colonnino segue il suo profilo
   const edgeOut = edge - trackNarrowAt(positiveMod(player.progress, track.length || 1));
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
@@ -13357,6 +13407,10 @@ function updateAiHorse(horse, dt, time) {
   // dei prossimi metri: la Contrada si stacca dai palchi PRIMA che stringano.
   let aiOuterAvanti = aiOuterLim;
   for (let k = 2; k <= AI_STRETTOIA_AVANTI; k += 2) aiOuterAvanti = Math.min(aiOuterAvanti, outerLimitAt(horse.progress + k));
+  // Stessa cosa per il colonnino, che dal 7/11 ha il suo profilo.
+  const aiInnerLim = innerLimitAt(horse.progress);
+  let aiInnerAvanti = aiInnerLim;
+  for (let k = 2; k <= AI_STRETTOIA_AVANTI; k += 2) aiInnerAvanti = Math.min(aiInnerAvanti, innerLimitAt(horse.progress + k));
   // ── GOMITO A GOMITO ───────────────────────────────────────────────────────
   // Fra due Contrade affiancate non c'era NIENTE che le tenesse separate: il
   // codice dei sorpassi guarda solo chi sta DAVANTI, quindi due che puntavano
@@ -13380,7 +13434,7 @@ function updateAiHorse(horse, dt, time) {
     });
     if (spinta) horse.targetLane += clamp(spinta, -2.4, 2.4) * dt * 2.2;
   }
-  horse.targetLane = clamp(horse.targetLane, -aiOuterAvanti, AI_LANE_LIMIT);
+  horse.targetLane = clamp(horse.targetLane, -aiOuterAvanti, aiInnerAvanti);
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
   let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
@@ -13395,7 +13449,7 @@ function updateAiHorse(horse, dt, time) {
   const versoDentro = iSignIn > 0 ? horse.targetLane > horse.lane : horse.targetLane < horse.lane;
   if (versoDentro) laneFollow = Math.max(laneFollow, 5.5);
   horse.lane += (horse.targetLane - horse.lane) * clamp(dt * laneFollow, 0, 1);
-  horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
+  horse.lane = clamp(horse.lane, -aiOuterLim, aiInnerLim);
   // ── NIENTE TETTO DI CURVA PER LE AI ───────────────────────────────────────
   // Qui c'era un tetto duro: piu' andavano forte, piu' erano OBBLIGATE larghe in
   // curva, secondo la stessa tabella di sterzata che al giocatore e' stata tolta.
@@ -13419,7 +13473,7 @@ function updateAiHorse(horse, dt, time) {
   {
     const passoMax = AI_VELOCITA_LATERALE * dt;
     horse.lane = clamp(horse.lane, previousLane - passoMax, previousLane + passoMax);
-    horse.lane = clamp(horse.lane, -aiOuterLim, AI_LANE_LIMIT);
+    horse.lane = clamp(horse.lane, -aiOuterLim, aiInnerLim);
   }
   horse.laneVelocity = clamp((horse.lane - previousLane) / Math.max(dt, 0.001), -PLAYER_LANE_VELOCITY_LIMIT, PLAYER_LANE_VELOCITY_LIMIT);
   // Urto sullo steccato/materassi anche per le AI: schiacciata al limite di corsia
@@ -13428,7 +13482,7 @@ function updateAiHorse(horse, dt, time) {
   // (San Martino coi materassi) che si picchia di più.
   // Conta solo se il cavallo va VERSO il muro: se è il muro a venirgli incontro
   // (strettoia) e lui viene spostato verso l'interno, non è un urto.
-  const controColonnino = horse.lane >= AI_LANE_LIMIT - 0.06 && horse.laneVelocity > RAIL_HIT_MIN;
+  const controColonnino = horse.lane >= aiInnerLim - 0.06 && horse.laneVelocity > RAIL_HIT_MIN;
   const controPalchi = horse.lane <= -(aiOuterLim - 0.06) && horse.laneVelocity < -RAIL_HIT_MIN;
   if (controColonnino || controPalchi) {
     riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino), "steccato");
@@ -13487,7 +13541,7 @@ function updateRace(dt, time) {
       if (horse.cadutoSlide > 0) {
         horse.progress += horse.cadutoSlide * dt;
         const limScivolo = outerLimitAt(horse.progress);
-        horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * 0.55, -limScivolo, AI_LANE_LIMIT);
+        horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * 0.55, -limScivolo, innerLimitAt(horse.progress));
         horse.targetLane = horse.lane;
       }
       horse.cadutoMult = 0;
@@ -14146,16 +14200,17 @@ function resolveHorsePair(A, B, dt, feedback) {
     // strettoia compatta il gruppo e le spinte diventano pericolose.
     const outLim = outerLimitAt(behind.progress);
     let side = Math.sign(behind.lane - front.lane) || (front.lane >= 0 ? -1 : 1);
-    const roomToward = side > 0 ? AI_LANE_LIMIT - behind.lane : behind.lane + outLim;
+    const inLim = innerLimitAt(behind.progress);
+    const roomToward = side > 0 ? inLim - behind.lane : behind.lane + outLim;
     if (roomToward < laneOverlap * 1.2) side = -side;  // lato chiuso: scarta dall'altra parte
     const bounce = behind.player ? 0.5 : 1.0;          // al giocatore non si strappa il controllo
-    behind.lane = clamp(behind.lane + side * laneOverlap * bounce, -outLim, AI_LANE_LIMIT);
+    behind.lane = clamp(behind.lane + side * laneOverlap * bounce, -outLim, inLim);
     // POTENZA = moltiplicatore di quanto SPOSTI le altre andandogli addosso: se
     // chi arriva da dietro ha più potenza di chi è davanti, lo scaccia di lato
     // (bounded ~½ corpo per non stravolgere la precedenza a chi è davanti).
     const shove = clamp(((behind.potenza || 3) - (front.potenza || 3)) * 0.16, 0, 0.5);
     if (shove > 0 && !front.player) {
-      front.lane = clamp(front.lane - side * laneOverlap * shove, -outerLimitAt(front.progress), AI_LANE_LIMIT);
+      front.lane = clamp(front.lane - side * laneOverlap * shove, -outerLimitAt(front.progress), innerLimitAt(front.progress));
     }
   }
 
@@ -17868,6 +17923,7 @@ function init() {
     // DEVE stare PRIMA di buildScene (i ribbon e le barriere leggono trackNarrowAt)
     // e PRIMA delle corsie qui sotto (mossaOuterEdge sottrae le strettoie).
     computeTrackNarrows();
+    calcolaMossaLaneIn();
     VERROCCHINO_LANE = verrocchinoLane();
     RINCORSA_LANE = rincorsaLane();
     loadIdealLine();
