@@ -271,6 +271,22 @@ const NERV_DECAY_TONDINO = 1;
 // aprirebbe una finestra di decadimento più grande del guadagno, e il nervosismo
 // non salirebbe MAI nemmeno sotto pressione continua.
 const NERV_CALM_AFTER_HIT = 2.0;
+// ── CAPRICCI DEL CAVALLO ai canapi (per CALMA) ──────────────────────────────
+// Ogni tanto il cavallo si ribella al fantino per CAPRICCIO_DURATA secondi: tira
+// indietro, di lato, in avanti, addosso al vicino — soprattutto INDIETRO E DI
+// LATO, cosi' ti porta fuori posizione. È una spinta LIEVE che si SOMMA ai
+// comandi: il giocatore (o il fantino AI) la può correggere. Pausa fra un
+// capriccio e l'altro, per calma (tabella di Simone):
+const CAPRICCIO_PAUSA = { 5: 15, 4: 12, 3: 10, 2: 10, 1: 5 };
+const CAPRICCIO_DURATA = 10;
+// Intensità: 1 = lieve; calma 2 e 1 «più accentuato».
+const CAPRICCIO_FORZA = { 5: 1, 4: 1, 3: 1, 2: 1.7, 1: 1.7 };
+const CAPRICCIO_V_INDIETRO = 0.30;   // u/s all'indietro (il giocatore corregge a 1.4)
+const CAPRICCIO_V_LATO = 0.35;       // u/s di lato (il giocatore corregge a 1.9 con Q/P)
+// Per le AI la posizione lungo la pista è riscritta a ogni frame dall'obiettivo:
+// il capriccio lì è uno SCARTO che il fantino recupera a questa velocità, con un tetto.
+const CAPRICCIO_RECUPERO_AI = 0.20;  // u/s
+const CAPRICCIO_SCARTO_MAX = 1.2;    // u indietro (×FORZA)
 // ── NERBATA: colpo di nerbo che danneggia il cavallo accanto. Stesse regole per
 // giocatore e AI. 5 colpi "in canna", ricarica come un caricatore.
 const NERBATE_MAX = 5;              // colpi massimi in canna
@@ -9997,6 +10013,7 @@ function startMossa(fromTratta = false) {
     horse.soldTo = null; horse.soldTargetId = null; horse.soldBurst = 0; horse.soldNext = 0;
     // Agitazione da nervosismo: stato pulito a ogni mossa.
     horse.nervBackState = null; horse.lastHitAt = -99; horse.lastTouchAt = -99; horse.hitStreak = null;
+    horse.capT = null; horse.capLeft = 0; horse.capMoveT = 0; horse.capVP = 0; horse.capVL = 0; horse.capOffP = 0; horse.capOffL = 0;   // capricci: da capo
     horse.launching = false;
     horse.launchDelayTimer = 0;
     horse.launchHeadingDev = 0;
@@ -11680,12 +11697,79 @@ function updateMossa(dt, time) {
       // Rincorsa dell'obiettivo RALLENTATA (1.6→0.9 e 2.0→1.1): il cavallo si
       // sposta e si gira con calma. NON toccare invece followRate più sotto:
       // quella è la velocità di RECUPERO della posta dopo una spinta.
-      horse.mossaLane += (clamp(laneGoal, -AI_LANE_LIMIT, MOSSA_LANE_IN) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
+      horse.mossaLane += (clamp(laneGoal + (horse.capOffL || 0), -AI_LANE_LIMIT, MOSSA_LANE_IN) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
       // (La nerbata non arretra più: la spinta laterale è nel blocco NERBATO comune sotto.)
-      horse.mossaProgress = clamp(progGoal, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
+      // CAPRICCIO: lo scarto all'indietro del cavallo che si ribella (calcolato
+      // nel blocco CAPRICCI comune; qui il fantino AI lo subisce e lo recupera).
+      horse.mossaProgress = clamp(progGoal + (horse.capOffP || 0), MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
       horse.mossaTurn += (turnGoal - horse.mossaTurn) * clamp(dt * 1.1, 0, 1);
       // Anche le AI dentro i canapi: massimo 60°, mai girate del tutto di traverso.
       horse.mossaTurn = clamp(horse.mossaTurn, -1.57, 1.57);
+    }
+
+    // ══ CAPRICCI (CALMA) ═══════════════════════════════════════════════════════
+    // Vale per AI e giocatore. Non durante l'ingresso, non per la rincorsa, non
+    // per chi è già uscito dietro agitato o si sta girando per TURNS (vincono loro).
+    if (!horse.isRincorsa && horse.called && !horse.entering && !horse.nervBackState && !horse.turnsSpin) {
+      const calma = clamp(Math.round(horse.calma || 3), 1, 5);
+      const forza = CAPRICCIO_FORZA[calma];
+      if (horse.capT == null) horse.capT = CAPRICCIO_PAUSA[calma] * (0.3 + Math.random() * 0.7);   // sfasati fra loro
+      if ((horse.capLeft || 0) > 0) {
+        horse.capLeft -= dt;
+        horse.capMoveT = (horse.capMoveT || 0) - dt;
+        if (horse.capMoveT <= 0) {
+          // Nuovo strattone ogni 1.5-2.5s. Calma 1: SEMPRE indietro verso sinistra
+          // (lane −). Gli altri: per lo più indietro di lato, a volte altro.
+          horse.capMoveT = 1.5 + Math.random();
+          let vp = -1, vl = Math.random() < 0.5 ? -1 : 1;
+          if (calma === 1) { vp = -1; vl = -1; }
+          else {
+            const r = Math.random();
+            if (r < 0.50) { /* indietro di lato */ }
+            else if (r < 0.65) { vl = 0; }                       // indietro dritto
+            else if (r < 0.75) { vp = 0.6; vl *= 0.5; }          // avanti
+            else if (r < 0.88) { vp = 0; }                       // di lato
+            else {                                               // addosso al vicino più prossimo
+              vp = 0;
+              let best = null, bd = 99;
+              state.horses.forEach((o) => {
+                if (o === horse || o.isRincorsa || !o.called || o.entering) return;
+                const d = Math.abs((o.mossaLane ?? 0) - horse.mossaLane);
+                if (Math.abs((o.mossaProgress ?? 0) - horse.mossaProgress) < 2 && d < bd) { bd = d; best = o; }
+              });
+              if (best) vl = Math.sign((best.mossaLane ?? 0) - horse.mossaLane) || vl;
+            }
+          }
+          horse.capVP = vp * CAPRICCIO_V_INDIETRO * forza;
+          horse.capVL = vl * CAPRICCIO_V_LATO * forza;
+        }
+        if (horse.capLeft <= 0) {
+          horse.capLeft = 0; horse.capVP = 0; horse.capVL = 0;
+          horse.capT = CAPRICCIO_PAUSA[calma];
+        }
+      } else {
+        horse.capT -= dt;
+        if (horse.capT <= 0) { horse.capLeft = CAPRICCIO_DURATA; horse.capMoveT = 0; }
+      }
+      // Di lato: si somma alla corsia (persistente). L'AI la riprende da sola
+      // inseguendo il suo obiettivo; il giocatore la corregge con Q/P.
+      if (isHuman(horse)) {
+        if (horse.capVL) horse.mossaLane = clamp(horse.mossaLane + horse.capVL * dt, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+        if (horse.capVP) horse.mossaProgress = clamp(horse.mossaProgress + horse.capVP * dt, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
+      } else {
+        // AI: scarti (indietro e di lato) che crescono col capriccio e che il
+        // fantino recupera piano. Li applica il ramo AI sugli obiettivi
+        // («progGoal + capOffP», «laneGoal + capOffL»): applicati qui direttamente,
+        // l'inseguimento dell'obiettivo li cancellava all'istante.
+        const recupera = (v) => v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
+        const max = CAPRICCIO_SCARTO_MAX * forza;
+        horse.capOffP = clamp(recupera((horse.capOffP || 0) + (horse.capVP || 0) * dt), -max, 0.6);
+        horse.capOffL = clamp(recupera((horse.capOffL || 0) + (horse.capVL || 0) * dt), -max, max);
+      }
+    } else {
+      horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0;
+      if (horse.capOffP) horse.capOffP += Math.sign(-horse.capOffP) * Math.min(Math.abs(horse.capOffP), CAPRICCIO_RECUPERO_AI * 3 * dt);
+      if (horse.capOffL) horse.capOffL += Math.sign(-horse.capOffL) * Math.min(Math.abs(horse.capOffL), CAPRICCIO_RECUPERO_AI * 3 * dt);
     }
 
     // ══ TURNS ══════════════════════════════════════════════════════════════════
