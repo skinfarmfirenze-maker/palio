@@ -10426,6 +10426,7 @@ function startMossa(fromTratta = false) {
   const rTF = Math.random();
   state.tuttiFuoriMax = rTF < 0.4 ? 1 : (rTF < 0.75 ? 2 : 3);
   state.forcedStartWindow = 0;                     // finestra forzata dei 5 minuti
+  state.rincorsaFiancaAt = null; state.fiancaPremutoA = null;   // FIANCA: da capo
   state.chaosTimer = 0;
   state.recallCount = 0;                            // richiami singoli (2° → tutti fuori)
   state.recallCd = 0;
@@ -10492,33 +10493,51 @@ function startMossa(fromTratta = false) {
 // aggiudica la mossa pagando (4s), −6% per la rivale bloccata (3s). Il timer viene
 // scalato in updateRace; il moltiplicatore entra nelle righe di velocità.
 // ══════════════════════════════════════════════════════════════════════════════
-// FIANCA (tasto F, Simone 9/11): lo SCATTINO per partire davanti agli altri.
-// Alle Contrade al canape: premuto al momento giusto del via dà uno scatto. Se non
-// lo premi (o lo premi fuori tempo) il cavallo parte comunque, normale.
-//  · da FIANCA_PERFETTA s prima del via fino al via        → fiancata perfetta
-//  · da FIANCA_ANTICIPO s prima fino a FIANCA_PERFETTA     → in anticipo (meno)
-//  · entro FIANCA_RITARDO s DOPO il via                     → in ritardo (buona)
-// Una pressione «a vuoto» (il via non arriva entro FIANCA_ANTICIPO) si può
-// ripetere dopo FIANCA_RIPROVA s: niente scatto gratis premendo a raffica.
+// FIANCA (tasto F) — regole di Simone 9/11 (seconda versione).
+// Il tempo conta DAL MOMENTO IN CUI LA RINCORSA FIANCA (state.rincorsaFiancaAt):
+//  · F premuto PRIMA che la rincorsa fianchi        → hai FORZATO IL CANAPE
+//    (come andare a 5: mossa falsa)
+//  · F premuto e il via non arriva entro 1,5 s       → hai forzato il canape
+//  · F fra 1,5 s e 0,5 s prima del via               → +5% per 2 s
+//  · F fra 0,5 s prima e 0,3 s dopo il via           → +6% per 2,5 s
+//  · mai, o più tardi                                → parte normale
+// POSIZIONE: lo scatto spinge avanti; chi è messo troppo dietro, con un cavallo
+// subito davanti, gli scatta ADDOSSO: niente guadagno, lo urta e si scompone.
 // Alla RINCORSA il tasto fa fiancare: andatura al massimo, si lancia.
-// Le AI fiancano secondo la MOSSA del fantino (FIANCA_AI: probabilità di
-// perfetta e di anticipo; il resto parte normale).
+// Le AI premono secondo la MOSSA del fantino (FIANCA_AI).
 // ══════════════════════════════════════════════════════════════════════════════
-const FIANCA_PERFETTA = 0.35, FIANCA_ANTICIPO = 1.0, FIANCA_RITARDO = 0.5, FIANCA_RIPROVA = 2.0;
+const FIANCA_FORZA = 1.5, FIANCA_BUONA_PRIMA = 0.5, FIANCA_BUONA_DOPO = 0.3;
 const FIANCA_EFFETTO = {
-  perfetta: { mult: 1.12, durata: 2.5, msg: "Fiancata perfetta!" },
+  perfetta: { mult: 1.06, durata: 2.5, msg: "Fiancata perfetta!" },
   anticipo: { mult: 1.05, durata: 2.0, msg: "Fiancata in anticipo" },
-  ritardo:  { mult: 1.07, durata: 2.0, msg: "Fiancata in ritardo" },
 };
-const FIANCA_AI = {   // mossa del fantino → [probabilità perfetta, probabilità anticipo]
-  1: [0.10, 0.25], 2: [0.20, 0.30], 3: [0.35, 0.30], 4: [0.50, 0.25], 5: [0.65, 0.20],
+// mossa del fantino → [perfetta, anticipo, forza il canape] (il resto parte normale)
+const FIANCA_AI = {
+  1: [0.10, 0.25, 0.03], 2: [0.20, 0.30, 0.02], 3: [0.35, 0.30, 0.01], 4: [0.50, 0.25, 0.005], 5: [0.65, 0.20, 0],
 };
+// Il cavallo che gli sta subito davanti (stessa linea, a meno di un corpo), se c'è.
+function cavalloDavanti(h) {
+  let best = null, gap = Infinity;
+  state.horses.forEach((o) => {
+    if (o === h || o.isRincorsa || o.finishTime) return;
+    const dP = (o.progress || 0) - (h.progress || 0);
+    if (dP > 0.2 && dP < 3.4 && Math.abs((o.lane || 0) - (h.lane || 0)) < 1.1 && dP < gap) { best = o; gap = dP; }
+  });
+  return best;
+}
 function applicaFianca(h, tipo) {
   const e = FIANCA_EFFETTO[tipo]; if (!h || !e) return;
+  // TROPPO DIETRO: lo scatto finisce addosso a chi ha davanti.
+  const davanti = cavalloDavanti(h);
+  if (davanti) {
+    h.fiancaTipo = "addosso"; h.fiancaMult = 0.96; h.fiancaTimer = 1.2;
+    davanti.nervousnessCurrent = Math.min(1, (davanti.nervousnessCurrent || 0) + 0.12);
+    if (isHuman(h)) showMessage(`Scattato addosso a ${nomeConArticolo(davanti)}`, 1.6, "danger");
+    return;
+  }
   h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
-  if (tipo !== "anticipo") {
+  if (tipo === "perfetta") {
     h.launchDelayTimer = 0; h.launching = false;   // nessun ritardo di reazione
-    // e niente «partenza lenta»: parte a velocità piena (il resto lo fa fiancaMult)
     if (isHuman(h)) {
       const piena = andaturaToSpeed(h.effectiveSpeedLevel || 3);
       if (h.travelSpeed < piena) h.travelSpeed = piena;
@@ -10529,33 +10548,65 @@ function applicaFianca(h, tipo) {
   if (h.startQuality && h.startQuality !== "closed") h.startQuality = "clean";
   if (isHuman(h)) showMessage(e.msg, 1.6, "good");
 }
+// Forzare il canape con la F: stessa mossa falsa del 5 (stessi freni).
+function fiancaForzaCanape(h) {
+  if (state.mode !== "mossa" || state.falseStartRunning) return false;
+  if ((state.mossaFalsaCooldown || 0) > 0 || (state.forcedCanapeCd || 0) > 0) return false;
+  state.forcedCanapeCd = 6;
+  state.fiancaPremutoA = null;
+  triggerMossaFalsa(`${nomeConArticolo(h)} ha forzato il canape`);
+  return true;
+}
 function premiFianca() {
   const p = getPlayer(); if (!p || p.finishTime) return;
   const now = performance.now() / 1000;
   if (state.mode === "mossa") {
+    if (state.falseStartRunning) return;
     if (p.isRincorsa) {            // la rincorsa FIANCA: si lancia
       p.speedSetting = ANDATURA_MAX;
+      if (state.rincorsaFiancaAt == null) state.rincorsaFiancaAt = now;
       showMessage("Fianca!", 0.9, "good");
       return;
     }
-    if (state.fiancaPremutoA != null && now - state.fiancaPremutoA < FIANCA_RIPROVA) return;
-    state.fiancaPremutoA = now;
+    if (!p.called || p.entering || state.fiancaPremutoA != null) return;
+    if (giocatoreHaLaMossa()) return;   // la mossa è tua: parti a 5, non si forza
+    // Prima che la rincorsa fianchi: canape forzato.
+    if (state.rincorsaFiancaAt == null) { fiancaForzaCanape(p); return; }
+    state.fiancaPremutoA = now;    // se il via non arriva entro 1,5 s → forzato (vedi fiancaControlla)
     return;
   }
-  if (state.mode === "race" && !p.fiancaTipo && !p.isRincorsa && (state.raceClock || 0) <= FIANCA_RITARDO) {
-    applicaFianca(p, "ritardo");
+  if (state.mode === "race" && !p.fiancaTipo && !p.isRincorsa && state.viaA != null
+      && now - state.viaA <= FIANCA_BUONA_DOPO) {
+    applicaFianca(p, "perfetta");
   }
+}
+// A ogni frame della mossa: F premuto e via che non arriva → canape forzato.
+function fiancaControlla() {
+  if (state.mode !== "mossa" || state.fiancaPremutoA == null) return;
+  const p = getPlayer();
+  if (performance.now() / 1000 - state.fiancaPremutoA > FIANCA_FORZA) {
+    if (!p || !fiancaForzaCanape(p)) state.fiancaPremutoA = null;   // freni attivi: pressione persa
+  }
+}
+// Quando la rincorsa fianca: le AI che «scappano» prima forzano il canape.
+function fiancaRincorsaPartita() {
+  state.horses.forEach((h) => {
+    if (h.isRincorsa || isHuman(h) || !h.called || h.entering) return;
+    const forza = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)][2];
+    if ((state.falseStartCount || 0) < 2 && Math.random() < forza * 0.5) fiancaForzaCanape(h);
+  });
 }
 // Al VIA: la fiancata del giocatore (premuta prima) e quelle delle AI.
 function fiancaAlVia() {
   const now = performance.now() / 1000;
+  state.viaA = now;
   state.horses.forEach((h) => { h.fiancaTipo = null; h.fiancaMult = 1; h.fiancaTimer = 0; });
   state.horses.forEach((h) => {
     if (h.isRincorsa) return;
     if (isHuman(h)) {
       const d = state.fiancaPremutoA != null ? now - state.fiancaPremutoA : Infinity;
-      if (d >= 0 && d <= FIANCA_PERFETTA) applicaFianca(h, "perfetta");
-      else if (d > FIANCA_PERFETTA && d <= FIANCA_ANTICIPO) applicaFianca(h, "anticipo");
+      if (d >= 0 && d <= FIANCA_BUONA_PRIMA) applicaFianca(h, "perfetta");
+      else if (d > FIANCA_BUONA_PRIMA && d <= FIANCA_FORZA) applicaFianca(h, "anticipo");
       return;
     }
     const [perf, ant] = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)];
@@ -10564,6 +10615,7 @@ function fiancaAlVia() {
     else if (r < perf + ant) applicaFianca(h, "anticipo");
   });
   state.fiancaPremutoA = null;
+  state.rincorsaFiancaAt = null;
 }
 function mossaSpeedMod(horse) {
   const fianca = (horse && horse.fiancaTimer > 0) ? (horse.fiancaMult || 1) : 1;
@@ -10769,6 +10821,19 @@ function releaseRace() {
 // ancora schierati. Comportamento differenziato per indole del cavallo
 // (nervosismo) e del fantino (aggressività/controllo): cerchi, mezze curve,
 // scarti, avvicinamenti e allontanamenti dai canapi. Niente caos arcade.
+// Il punto dell'ovale di ciascun cavallo, GIÀ dentro i limiti del tondino
+// (progress e bordo interno). Lo usano sia il giro sia il rientro: prima il
+// rientro puntava all'ovale «grezzo», e appena arrivato il giro lo rimetteva nei
+// limiti di colpo — il cavallo saltava di lato fino a 3,4 (visto in prova dopo un
+// «tutti fuori», Simone 9/11).
+function tondinoGoal(horse, time) {
+  const wobble = Math.sin(time * 1.1 + horse.phase) * 0.025;
+  const angle = (state.tondinoBase || 0) + (horse.tondinoOffset || 0) + wobble;
+  const goalP = clamp(TONDINO_CP + Math.cos(angle) * TONDINO_RP, TONDINO_CP - TONDINO_RP - 2, MOSSA_BACK_LIMIT - 0.5);
+  const tondinoIn = Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(goalP, track.length || 1)) - 1.6);
+  const goalL = clamp(TONDINO_CL + Math.sin(angle) * TONDINO_RL, -TONDINO_LANE_MAX, tondinoIn);
+  return { goalP, goalL };
+}
 function tondinoBehavior(horse, dt, time) {
   const prevLane = horse.lane;
   const prevProg = horse.mossaProgress;
@@ -10777,18 +10842,18 @@ function tondinoBehavior(horse, dt, time) {
   // l'anello; ogni cavallo tiene il suo OFFSET FISSO → restano SEMPRE equidistanti,
   // niente ammucchiamenti né accelerazioni impazzite. Solo una lieve oscillazione
   // nervosa attorno alla propria posizione (fissa: il nervosismo non c'entra più).
-  const wobble = Math.sin(time * 1.1 + horse.phase) * 0.025;
-  const angle = (state.tondinoBase || 0) + (horse.tondinoOffset || 0) + wobble;
-  const goalP = TONDINO_CP + Math.cos(angle) * TONDINO_RP;
-  const goalL = TONDINO_CL + Math.sin(angle) * TONDINO_RL;
+  const { goalP, goalL } = tondinoGoal(horse, time);
   const ease = clamp(dt * 2.2, 0, 1);
   horse.mossaProgress += (goalP - horse.mossaProgress) * ease;
   horse.mossaLane += (goalL - horse.mossaLane) * ease;
-  horse.mossaProgress = clamp(horse.mossaProgress, TONDINO_CP - TONDINO_RP - 2, MOSSA_BACK_LIMIT - 0.5);
-  // Dietro i canapi il colonnino entra in pista (profilo del 7/11): l'ovale si
-  // schiaccia lì, per restare a 1.6 dal bordo interno vero.
+  // Limiti del tondino (dietro i canapi il colonnino entra in pista, profilo del
+  // 7/11): chi ne è fuori ci RIENTRA camminando (max 3 u/s), mai a scatto.
+  const passoMax = 3.0 * dt;
+  const pMax = MOSSA_BACK_LIMIT - 0.5;
+  if (horse.mossaProgress > pMax) horse.mossaProgress = Math.max(pMax, horse.mossaProgress - passoMax);
   const tondinoIn = Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(horse.mossaProgress, track.length || 1)) - 1.6);
-  horse.mossaLane = clamp(horse.mossaLane, -TONDINO_LANE_MAX, tondinoIn);
+  if (horse.mossaLane > tondinoIn) horse.mossaLane = Math.max(tondinoIn, horse.mossaLane - passoMax);
+  if (horse.mossaLane < -TONDINO_LANE_MAX) horse.mossaLane = Math.min(-TONDINO_LANE_MAX, horse.mossaLane + passoMax);
   horse.progress = horse.mossaProgress;
   horse.lane = horse.mossaLane;
   horse.laneVelocity = (horse.lane - prevLane) / Math.max(dt, 0.001);
@@ -10812,10 +10877,7 @@ function tondinoBehavior(horse, dt, time) {
 // cammina a velocità costante in linea retta, attraversando pulito il canapo.
 function returnToTondinoStep(horse, dt, time) {
   const prevLane = horse.lane, prevProg = horse.mossaProgress;
-  const wobble = Math.sin(time * 1.1 + horse.phase) * 0.025;
-  const angle = (state.tondinoBase || 0) + (horse.tondinoOffset || 0) + wobble;
-  const goalP = TONDINO_CP + Math.cos(angle) * TONDINO_RP;
-  const goalL = TONDINO_CL + Math.sin(angle) * TONDINO_RL;
+  const { goalP, goalL } = tondinoGoal(horse, time);
   const dl = goalL - horse.mossaLane, dp = goalP - horse.mossaProgress;
   const dist = Math.hypot(dl, dp) || 1;
   const walkV = 6.0;                                   // u/sec: torna spedito, in linea retta
@@ -10962,6 +11024,7 @@ function triggerMossaFalsa(motivo) {
   if (state.falseStartRunning || state.mode !== "mossa") return;   // una alla volta
   state.falseStartCount = (state.falseStartCount || 0) + 1;
   state.falseStartRunning = true;
+  state.rincorsaFiancaAt = null; state.fiancaPremutoA = null;   // FIANCA: si riparte da capo
   state.falseStartTimer = 0;
   state.falseStartMortarettoDone = false;
   state.falsaMotivo = motivo || motivoMossaFalsa();
@@ -11070,6 +11133,8 @@ function resetMossaAfterFalsa() {
     rincorsa.progress = RINCORSA_START_PROGRESS;
     rincorsa.mossaProgress = RINCORSA_START_PROGRESS;
     rincorsa.prevProgress = RINCORSA_START_PROGRESS;
+    // Anche la corsia nello stesso taglio: prima tornava al suo posto un fotogramma dopo.
+    if (!isHuman(rincorsa)) { rincorsa.lane = rincorsa.mossaLane = rincorsa.aiLaneR ?? RINCORSA_LANE; }
     rincorsa.wantsToEnter = false;
     rincorsa.rincorsaSpeed = 0;
     rincorsa.mossaSubState = "runup";
@@ -11099,6 +11164,9 @@ function triggerTuttiFuori() {
     h.blockingRincorsa = false;
     h.nervBackState = null; h.nervBackTimer = 0;   // tutti fuori: si azzera anche l'agitazione
     h.returningToTondino = true;   // torna DIRETTO all'ovale, senza incastrarsi sul canapo posteriore
+    // Si parte da DOVE SI VEDE il cavallo: lo scarto del capriccio stava nel corpo
+    // ma non nella posta, e il rientro lo cancellava di colpo (scatto di 0,6).
+    h.mossaProgress = h.progress; h.mossaLane = h.lane; h.capOffP = 0; h.capOffL = 0;
     nervEvento(h, 0.08);
   });
   state.callIndex = 0;                   // richiama dalla prima, ORDINE IDENTICO
@@ -11215,6 +11283,7 @@ function updateMossa(dt, time) {
     });
   }
   state.forcedCanapeCd = Math.max(0, (state.forcedCanapeCd || 0) - dt);   // cooldown "forza il canape"
+  fiancaControlla();   // F premuto e via che non arriva entro 1,5 s → canape forzato
   // FALSO AVVIO in corso: galoppo breve → mortaretto → ritorno al tondino. Blocca
   // ogni altra logica di mossa finché la sequenza dei 4s non è finita.
   // (la mossa falsa non passa piu' di qui: gira in modalita' corsa, vedi il dispatch)
@@ -12530,9 +12599,21 @@ function updateRincorsa(rincorsa, dt) {
     // Scarto di progress da restituire prima di azzerarlo, se no resta indietro.
     const pPrima = rincorsa.capOffP || 0;
     capriccioStop(rincorsa, dt);
-    if (!isHuman(rincorsa)) rincorsa.progress += (rincorsa.capOffP || 0) - pPrima;
+    if (!isHuman(rincorsa)) {
+      rincorsa.progress += (rincorsa.capOffP || 0) - pPrima;
+      // Lo scarto di lato rientra PIANO anche mentre carica: prima spariva di colpo
+      // al lancio e la rincorsa saltava di lato fino a 1,2 (visto 0,8 in prova).
+      if (rincorsa.capOffL) rincorsa.lane = clamp(rincorsa.lane + rincorsa.capOffL, -(mossaOuterEdge() - 0.8), MOSSA_LANE_IN);
+    }
   }
   if (isHuman(rincorsa)) rincorsa.mossaLane = rincorsa.lane;
+  // FIANCA: l'istante in cui la rincorsa si lancia (AI che decide di entrare, o
+  // rincorsa umana che carica forte) apre la finestra della F per chi è ai canapi.
+  if (state.mode === "mossa" && state.rincorsaFiancaAt == null && !state.falseStartRunning
+      && (rincorsa.wantsToEnter || (isHuman(rincorsa) && (rincorsa.rincorsaSpeed || 0) > 3))) {
+    state.rincorsaFiancaAt = performance.now() / 1000;
+    fiancaRincorsaPartita();
+  }
   rincorsa.laneVelocity = 0;
   rincorsa.speedLevel = clamp(Math.abs(rincorsa.rincorsaSpeed), 0, 9);
 }
