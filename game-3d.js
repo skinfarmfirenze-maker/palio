@@ -8099,7 +8099,7 @@ const ROSTER_CAVALLI = {
   "Remorex":            { epoca: "moderno", tier: "bombolone", stamina: 97,  potenza: 4, calma: 2, turns: 3, scossoStamina: 10 },
   "Urbino":             { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 1, calma: 4, turns: 5 },
   "Zio Frac":           { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 1, calma: 4, turns: 3, scossoStamina: -15 },
-  "Preziosa Penelope":  { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 4 },
+  "Preziosa Penelope":  { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 5, calma: 3, turns: 4 },
   "Galleggiante":       { epoca: "storico", tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
   "Anda e Bola":        { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 3, calma: 5, turns: 5 },
   "Reo Confesso":       { epoca: "moderno", tier: "bono",      stamina: 84,  potenza: 2, calma: 3, turns: 4 },
@@ -16842,6 +16842,7 @@ const STAT_FINAL_HORSE = {
   // Simone 9/11: potenza 1 (spingono poco ai canapi).
   "Fedora Saura": { potenza: 1 }, "Comancio": { potenza: 1 }, "Oppio": { potenza: 1 },
   "Urbino": { potenza: 1 }, "Gaudenzia": { potenza: 1 },
+  "Preziosa Penelope": { potenza: 5 },   // Simone 9/11
 };
 function applyFinalCorrections() {
   Object.keys(STAT_FINAL_JOCKEY).forEach((nick) => {
