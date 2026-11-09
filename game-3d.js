@@ -1983,14 +1983,14 @@ function buildCurvePadding() {
       // Dal punto 8 al punto 10 del bordo esterno (regola di Simone), ma MAI
       // davanti alla Cappella: coprirebbero le basi dei pilastri (v203: il punto
       // 10 è passato a 218.7, la Cappella comincia a 211.65).
-      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 11.8, a: Math.min(SM_OUT + 35.2, getStraightCenterP() - 25.0) }));
+      addAllestimento(costruisciMaterassi(scenaCtxRef, trattoMaterassi()));
     } catch (e) { console.error("materassi San Martino:", e); }
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
   // colmo e puntoni sul retro) al posto del vecchio loop di assi.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 11.9, a: CAS_OUT + 17.9 }));
+      addAllestimento(costruisciPalizzata(scenaCtxRef, trattoSteccatoAlto()));
     } catch (e) { console.error("palizzata Casato:", e); }
   }
 }
@@ -13528,7 +13528,7 @@ function updatePlayer(dt, time) {
     // Solo se vai VERSO quel muro: se è la strettoia a venirti incontro mentre
     // tu rientri, il bordo ti accompagna dentro senza farti cadere.
     const versoMuro = player.lane > edge ? player.laneVelocity > 0 : player.laneVelocity < 0;
-    if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge), "steccato");
+    if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge, player.progress), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
     // pista ogni volta che sfioravi lo steccato: è il "colonnino che ti tira verso
@@ -14020,10 +14020,10 @@ function updateAiHorse(horse, dt, time) {
   // (San Martino coi materassi) che si picchia di più.
   // Conta solo se il cavallo va VERSO il muro: se è il muro a venirgli incontro
   // (strettoia) e lui viene spostato verso l'interno, non è un urto.
-  const controColonnino = horse.lane >= aiInnerLim - 0.06 && horse.laneVelocity > RAIL_HIT_MIN;
+  const controColonnino = horse.lane >= aiInnerLim - 0.06 && horse.laneVelocity > RAIL_HIT_MIN_COLONNINI * 0.75;
   const controPalchi = horse.lane <= -(aiOuterLim - 0.06) && horse.laneVelocity < -RAIL_HIT_MIN;
   if (controColonnino || controPalchi) {
-    riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino), "steccato");
+    riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino, horse.progress), "steccato");
   }
 
   // Nessun freno di curva nemmeno per le AI: il giocatore non ce l'ha piu', e
@@ -14384,8 +14384,35 @@ function fallImpactFromLaneVel(v) { return clamp((Math.abs(v) - RAIL_HIT_MIN) / 
 // striscio non succede niente, e si rischia solo arrivandoci DI TRAVERSO e forte.
 // Sui materassi esterni invece la soglia resta bassa: li' sbatterci e' un errore.
 const RAIL_HIT_MIN_CORDA = 5.5;
-function fallImpactBordo(v, controColonnino) {
-  const min = controColonnino ? RAIL_HIT_MIN_CORDA : RAIL_HIT_MIN;
+// COME SI CADE NEL PALIO VERO (Simone 9/11): battendo sui COLONNINI di San Martino
+// e del Casato, o contro lo steccato alto e i materassi. Di rado perché uno ti
+// viene addosso. Quindi: ai colonnini delle due curve brutte si cade con un urto
+// medio (non solo di traverso e fortissimo); altrove la corda resta sicura; il
+// tamponamento pesa un quarto.
+const RAIL_HIT_MIN_COLONNINI = 3.4;
+const TAMPONAMENTO_PESO = 0.25;
+function aiColonniniCattivi(prog) {
+  if (!NARROW_READY) return false;
+  const q = positiveMod(prog || 0, track.length || 1);
+  return (q > SM_IN - 3 && q < SM_OUT + 3) || (q > CAS_IN - 3 && q < CAS_OUT + 3);
+}
+// I tratti dei materassi (San Martino) e dello steccato alto (Casato): gli stessi
+// con cui si disegnano, così se si spostano le cadute li seguono (idea chat Grafica).
+function trattoMaterassi() { return { da: SM_OUT - 11.8, a: Math.min(SM_OUT + 35.2, getStraightCenterP() - 25.0) }; }
+function trattoSteccatoAlto() { return { da: CAS_IN + 11.9, a: CAS_OUT + 17.9 }; }
+function controMaterassiOSteccatoAlto(prog) {
+  if (!NARROW_READY) return true;
+  const q = positiveMod(prog || 0, track.length || 1);
+  const m = trattoMaterassi(), c = trattoSteccatoAlto();
+  return (q > m.da && q < m.a) || (q > c.da && q < c.a);
+}
+function fallImpactBordo(v, controColonnino, prog) {
+  // Interno: colonnini di San Martino e Casato pericolosi, altrove la corda è sicura.
+  // Esterno: si cade sui materassi e sullo steccato alto; contro i palchi altrove no
+  // (solo di traverso e fortissimo, come la corda).
+  const min = controColonnino
+    ? (aiColonniniCattivi(prog) ? RAIL_HIT_MIN_COLONNINI : RAIL_HIT_MIN_CORDA)
+    : (controMaterassiOSteccatoAlto(prog) ? RAIL_HIT_MIN : RAIL_HIT_MIN_CORDA);
   return clamp((Math.abs(v) - min) / RAIL_HIT_RANGE, 0, 1);
 }
 function riskFall(horse, impact, cause, other) {
@@ -14396,7 +14423,6 @@ function riskFall(horse, impact, cause, other) {
   const imp = clamp(impact, 0, 1);
   if (imp < 0.12) return;                                         // urto troppo lieve: niente rischio
   horse.fallCd = 1.6;
-  const curva = (horse.jockey && horse.jockey.curva) || 3;
   const base = clamp(0.9 - (curva - 1) * 0.2, 0.1, 0.9);          // curva 1→.9 · 3→.5 · 5→.1
   if (Math.random() < base * imp) {
     // IMPATTO GRANDE in curva: può andare giù ANCHE IL CAVALLO, non solo il
@@ -14772,7 +14798,16 @@ function resolveHorsePair(A, B, dt, feedback) {
         const frontV = (front.progress - (front.prevProgress ?? front.progress)) / Math.max(dt, 0.001);
         const closing = behindV - frontV;
         // Il davanti è la seconda Contrada coinvolta: serve alla maxi-caduta.
-        if (closing > 2.5) riskFall(behind, clamp((closing - 2.5) / 5, 0, 1), "tamponamento", front);
+        if (closing > 2.5) {
+          // Nella calca di San Martino e del Casato l'urto ti butta contro il
+          // colonnino o lo steccato: è quella la caduta vera, e pesa per intero.
+          // Altrove l'urto da dietro fa cadere di rado. (Le AI in quelle curve
+          // stanno a 3-5 dal colonnino: legarlo alla distanza dal bordo, provato,
+          // non scattava mai.)
+          const contro = aiColonniniCattivi(behind.progress);
+          const imp = clamp((closing - 2.5) / 5, 0, 1) * (contro ? 1 : TAMPONAMENTO_PESO);
+          riskFall(behind, imp, contro ? "colonnino" : "tamponamento", front);
+        }
       }
       behind.progress = front.progress - minGap;
       held = true;
@@ -18683,3 +18718,4 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
