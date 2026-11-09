@@ -977,7 +977,7 @@ function computeTrackNarrows() {
 }
 // ── PROFILO DELLE STRETTOIE ──────────────────────────────────────────────────
 // Disegnato da Simone sull'editor «Strettoie del Campo» (7/11/2026, ridisegnato
-// il 9/11 con la mossa larga all'esterno: v183; San Martino rifatto: v203). Ogni punto è
+// il 9/11 con la mossa larga all'esterno: v183; San Martino rifatto: v203; Casato: v232). Ogni punto è
 // [posizione, strettoia]: la strettoia è quanto il bordo ESTERNO entra rispetto al
 // tufo pieno (23); negativa = allarga. Fra due punti consecutivi la curva è uno
 // smoothstep, a giro chiuso (l'ultimo punto si raccorda col primo scavalcando il via).
@@ -990,8 +990,8 @@ function preparaStrettoie() {
     [0.9, -3.10], [5.5, -3.40], [52.6, 4.50], [81.1, 3.00],
     [SM_IN - 41.1, 1.15], [SM_IN - 26.0, 2.35], [SM_IN + 2.9, 5.75],
     [SM_OUT - 11.8, 5.45], [SM_OUT + 6.0, 3.10], [SM_OUT + 35.2, 8.40],
-    [CAS_IN - 17.7, 3.05], [CAS_IN - 5.3, 3.70], [CAS_OUT + 0.6, 8.15],
-    [CAS_OUT + 42.0, -2.05], [CAS_OUT + 47.6, -3.00],
+    [CAS_IN - 17.7, 3.05], [CAS_IN - 2.9, 4.60], [CAS_IN + 8.6, 6.60], [CAS_OUT - 1.0, 7.85],
+    [CAS_OUT + 33.8, -1.05], [CAS_OUT + 41.4, -2.45], [CAS_OUT + 47.6, -3.00],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
 function trackNarrowAt(cum) {
@@ -1008,7 +1008,7 @@ function trackNarrowAt(cum) {
   return a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
 }
 // ── PROFILO DEL COLONNINO (bordo INTERNO) ────────────────────────────────────
-// Disegnato da Simone sull'editor (7/11/2026, ridisegnato il 9/11: v183, v203). Ogni punto è [posizione, rientro]:
+// Disegnato da Simone sull'editor (7/11/2026, ridisegnato il 9/11: v183, v203, v232). Ogni punto è [posizione, rientro]:
 // rientro + = il colonnino entra in pista, − = arretra verso la piazza. Stessa
 // matematica delle strettoie (smoothstep fra punti consecutivi, a giro chiuso).
 // Bordo interno = TRACK_HALF_WIDTH − trackInnerAt(cum).
@@ -1016,7 +1016,7 @@ let INTERNI = [];
 function preparaInterni() {
   INTERNI = [
     [5.3, 4.80], [51.1, -0.05], [SM_IN - 49.3, 5.30], [SM_IN - 29.6, 4.35],
-    [SM_IN + 10.8, 3.10], [SM_OUT - 0.4, 1.50], [CAS_OUT - 2.1, -1.35], [CAS_OUT + 28.6, 1.95],
+    [SM_IN + 10.8, 3.10], [SM_OUT - 0.4, 1.50], [CAS_OUT - 8.8, 1.85], [CAS_OUT + 29.6, 4.75],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
 function trackInnerAt(cum) {
