@@ -10960,6 +10960,69 @@ function triggerTuttiFuori() {
 // quindi isHuman ≡ player (comportamento invariato).
 function isHuman(horse) { return !!(horse && horse.player && !horse.autopilot); }
 
+// ── CAPRICCI: orologio e scelta dello strattone (cavalli ai canapi E rincorsa) ──
+// Aggiorna capT/capLeft/capVP/capVL/capTurn del cavallo; chi lo chiama decide come
+// applicare lo strattone. Restituisce la forza (per i tetti degli scarti).
+function capriccioTick(horse, dt) {
+  const calma = clamp(Math.round(horse.calma || 3), 1, 5);
+  const forza = CAPRICCIO_FORZA[calma];
+  if (horse.capT == null) horse.capT = CAPRICCIO_PAUSA[calma] * (0.3 + Math.random() * 0.7);   // sfasati fra loro
+  if ((horse.capLeft || 0) > 0) {
+    horse.capLeft -= dt;
+    horse.capMoveT = (horse.capMoveT || 0) - dt;
+    if (horse.capMoveT <= 0) {
+      // Nuovo strattone ogni 1.5-2.5s. Calma 1: SEMPRE indietro verso sinistra
+      // (lane −). Gli altri: per lo più indietro di lato, a volte altro.
+      horse.capMoveT = 1.5 + Math.random();
+      let vp = -1, vl = Math.random() < 0.5 ? -1 : 1;
+      if (calma === 1) { vp = -1; vl = -1; }
+      else {
+        const r = Math.random();
+        if (r < 0.50) { /* indietro di lato */ }
+        else if (r < 0.65) { vl = 0; }                       // indietro dritto
+        else if (r < 0.75) { vp = 0.6; vl *= 0.5; }          // avanti
+        else if (r < 0.88) { vp = 0; }                       // di lato
+        else {                                               // addosso al vicino più prossimo
+          vp = 0;
+          let best = null, bd = 99;
+          state.horses.forEach((o) => {
+            if (o === horse || o.isRincorsa || !o.called || o.entering) return;
+            const d = Math.abs((o.mossaLane ?? 0) - horse.mossaLane);
+            if (Math.abs((o.mossaProgress ?? 0) - horse.mossaProgress) < 2 && d < bd) { bd = d; best = o; }
+          });
+          if (best) vl = Math.sign((best.mossaLane ?? 0) - horse.mossaLane) || vl;
+        }
+      }
+      horse.capVP = vp * CAPRICCIO_V_INDIETRO * forza;
+      horse.capVL = vl * CAPRICCIO_V_LATO * forza;
+      // Il muso va verso lo strattone (mossaTurn + = muso a sinistra, lane −,
+      // come il tasto A): senza, il cavallo scivolava di lato a testa dritta.
+      // 0.2 rad, sotto la soglia di «girato» del Mossiere (0.6). Solo AI: per il
+      // giocatore mossaTurn è anche la direzione di marcia.
+      horse.capTurn = vl ? -Math.sign(vl) * 0.2 : 0;
+    }
+    if (horse.capLeft <= 0) {
+      horse.capLeft = 0; horse.capVP = 0; horse.capVL = 0; horse.capTurn = 0;
+      horse.capT = CAPRICCIO_PAUSA[calma];
+    }
+  } else {
+    horse.capT -= dt;
+    if (horse.capT <= 0) { horse.capLeft = CAPRICCIO_DURATA; horse.capMoveT = 0; }
+  }
+  return forza;
+}
+// Capriccio fermato (TURNS, agitato, tutti fuori, rincorsa che carica…): la pausa
+// riparte da capo e gli scarti dell'AI rientrano piano.
+function capriccioStop(horse, dt) {
+  // Capriccio INTERROTTO (TURNS, agitato, tutti fuori): la pausa riparte da capo.
+  // Senza questo capT restava <= 0 e, appena finita la girata, partiva subito un
+  // altro capriccio da 10 s: il cavallo nervoso non tornava mai in mano al fantino.
+  if ((horse.capLeft || 0) > 0) horse.capT = CAPRICCIO_PAUSA[clamp(Math.round(horse.calma || 3), 1, 5)];
+  horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0; horse.capTurn = 0;
+  if (horse.capOffP) horse.capOffP += Math.sign(-horse.capOffP) * Math.min(Math.abs(horse.capOffP), CAPRICCIO_RECUPERO_AI * 3 * dt);
+  if (horse.capOffL) horse.capOffL += Math.sign(-horse.capOffL) * Math.min(Math.abs(horse.capOffL), CAPRICCIO_RECUPERO_AI * 3 * dt);
+}
+
 function updateMossa(dt, time) {
   state.mossaTimer += dt;
   state.mossaSubTimer += dt;
@@ -11731,54 +11794,11 @@ function updateMossa(dt, time) {
     }
 
     // ══ CAPRICCI (CALMA) ═══════════════════════════════════════════════════════
-    // Vale per AI e giocatore. Non durante l'ingresso, non per la rincorsa, non
-    // per chi è già uscito dietro agitato o si sta girando per TURNS (vincono loro).
+    // Vale per AI e giocatore. Non durante l'ingresso, non per chi è già uscito
+    // dietro agitato o si sta girando per TURNS (vincono loro). La rincorsa ha i
+    // suoi capricci in updateRincorsa.
     if (!horse.isRincorsa && horse.called && !horse.entering && !horse.nervBackState && !horse.turnsSpin) {
-      const calma = clamp(Math.round(horse.calma || 3), 1, 5);
-      const forza = CAPRICCIO_FORZA[calma];
-      if (horse.capT == null) horse.capT = CAPRICCIO_PAUSA[calma] * (0.3 + Math.random() * 0.7);   // sfasati fra loro
-      if ((horse.capLeft || 0) > 0) {
-        horse.capLeft -= dt;
-        horse.capMoveT = (horse.capMoveT || 0) - dt;
-        if (horse.capMoveT <= 0) {
-          // Nuovo strattone ogni 1.5-2.5s. Calma 1: SEMPRE indietro verso sinistra
-          // (lane −). Gli altri: per lo più indietro di lato, a volte altro.
-          horse.capMoveT = 1.5 + Math.random();
-          let vp = -1, vl = Math.random() < 0.5 ? -1 : 1;
-          if (calma === 1) { vp = -1; vl = -1; }
-          else {
-            const r = Math.random();
-            if (r < 0.50) { /* indietro di lato */ }
-            else if (r < 0.65) { vl = 0; }                       // indietro dritto
-            else if (r < 0.75) { vp = 0.6; vl *= 0.5; }          // avanti
-            else if (r < 0.88) { vp = 0; }                       // di lato
-            else {                                               // addosso al vicino più prossimo
-              vp = 0;
-              let best = null, bd = 99;
-              state.horses.forEach((o) => {
-                if (o === horse || o.isRincorsa || !o.called || o.entering) return;
-                const d = Math.abs((o.mossaLane ?? 0) - horse.mossaLane);
-                if (Math.abs((o.mossaProgress ?? 0) - horse.mossaProgress) < 2 && d < bd) { bd = d; best = o; }
-              });
-              if (best) vl = Math.sign((best.mossaLane ?? 0) - horse.mossaLane) || vl;
-            }
-          }
-          horse.capVP = vp * CAPRICCIO_V_INDIETRO * forza;
-          horse.capVL = vl * CAPRICCIO_V_LATO * forza;
-          // Il muso va verso lo strattone (mossaTurn + = muso a sinistra, lane −,
-          // come il tasto A): senza, il cavallo scivolava di lato a testa dritta.
-          // 0.2 rad, sotto la soglia di «girato» del Mossiere (0.6). Solo AI: per il
-          // giocatore mossaTurn è anche la direzione di marcia.
-          horse.capTurn = vl ? -Math.sign(vl) * 0.2 : 0;
-        }
-        if (horse.capLeft <= 0) {
-          horse.capLeft = 0; horse.capVP = 0; horse.capVL = 0; horse.capTurn = 0;
-          horse.capT = CAPRICCIO_PAUSA[calma];
-        }
-      } else {
-        horse.capT -= dt;
-        if (horse.capT <= 0) { horse.capLeft = CAPRICCIO_DURATA; horse.capMoveT = 0; }
-      }
+      const forza = capriccioTick(horse, dt);
       // Di lato: si somma alla corsia (persistente). L'AI la riprende da sola
       // inseguendo il suo obiettivo; il giocatore la corregge con Q/P.
       if (isHuman(horse)) {
@@ -11795,13 +11815,7 @@ function updateMossa(dt, time) {
         horse.capOffL = clamp(recupera((horse.capOffL || 0) + (horse.capVL || 0) * dt), -max, max);
       }
     } else {
-      // Capriccio INTERROTTO (TURNS, agitato, tutti fuori): la pausa riparte da capo.
-      // Senza questo capT restava <= 0 e, appena finita la girata, partiva subito un
-      // altro capriccio da 10 s: il cavallo nervoso non tornava mai in mano al fantino.
-      if ((horse.capLeft || 0) > 0) horse.capT = CAPRICCIO_PAUSA[clamp(Math.round(horse.calma || 3), 1, 5)];
-      horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0; horse.capTurn = 0;
-      if (horse.capOffP) horse.capOffP += Math.sign(-horse.capOffP) * Math.min(Math.abs(horse.capOffP), CAPRICCIO_RECUPERO_AI * 3 * dt);
-      if (horse.capOffL) horse.capOffL += Math.sign(-horse.capOffL) * Math.min(Math.abs(horse.capOffL), CAPRICCIO_RECUPERO_AI * 3 * dt);
+      capriccioStop(horse, dt);
     }
 
     // ══ TURNS ══════════════════════════════════════════════════════════════════
@@ -12304,6 +12318,34 @@ function updateRincorsa(rincorsa, dt) {
   }
   // Corsia FISSA solo per la rincorsa AI; quella umana la muove liberamente (Q/P, A/L).
   if (!rincorsa.humanSteered) rincorsa.lane = RINCORSA_LANE;
+  // ── CAPRICCI anche per la RINCORSA (Simone 9/11), mentre aspetta il momento:
+  // stessi tempi e forze per calma dei cavalli ai canapi. Non mentre CARICA: il
+  // lancio non si tocca. Giocatore: lo strattone si somma ai comandi e lo
+  // correggi tu. AI: scarti che il fantino recupera piano (come ai canapi).
+  if (rincorsa.mossaSubState !== "charging" && !rincorsa.wantsToEnter) {
+    const forza = capriccioTick(rincorsa, dt);
+    const outerR = -(mossaOuterEdge() - 0.8);
+    if (isHuman(rincorsa)) {
+      if (rincorsa.capVL) rincorsa.lane = clamp(rincorsa.lane + rincorsa.capVL * dt, outerR, MOSSA_LANE_IN);
+      if (rincorsa.capVP) rincorsa.progress += rincorsa.capVP * dt;
+    } else {
+      const recupera = (v) => v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
+      const max = CAPRICCIO_SCARTO_MAX * forza;
+      const pPrima = rincorsa.capOffP || 0;
+      rincorsa.capOffP = clamp(recupera(pPrima + (rincorsa.capVP || 0) * dt), -max, 0.6);
+      rincorsa.capOffL = clamp(recupera((rincorsa.capOffL || 0) + (rincorsa.capVL || 0) * dt), -max, max);
+      // Avanti/indietro: solo la DIFFERENZA (il progress della rincorsa si integra,
+      // non è riscritto da un obiettivo): quando lo scarto rientra, torna dov'era.
+      rincorsa.progress += rincorsa.capOffP - pPrima;
+      rincorsa.lane = clamp(rincorsa.lane + rincorsa.capOffL, outerR, MOSSA_LANE_IN);
+    }
+  } else {
+    // Scarto di progress da restituire prima di azzerarlo, se no resta indietro.
+    const pPrima = rincorsa.capOffP || 0;
+    capriccioStop(rincorsa, dt);
+    if (!isHuman(rincorsa)) rincorsa.progress += (rincorsa.capOffP || 0) - pPrima;
+  }
+  if (isHuman(rincorsa)) rincorsa.mossaLane = rincorsa.lane;
   rincorsa.laneVelocity = 0;
   rincorsa.speedLevel = clamp(Math.abs(rincorsa.rincorsaSpeed), 0, 9);
 }
