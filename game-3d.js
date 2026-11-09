@@ -281,12 +281,16 @@ const CAPRICCIO_PAUSA = { 5: 15, 4: 12, 3: 10, 2: 10, 1: 5 };
 const CAPRICCIO_DURATA = 10;
 // Intensità: 1 = lieve; calma 2 e 1 «più accentuato».
 const CAPRICCIO_FORZA = { 5: 1, 4: 1, 3: 1, 2: 1.7, 1: 1.7 };
-const CAPRICCIO_V_INDIETRO = 0.30;   // u/s all'indietro (il giocatore corregge a 1.4)
+// Indietro ACCENTUATO (Simone 9/11): il cavallo che si ribella deve uscire dalla
+// fila abbastanza da rompere l'allineamento (MOSSA_ALIGN_GAP 2.6 dalla mediana),
+// così la rincorsa non può entrare e la mossa si allunga.
+const CAPRICCIO_V_INDIETRO = 0.55;   // u/s all'indietro (il giocatore corregge a 1.4)
 const CAPRICCIO_V_LATO = 0.35;       // u/s di lato (il giocatore corregge a 1.9 con Q/P)
 // Per le AI la posizione lungo la pista è riscritta a ogni frame dall'obiettivo:
 // il capriccio lì è uno SCARTO che il fantino recupera a questa velocità, con un tetto.
 const CAPRICCIO_RECUPERO_AI = 0.20;  // u/s
-const CAPRICCIO_SCARTO_MAX = 1.2;    // u indietro (×FORZA)
+const CAPRICCIO_SCARTO_MAX = 3.2;    // u indietro (×FORZA, tetto ×1.25): oltre i 2.6 dell'allineamento
+const CAPRICCIO_FORZA_SCARTO_MAX = 1.25;
 // ── NERBATA: colpo di nerbo che danneggia il cavallo accanto. Stesse regole per
 // giocatore e AI. 5 colpi "in canna", ricarica come un caricatore.
 const NERBATE_MAX = 5;              // colpi massimi in canna
@@ -11015,7 +11019,7 @@ function capriccioTick(horse, dt) {
       else {
         const r = Math.random();
         if (r < 0.50) { /* indietro di lato */ }
-        else if (r < 0.65) { vl = 0; }                       // indietro dritto
+        else if (r < 0.70) { vl = 0; }                       // indietro dritto
         else if (r < 0.75) { vp = 0.6; vl *= 0.5; }          // avanti
         else if (r < 0.88) { vp = 0; }                       // di lato
         else {                                               // addosso al vicino più prossimo
@@ -11845,10 +11849,13 @@ function updateMossa(dt, time) {
         // fantino recupera piano. Li applica il ramo AI sugli obiettivi
         // («progGoal + capOffP», «laneGoal + capOffL»): applicati qui direttamente,
         // l'inseguimento dell'obiettivo li cancellava all'istante.
-        const recupera = (v) => v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
-        const max = CAPRICCIO_SCARTO_MAX * forza;
+        // Il fantino recupera solo a capriccio FINITO: durante, il cavallo comanda.
+        const inCapriccio = (horse.capLeft || 0) > 0;
+        const recupera = (v) => inCapriccio ? v : v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
+        const max = CAPRICCIO_SCARTO_MAX * Math.min(forza, CAPRICCIO_FORZA_SCARTO_MAX);
+        const maxLato = 1.2 * forza;   // di lato resta lieve, com'era
         horse.capOffP = clamp(recupera((horse.capOffP || 0) + (horse.capVP || 0) * dt), -max, 0.6);
-        horse.capOffL = clamp(recupera((horse.capOffL || 0) + (horse.capVL || 0) * dt), -max, max);
+        horse.capOffL = clamp(recupera((horse.capOffL || 0) + (horse.capVL || 0) * dt), -maxLato, maxLato);
       }
     } else {
       capriccioStop(horse, dt);
@@ -12203,12 +12210,18 @@ function updateRincorsa(rincorsa, dt) {
         // ri-chiamata dopo una falsa). La rincorsa tenta SOLO da fila schierata: così
         // una mossa falsa non innesca un loop di false a ripetizione durante il rientro.
         const fieldAssembled = campoSchierato();
+        // CAPRICCIO IN CORSO: un cavallo che si ribella ed esce dalla fila NON è una
+        // rivale «messa male» da fregare, e nemmeno il fallback della mossa lunga
+        // parte su una fila rotta: la rincorsa aspetta che rientri (Simone
+        // 9/11: «la durata della mossa si allunga perché la rincorsa non può entrare»).
+        const capriccioFuoriFila = state.horses.some((o) => !o.isRincorsa && o.called && !o.entering
+          && (o.capLeft || 0) > 0 && (o.capOffP || 0) < -1.5);
         const goodEntry = fieldAssembled &&
           (state.mossaFalsaCooldown || 0) <= 0 &&
           state.mossaTimer >= MOSSA_MIN_DURATION &&
           (state.rincorsaWait || 0) >= RINCORSA_MIN_TENSION && (
             (score > threshold && isMossaAligned()) ||
-            state.mossaTimer > MOSSA_MAX_DURATION * 0.6 // fallback: mossa lunghissima
+            (state.mossaTimer > MOSSA_MAX_DURATION * 0.6 && !capriccioFuoriFila) // fallback: mossa lunghissima (non su un capriccio)
           )
           // ONORA L'ASTA: se qualcuno si è comprato la mossa, la rincorsa aspetta
           // il momento buono PER LUI. Dopo 2 minuti molla il vincolo, altrimenti
@@ -12233,7 +12246,7 @@ function updateRincorsa(rincorsa, dt) {
         // il controllo: allineati = mossa valida; qualcuno troppo indietro = MOSSA
         // FALSA (mortaretto + si riparte). Non a ogni frame, e non oltre 2 false.
         let fiancata = false;
-        if (rivalIsMale && fieldAssembled && (state.mossaFalsaCooldown || 0) <= 0
+        if (rivalIsMale && !capriccioFuoriFila && fieldAssembled && (state.mossaFalsaCooldown || 0) <= 0
             && state.mossaTimer >= MOSSA_MIN_DURATION && (state.rincorsaWait || 0) >= 15
             && (state.falseStartCount || 0) < 2) {
           // ~30% per DECISIONE (la rincorsa decide ogni ~0.6s): quando la rivale è
@@ -12365,11 +12378,13 @@ function updateRincorsa(rincorsa, dt) {
       if (rincorsa.capVL) rincorsa.lane = clamp(rincorsa.lane + rincorsa.capVL * dt, outerR, MOSSA_LANE_IN);
       if (rincorsa.capVP) rincorsa.progress += rincorsa.capVP * dt;
     } else {
-      const recupera = (v) => v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
-      const max = CAPRICCIO_SCARTO_MAX * forza;
+      const inCapriccio = (rincorsa.capLeft || 0) > 0;
+      const recupera = (v) => inCapriccio ? v : v + Math.sign(-v) * Math.min(Math.abs(v), CAPRICCIO_RECUPERO_AI * dt);
+      const max = CAPRICCIO_SCARTO_MAX * Math.min(forza, CAPRICCIO_FORZA_SCARTO_MAX);
+      const maxLato = 1.2 * forza;
       const pPrima = rincorsa.capOffP || 0;
       rincorsa.capOffP = clamp(recupera(pPrima + (rincorsa.capVP || 0) * dt), -max, 0.6);
-      rincorsa.capOffL = clamp(recupera((rincorsa.capOffL || 0) + (rincorsa.capVL || 0) * dt), -max, max);
+      rincorsa.capOffL = clamp(recupera((rincorsa.capOffL || 0) + (rincorsa.capVL || 0) * dt), -maxLato, maxLato);
       // Avanti/indietro: solo la DIFFERENZA (il progress della rincorsa si integra,
       // non è riscritto da un obiettivo): quando lo scarto rientra, torna dov'era.
       rincorsa.progress += rincorsa.capOffP - pPrima;
