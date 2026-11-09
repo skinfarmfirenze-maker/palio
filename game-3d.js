@@ -8073,9 +8073,9 @@ const ROSTER_CAVALLI = {
   "Volpino":            { epoca: "moderno", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
   "Trattu de Zamaglia": { epoca: "moderno", tier: "brenna",    stamina: 71,  potenza: 1, calma: 5, turns: 5, scossoStamina: 16 },
   "Uberta de Mores":    { epoca: "storico", tier: "brenna",    stamina: 78,  potenza: 2, calma: 2, turns: 2 },
-  "Gaudenzia":          { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 3, turns: 4 },
+  "Gaudenzia":          { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 1, calma: 3, turns: 4 },
   "Mirabella":          { epoca: "storico", tier: "bono",      stamina: 86,  potenza: 4, calma: 2, turns: 3, scossoStamina: -15 },
-  "Fedora Saura":       { epoca: "moderno", tier: "bombolone", stamina: 80,  potenza: 3, calma: 3, turns: 3 },
+  "Fedora Saura":       { epoca: "moderno", tier: "bombolone", stamina: 80,  potenza: 1, calma: 3, turns: 3 },
   "Pytheos":            { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 3, turns: 4, scossoStamina: -15 },
   "Quebel":             { epoca: "storico", tier: "bono",      stamina: 80,  potenza: 3, calma: 4, turns: 4 },
   "Rimini":             { epoca: "storico", tier: "bombolone", stamina: 97,  potenza: 2, calma: 2, turns: 2 },
@@ -8083,11 +8083,11 @@ const ROSTER_CAVALLI = {
   "Urbino de Ozieri":   { epoca: "storico", tier: "brenna",    stamina: 72,  potenza: 1, calma: 1, turns: 2 },
   "Tale e Quale":       { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 3, scossoStamina: -15 },
   "Quarnero":           { epoca: "storico", tier: "brenna",    stamina: 75,  potenza: 4, calma: 5, turns: 5 },
-  "Comancio":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 3, calma: 5, turns: 5 },
+  "Comancio":           { epoca: "moderno", tier: "bono",      stamina: 88,  potenza: 1, calma: 5, turns: 5 },
   "Selvaggia":          { epoca: "storico", tier: "brenna",    stamina: 74,  potenza: 2, calma: 3, turns: 3 },
   "Uberto":             { epoca: "storico", tier: "brenna",    stamina: 76,  potenza: 3, calma: 4, turns: 4 },
   "Vipera":             { epoca: "storico", tier: "bombolone", stamina: 94,  potenza: 5, calma: 1, turns: 1, scossoStamina: 13 },
-  "Oppio":              { epoca: "moderno", tier: "bombolone", stamina: 96,  potenza: 3, calma: 1, turns: 1, scossoStamina: -10 },
+  "Oppio":              { epoca: "moderno", tier: "bombolone", stamina: 96,  potenza: 1, calma: 1, turns: 1, scossoStamina: -10 },
   "Benitos":            { epoca: "moderno", tier: "bombolone", stamina: 89,  potenza: 5, calma: 1, turns: 1 },
   "Diodoro":            { epoca: "moderno", tier: "bombolone", stamina: 98,  potenza: 5, calma: 2, turns: 3 },
   "Ungaros":            { epoca: "moderno", tier: "bono",      stamina: 82,  potenza: 2, calma: 2, turns: 2 },
@@ -8097,7 +8097,7 @@ const ROSTER_CAVALLI = {
   "Re Artù":            { epoca: "storico", tier: "brenna",    stamina: 73,  potenza: 2, calma: 3, turns: 4 },
   "Zodiach":            { epoca: "storico", tier: "bombolone", stamina: 90,  potenza: 4, calma: 3, turns: 2 },
   "Remorex":            { epoca: "moderno", tier: "bombolone", stamina: 97,  potenza: 4, calma: 2, turns: 3, scossoStamina: 10 },
-  "Urbino":             { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 3, calma: 4, turns: 5 },
+  "Urbino":             { epoca: "storico", tier: "bono",      stamina: 85,  potenza: 1, calma: 4, turns: 5 },
   "Zio Frac":           { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 1, calma: 4, turns: 3, scossoStamina: -15 },
   "Preziosa Penelope":  { epoca: "moderno", tier: "bombolone", stamina: 95,  potenza: 4, calma: 3, turns: 4 },
   "Galleggiante":       { epoca: "storico", tier: "bono",      stamina: 83,  potenza: 2, calma: 2, turns: 3 },
@@ -16838,7 +16838,11 @@ const STAT_FINAL_JOCKEY = {
   Grido: { terzo: 4 },              // era 5
   "Tittìa": { mossa: 5, terzo: 4 }, // mossa 5, terzo 4
 };
-const STAT_FINAL_HORSE = {};
+const STAT_FINAL_HORSE = {
+  // Simone 9/11: potenza 1 (spingono poco ai canapi).
+  "Fedora Saura": { potenza: 1 }, "Comancio": { potenza: 1 }, "Oppio": { potenza: 1 },
+  "Urbino": { potenza: 1 }, "Gaudenzia": { potenza: 1 },
+};
 function applyFinalCorrections() {
   Object.keys(STAT_FINAL_JOCKEY).forEach((nick) => {
     const jk = JOCKEYS.find((j) => j.nick === nick);
