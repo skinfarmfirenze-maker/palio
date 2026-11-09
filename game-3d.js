@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione } from "./cavallo-lab.js";
+import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";
 // NERBATA visiva (chat Grafica): carica, colpo, ritorno. Il colpito reagisce quando ARRIVA la frusta.
 const NERBATA_ANIM = 0.5;          // durata del gesto (prima 0.32, posa fissa)
@@ -3503,7 +3503,7 @@ function updateHorseGlb(dt) {
     if (!r.horse.group || !r.horse.group.parent) { HORSE_GLB.registrati.splice(i, 1); continue; }
     const infl = r.morphMesh && r.morphMesh.morphTargetInfluences;
     // CADUTO a terra: fermo davvero (zampe piantate, niente movimento).
-    if (r.horse.caduto) { if (infl) infl.fill(0); continue; }
+    if (r.horse.caduto) { if (r.morphMesh) ripristinaZampe(r.morphMesh); if (infl) infl.fill(0); continue; }
     const gsGrezza = Math.abs((r.horse.progress || 0) - (r.horse.prevProgress ?? r.horse.progress)) / step;
     const allaMossa = state.mode === "mossa";
     // Fuori dalla mossa la reazione a spinte e urti si spegne da sola.
@@ -3521,10 +3521,14 @@ function updateHorseGlb(dt) {
     const cad = allaMossa ? Math.max(0.55 + 0.9 * passo, gs * GAIT_K)
                           : (race > 0 ? clamp(gs * GAIT_K, 0.15, 6) : 0.55);
     r.mixer.update(dt * cad);
+    // ZAMPE AL PASSO (cavallo-lab §7): sotto ~6 u/s le zampe le mette il rig
+    // (fermo dritto, passo, trotto, sfumatura verso il galoppo). Se lo fa, i pesi
+    // del galoppo sono già usati e azzerati: la scala qui sotto non serve.
+    const zampe = r.morphMesh ? aggiornaZampe(r.morphMesh, dt) : false;
     // AMPIEZZA: fra i canapi le zampe si alzano POCO (0.32 = passo accennato, non
     // galoppo in aria); in corsa arriva al 100%. Scalo i pesi dopo il mixer, così
     // il cavallo si muove ma resta coi piedi a terra al canapo.
-    if (infl) {
+    if (infl && !zampe) {
       const amp = Math.min(1, 0.32 + 0.68 * race + 0.22 * passo);
       if (amp < 0.999) for (let k = 0; k < infl.length; k += 1) infl[k] *= amp;
     }
