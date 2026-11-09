@@ -98,6 +98,10 @@ function steerMultForCurve(curve, andatura) {
 // Limite anteriore al canapo: i cavalli si avvicinano alla linea ma non la
 // superano prima del via (niente falsa partenza). Progress 0 = canapo.
 const MOSSA_FRONT_LIMIT = -1.0;
+// BARRIERA IMMAGINARIA al canape (Simone 9/11): il centro del cavallo si ferma
+// qui. Il canape è a -0.8 e il cavallo è lungo 3.3: con il muro a -2.0 il muso
+// passava la corda di mezza unità. A -2.6 il muso resta appena dietro (-0.95).
+const MOSSA_MURO_CANAPO = MOSSA_FRONT_LIMIT - 1.6;
 // In curva una forza centrifuga spinge il cavallo verso l'esterno: per tenere
 // la linea interna (più corta e veloce) bisogna sterzare attivamente verso
 // l'interno (tasto L, lato interno nel senso orario). Niente più "svolta
@@ -11365,7 +11369,7 @@ function updateMossa(dt, time) {
       // FASE 1: dal verrocchino ci si piazza. L'AI CAMMINA fino alla sua posta a
       // passo costante (NON si teletrasporta); il giocatore la guida a mano.
       if (!isHuman(horse)) {
-        const slotP = horse.slotProgress ?? (MOSSA_FRONT_LIMIT - 1.6);
+        const slotP = horse.slotProgress ?? MOSSA_MURO_CANAPO;
         const slotL = horse.slotLane ?? horse.postLane ?? horse.mossaLane;
         const walkV = 2.8 + react * 1.2;                 // u/sec: si piazza alla posta più svelta
         const dl = slotL - horse.mossaLane, dp = slotP - horse.mossaProgress;
@@ -11414,7 +11418,7 @@ function updateMossa(dt, time) {
       // frontale. A 3-4 ti FERMI (niente sgambettìo sul posto); a 5 lo FORZI →
       // "…ha forzato il canape" e le Contrade partono con MOSSA FALSA.
       horse.canapeStop = false;
-      if (horse.mossaProgress > MOSSA_FRONT_LIMIT - 1.5 && andatura >= 3) {
+      if (horse.mossaProgress > MOSSA_MURO_CANAPO - 0.4 && andatura >= 3) {
         // MOSSA COMPRATA ALL'ASTA: qui il 5 NON è forzare il canape, è la partenza
         // a chiamata. Gliel'abbiamo appena promesso col cartello ("parti a 5 quando
         // vuoi") e prima di questa riga quella promessa era una trappola: partiva a
@@ -11481,7 +11485,7 @@ function updateMossa(dt, time) {
       const hw = horse.holdWeight ?? 0;                 // -2..+2
       const heavy = clamp((hw + 2) / 4, 0, 1);          // 0 (molle) .. 1 (macigno)
       const life = (1 - heavy) * (tension ? 1 : 0.4);   // vita nervosa (svanisce coi pesanti)
-      const frontLine = MOSSA_FRONT_LIMIT - 1.2;        // linea del canapo (fronte)
+      const frontLine = MOSSA_MURO_CANAPO;              // linea del canapo (fronte): la barriera immaginaria
       const agg = clamp(horse.aggression ?? 0.5, 0, 1);
 
       // Corsia: tiene la propria posta ma con scalpitìo laterale SEMPRE presente
@@ -11686,12 +11690,12 @@ function updateMossa(dt, time) {
         // Dopo ~20s tutti i cavalli smettono di fare caos e si riallineano:
         // lateralmente verso la propria posta, longitudinalmente verso il fronte.
         laneGoal = lerp(laneGoal, postLane, settle * 0.8);
-        progGoal = lerp(progGoal, MOSSA_FRONT_LIMIT - 1.0, settle);
+        progGoal = lerp(progGoal, MOSSA_MURO_CANAPO, settle);
         if (settle > 0.35) horse.behaviorState = "idle";
       }
       if (attesa > 0) {
         laneGoal = lerp(laneGoal, postLane, attesa);
-        progGoal = lerp(progGoal, MOSSA_FRONT_LIMIT - 1.0, attesa);
+        progGoal = lerp(progGoal, MOSSA_MURO_CANAPO, attesa);
         if (attesa > 0.5) horse.behaviorState = "idle";
       }
 
@@ -12810,8 +12814,7 @@ function resolveMossaCrowd(dt) {
   //    1.2 dal canapo: la condizione era SEMPRE vera, quindi ogni cavallo veniva
   //    respinto in continuazione mentre il suo goal lo riportava avanti → tremolìo
   //    perenne di tutta la fila. Ora è un tetto: ci si appoggia e si sta fermi.
-  const CANAPI_BUFFER = 1.0;
-  const muro = MOSSA_FRONT_LIMIT - CANAPI_BUFFER;
+  const muro = MOSSA_MURO_CANAPO;
   horses.forEach((horse) => {
     if (horse.progress > muro) horse.progress = muro;
     if (horse.mossaProgress > muro) horse.mossaProgress = muro;
