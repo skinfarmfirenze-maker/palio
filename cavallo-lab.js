@@ -400,6 +400,7 @@ export const REAZIONE = {
   filtroLento: 0.8,             // s, pressione sostenuta (appoggio)
   vMax: 2.5,                    // u/s: la calca non può più spostare un cavallo più in fretta di così, a vista
   inseguo: 0.05,                // s: con che prontezza la vista recupera lo spostamento della calca
+  debitoMax: 1.0,               // u: scarto massimo fra dove il cavallo È e dove lo si VEDE (solo sicurezza)
   // Molle LENTE e quasi senza rimbalzo (z ≥ 0,8): il cavallo si sbilancia e torna,
   // non dondola. Con f 1,1 Hz e z 0,6 una spinta di 37 cm lo faceva oscillare da +4,5°
   // a −7° in 0,4 s: si leggeva come un tremito.
@@ -421,6 +422,9 @@ function molla(x, v, bersaglio, f, z, dt) {
   return [x, v];
 }
 const _lim = (x, m) => Math.max(-m, Math.min(m, x));
+// Spostamento della calca c al netto del movimento proprio o che lo annulla:
+// se vanno in versi opposti conta solo l'eccesso della calca; mai più di c.
+const _netto = (c, o) => (c * o < 0 ? Math.sign(c) * Math.max(0, Math.abs(c) - Math.abs(o)) : c);
 // Limite morbido: se la molla arriva al tetto si ferma lì (niente rimbalzo a scatto).
 function _tetto(x, v, m) { if (x > m) return [m, Math.min(v, 0)]; if (x < -m) return [-m, Math.max(v, 0)]; return [x, v]; }
 
@@ -442,8 +446,18 @@ export function aggiornaReazione(h, dt, ingresso) {
   if (!h.reaz) azzeraReazione(h);
   const R = h.reaz, C = REAZIONE;
   if (!(dt > 0)) return R;
-  R.debitoL += ingresso ? ingresso.dLat : 0;
-  R.debitoP += ingresso ? (ingresso.dProg || 0) : 0;
+  // A debito va solo il SALTO vero. Un cavallo incastrato avanza verso il suo
+  // obiettivo e la calca lo respinge, a ogni frame: si annullano, il cavallo è
+  // fermo e non c'è niente da nascondere. Prima la respinta entrava tutta nel
+  // debito e l'avanzata no → il debito cresceva senza fine e il cavallo veniva
+  // disegnato metri avanti, fuori dai canapi (l'Istrice in produzione, 9/11).
+  // Movimento proprio = spostamento totale dall'ultimo frame − parte della calca.
+  const cL = ingresso ? (ingresso.dLat || 0) : 0, cP = ingresso ? (ingresso.dProg || 0) : 0;
+  const propL = R.ultL === undefined ? 0 : (h.lane - R.ultL) - cL;
+  const propP = R.ultP === undefined ? 0 : (h.progress - R.ultP) - cP;
+  R.ultL = h.lane; R.ultP = h.progress;
+  R.debitoL = _lim(R.debitoL + _netto(cL, propL), C.debitoMax);
+  R.debitoP = _lim(R.debitoP + _netto(cP, propP), C.debitoMax);
   const passoMax = C.vMax * dt, k = 1 - Math.exp(-dt / C.inseguo);
   const mostraL = _lim(R.debitoL * k, passoMax), mostraP = _lim(R.debitoP * k, passoMax);
   R.debitoL -= mostraL; R.debitoP -= mostraP;
