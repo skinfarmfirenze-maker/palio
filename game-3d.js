@@ -8,7 +8,10 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione } from "./cavallo-lab.js";
-import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
+import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";
+// NERBATA visiva (chat Grafica): carica, colpo, ritorno. Il colpito reagisce quando ARRIVA la frusta.
+const NERBATA_ANIM = 0.5;          // durata del gesto (prima 0.32, posa fissa)
+const NERBATA_COLPO_A = 0.42;      // frazione del gesto in cui la frusta arriva sul colpito   // steccati, palchi, pubblico (chat grafica)
 // `tr` e non `T`: nel file ci sono gia' variabili locali chiamate T (le timeline
 // di estrazione e tratta) che la coprirebbero dentro quelle funzioni.
 import { T as tr, linguaAttiva, impostaLingua, avviaTraduzione, traduciAlbero } from "./lingua.js";
@@ -3898,6 +3901,7 @@ function placeHorse(horse, time) {
     horse.group.rotation.x = RZ.p;
     if (RZ.p < 0) horse.group.position.y += 1.6 * Math.sin(-RZ.p);   // si alza davanti facendo perno dietro
   } else horse.group.rotation.x = 0;
+  if (!horse.cadutoRoll) reazioneNerbataCorpo(horse, gdt, sample);
   horse.lastCurve = sample.curve;
   horse.collisionFlash = Math.max(0, horse.collisionFlash - 0.045);
 
@@ -4019,6 +4023,7 @@ function placeHorse(horse, time) {
       jockey.userData.whip.rotation.x = horse.boosting ? -0.18 + Math.sin(gallop * 1.35) * 0.12 : -0.08;
     }
   }
+  animaNerbata(horse, jockey, gdt);
   if (horse.group.userData.boostGroup) {
     horse.group.userData.boostGroup.children.forEach((streak, index) => {
       // Streak di velocità rimosse: niente scie/luci gialle, look più realistico.
@@ -12989,7 +12994,7 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
   attacker.nerbate -= 1;                 // si consuma sempre
   if (attacker.player && state.tele) state.tele.nerbate += 1;
   attacker.nerbataCd = NERBATA_COOLDOWN;
-  attacker.nerbataSwing = 0.32;          // frusta in animazione
+  attacker.nerbataSwing = NERBATA_ANIM;  // frusta in animazione: carica, colpo, ritorno
   attacker.nerbataSide = side;
   const target = forcedTarget || vicinoDiLato(attacker, side, phase);
   if (!target) return false;             // colpo a vuoto: nerbata sprecata
@@ -13007,6 +13012,7 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
     if (isHuman(attacker)) attacker.nerbSlowT = 0;
   }
   target.collisionFlash = Math.max(target.collisionFlash || 0, 0.7);
+  target.colpoNerbata = { t: -NERBATA_ANIM * NERBATA_COLPO_A, lato: side >= 0 ? 1 : -1 };   // solo visivo
   // (rimossa la scritta "X nerba Y": troppo ripetitiva a schermo)
   return true;
 }
@@ -18629,3 +18635,51 @@ caricaJockeyGlb();  // async: quando arriva, mette il fantino GLB in sella
 // Precarico i file audio ~1.4s dopo il boot (quando i GLB critici sono già in
 // corso), così a mossa/arrivo non c'è decodifica al primo play → niente scatti.
 setTimeout(() => { try { preloadPalioSounds(); } catch (e) { /* niente */ } }, 1400);
+
+// ── NERBATA VISIVA (chat Grafica, banco canapi approvato da Simone) ──────────
+// Molla smorzata: 0 a riposo, picco a ~0.1 s, si spegne in ~0.7 s.
+function sobbalzoNerbata(t) { return t <= 0 ? 0 : Math.sin(Math.min(t, 0.9) * 13) * Math.exp(-t * 5.2); }
+function easeNerbata(x) { return x * x * (3 - 2 * x); }
+function mixNerbata(a, b, t) { return a + (b - a) * t; }
+// Il CAVALLO colpito sobbalza, si scansa di lato via dal colpo, gira la testa via e alza un filo il davanti.
+// lato = da chi colpisce verso il colpito (in corsia): è anche il verso in cui si scansa.
+function reazioneNerbataCorpo(h, dt, sample) {
+  const c = h.colpoNerbata;
+  if (!c) return;
+  c.t += dt;
+  const e = sobbalzoNerbata(c.t), via = c.lato;
+  h.group.rotation.z += via * 0.09 * e;
+  h.group.rotation.x += 0.10 * Math.max(0, e);
+  h.group.rotation.y += via * 0.14 * e;
+  const lat = via * 0.22 * (c.t > 0 ? (1 - Math.exp(-c.t * 9)) * Math.exp(-c.t * 2.2) : 0);
+  if (lat) h.group.position.addScaledVector(sample.normal, lat);
+  h.group.position.y += 0.05 * Math.max(0, e);
+  if (c.t > 1.2) h.colpoNerbata = null;
+}
+// Il FANTINO: chi prende il colpo si ritrae e si china; chi nerba carica (braccio su e indietro,
+// busto girato via), colpisce secco e torna. Sovrascrive la posa fissa di nerbando/nerbLatSx.
+function animaNerbata(h, jockey, dt) {
+  const U = jockey.userData;
+  if (h.colpoNerbata && h.colpoNerbata.t > 0) {
+    const e = Math.max(0, sobbalzoNerbata(h.colpoNerbata.t * 0.8) * 1.4), via = h.colpoNerbata.lato;
+    jockey.rotation.z += via * 0.15 * e;
+    jockey.rotation.x += 0.22 * e;
+  }
+  const sw = h.nerbataSwing || 0;
+  if (sw > 0 && U.rightArm) {
+    const p = 1 - sw / NERBATA_ANIM, lato = h.nerbataSide || 1;
+    const sx = lato < 0 && !!U.fantino2;      // a sinistra il fantino2 dispiega il braccio di lato
+    const riposo = { x: 0, z: 0 };
+    const carica = sx ? { x: -0.9, z: 0.2 } : { x: -2.6, z: 0.25 * lato };
+    const colpo = sx ? { x: -0.15, z: 1.35 } : { x: -1.0, z: -0.95 * lato };
+    let a, w, busto;
+    if (p < 0.38) { const t = easeNerbata(p / 0.38); a = { x: mixNerbata(riposo.x, carica.x, t), z: mixNerbata(riposo.z, carica.z, t) }; w = { x: mixNerbata(-0.08, 0.7, t), z: mixNerbata(-0.06, 0.3 * lato, t) }; busto = -0.28 * lato * t; }
+    else if (p < 0.52) { const t = (p - 0.38) / 0.14, tt = t * t; a = { x: mixNerbata(carica.x, colpo.x, tt), z: mixNerbata(carica.z, colpo.z, tt) }; w = { x: mixNerbata(0.7, -0.35, tt), z: mixNerbata(0.3 * lato, -1.5 * lato, tt) }; busto = mixNerbata(-0.28, 0.24, tt) * lato; }
+    else { const t = easeNerbata((p - 0.52) / 0.48); a = { x: mixNerbata(colpo.x, riposo.x, t), z: mixNerbata(colpo.z, riposo.z, t) }; w = { x: mixNerbata(-0.35, -0.08, t), z: mixNerbata(-1.5 * lato, -0.06, t) }; busto = mixNerbata(0.24, 0, t) * lato; }
+    U.rightArm.rotation.x = a.x; U.rightArm.rotation.z = a.z;
+    if (U.whip) { U.whip.rotation.x = w.x; U.whip.rotation.z = w.z; }
+    jockey.rotation.y = busto;
+  } else if (jockey.rotation.y) {
+    jockey.rotation.y *= Math.max(0, 1 - dt * 8);
+  }
+}
