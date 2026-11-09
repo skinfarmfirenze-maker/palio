@@ -10033,7 +10033,7 @@ function startMossa(fromTratta = false) {
     horse.soldTo = null; horse.soldTargetId = null; horse.soldBurst = 0; horse.soldNext = 0; horse.soldSpin = false;
     // Agitazione da nervosismo: stato pulito a ogni mossa.
     horse.nervBackState = null; horse.lastHitAt = -99; horse.lastTouchAt = -99; horse.hitStreak = null;
-    horse.capT = null; horse.capLeft = 0; horse.capMoveT = 0; horse.capVP = 0; horse.capVL = 0; horse.capOffP = 0; horse.capOffL = 0;   // capricci: da capo
+    horse.capT = null; horse.capLeft = 0; horse.capMoveT = 0; horse.capVP = 0; horse.capVL = 0; horse.capOffP = 0; horse.capOffL = 0; horse.capTurn = 0;   // capricci: da capo
     horse.launching = false;
     horse.launchDelayTimer = 0;
     horse.launchHeadingDev = 0;
@@ -11725,7 +11725,7 @@ function updateMossa(dt, time) {
       // CAPRICCIO: lo scarto all'indietro del cavallo che si ribella (calcolato
       // nel blocco CAPRICCI comune; qui il fantino AI lo subisce e lo recupera).
       horse.mossaProgress = clamp(progGoal + (horse.capOffP || 0), MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
-      horse.mossaTurn += (turnGoal - horse.mossaTurn) * clamp(dt * 1.1, 0, 1);
+      horse.mossaTurn += (turnGoal + (horse.capTurn || 0) - horse.mossaTurn) * clamp(dt * 1.1, 0, 1);
       // Anche le AI dentro i canapi: massimo 60°, mai girate del tutto di traverso.
       horse.mossaTurn = clamp(horse.mossaTurn, -1.57, 1.57);
     }
@@ -11765,9 +11765,14 @@ function updateMossa(dt, time) {
           }
           horse.capVP = vp * CAPRICCIO_V_INDIETRO * forza;
           horse.capVL = vl * CAPRICCIO_V_LATO * forza;
+          // Il muso va verso lo strattone (mossaTurn + = muso a sinistra, lane −,
+          // come il tasto A): senza, il cavallo scivolava di lato a testa dritta.
+          // 0.2 rad, sotto la soglia di «girato» del Mossiere (0.6). Solo AI: per il
+          // giocatore mossaTurn è anche la direzione di marcia.
+          horse.capTurn = vl ? -Math.sign(vl) * 0.2 : 0;
         }
         if (horse.capLeft <= 0) {
-          horse.capLeft = 0; horse.capVP = 0; horse.capVL = 0;
+          horse.capLeft = 0; horse.capVP = 0; horse.capVL = 0; horse.capTurn = 0;
           horse.capT = CAPRICCIO_PAUSA[calma];
         }
       } else {
@@ -11794,7 +11799,7 @@ function updateMossa(dt, time) {
       // Senza questo capT restava <= 0 e, appena finita la girata, partiva subito un
       // altro capriccio da 10 s: il cavallo nervoso non tornava mai in mano al fantino.
       if ((horse.capLeft || 0) > 0) horse.capT = CAPRICCIO_PAUSA[clamp(Math.round(horse.calma || 3), 1, 5)];
-      horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0;
+      horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0; horse.capTurn = 0;
       if (horse.capOffP) horse.capOffP += Math.sign(-horse.capOffP) * Math.min(Math.abs(horse.capOffP), CAPRICCIO_RECUPERO_AI * 3 * dt);
       if (horse.capOffL) horse.capOffL += Math.sign(-horse.capOffL) * Math.min(Math.abs(horse.capOffL), CAPRICCIO_RECUPERO_AI * 3 * dt);
     }
