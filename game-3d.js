@@ -14966,12 +14966,12 @@ function salvaTracciaMaestra(traccia, fantino, cavallo) {
 // Simone corre TRACCE_SOLO_N palii senza avversari; per ogni tratto di pista si
 // registra la corsia MEDIA tenuta nei tre giri. Fatti i 5 palii, la media dei 5
 // diventa la linea di TUTTE le AI (su questo browser), con leggere variazioni:
-// ognuna se ne scosta di poco (TRACCIA_SOLO_SCARTO), non dei ±2.6 delle tracce
+// ognuna se ne scosta fino a TRACCIA_SOLO_SCARTO, meno dei ±2.6 delle tracce
 // normali. Ha la precedenza sulla traiettoria maestra.
 // ══════════════════════════════════════════════════════════════════════════════
 const TRACCE_SOLO_KEY = "palio.tracce.solo.v1";
 const TRACCE_SOLO_N = 5;
-const TRACCIA_SOLO_SCARTO = 1.0;
+const TRACCIA_SOLO_SCARTO = 2.0;   // Simone: «anche di 2»
 function suCreator() {
   try { return /^\/creator(\/|$)/.test(location.pathname) || location.hostname === "localhost" || location.hostname === "127.0.0.1"; } catch (e) { return false; }
 }
