@@ -188,13 +188,19 @@ const RINCORSA_MIN_TENSION = 35.0;
 // Ovale del tondino: allungato lungo la pista (dietro la mossa) e LARGO DA BORDO
 // A BORDO (usa quasi tutta la larghezza). Tutti girano attorno a questo anello.
 const TONDINO_CP = MOSSA_BACK_LIMIT - 10;    // centro lungo la pista
-const TONDINO_CL = 0.0;                         // centro in corsia (centrato)
+// Centro e larghezza in corsia si ricalcolano sulla pista vera (calcolaTondino,
+// dopo il profilo): dietro i canapi la pista è larga fuori (fino a ~17) e stretta
+// dentro (colonnino a ~6,7), quindi l'ovale centrato in 0 stava tutto spostato.
+let TONDINO_CL = 0.0;                           // centro in corsia (ripiego)
 const TONDINO_RP = 9.0;                         // semi-lunghezza lungo la pista
 // Semi-larghezza in corsia: DENTRO i bordi con margine dallo steccato — se
 // l'ovale supera il limite pista i cavalli si schiacciano sul legno e lì
 // "sbattono"/laggano. 8.6 + clamp morbido = mai a contatto con lo steccato.
-const TONDINO_RL = 8.6;
+let TONDINO_RL = 8.6;
 const TONDINO_LANE_MAX = AI_LANE_LIMIT - 1.4;
+let TONDINO_OUT = -TONDINO_LANE_MAX;            // limite esterno (ripiego)
+const TONDINO_MARGINE = 1.6;                    // dai bordi della pista
+const TONDINO_MARGINE_RINCORSA = 1.2;           // dal verrocchino: il corridoio della rincorsa resta libero
 const TONDINO_SPIN = -1;                        // verso di rotazione (−1 = antiorario dall'alto)
 // Corsia fissa della rincorsa: la più esterna (lato verrocchino).
 // Ricalcolate dopo precomputeTrack() per tenere conto della svasatura ai canapi
@@ -206,6 +212,12 @@ let RINCORSA_LANE = -(TRACK_HALF_WIDTH - 1.4);
 const RINCORSA_VARCO_WIDTH = 3.6;   // varco d'entrata (verrocchino più interno)
 const RINCORSA_GAP_VERRO = 0.8;     // la rincorsa AI aspetta a 0.8 dal paletto (a ridosso)
 let VERROCCHINO_LANE = -(TRACK_HALF_WIDTH - RINCORSA_VARCO_WIDTH);
+// Limite ESTERNO delle Contrade ai canapi: il bordo vero della svasatura, non il
+// vecchio −AI_LANE_LIMIT. Con la pista allargata il corridoio della rincorsa
+// (oltre il verrocchino) stava FUORI da quel limite e nessuno poteva più
+// mettersi davanti all'ingresso per non farla partire (Simone 9/11: è strategia).
+let MOSSA_LANE_OUT = -AI_LANE_LIMIT;
+const REAZ_DEBITO_MAX = 1.0;   // scarto massimo fra dove il cavallo È e dove lo si VEDE ai canapi
 // Velocità di spostamento dentro i canapi: la velocità (andatura) muove il
 // cavallo nella direzione in cui è girato. (andatura-2) * questo valore.
 const MOSSA_MOVE_SPEED = 1.4;
@@ -10467,7 +10479,7 @@ function startMossa(fromTratta = false) {
     // OFFSET FISSO equidistante sull'anello; la posizione la dà l'angolo base + offset.
     h.tondinoOffset = (k / ring.length) * TAU;
     const p = TONDINO_CP + Math.cos(h.tondinoOffset) * TONDINO_RP;
-    const l = Math.min(TONDINO_CL + Math.sin(h.tondinoOffset) * TONDINO_RL, bordoInternoAt(positiveMod(p, track.length || 1)) - 1.6);
+    const l = clamp(TONDINO_CL + Math.sin(h.tondinoOffset) * TONDINO_RL, tondinoOutAt(p), tondinoInAt(p));
     h.mossaProgress = p;
     h.progress = p;
     h.mossaLane = l;
@@ -10826,12 +10838,33 @@ function releaseRace() {
 // rientro puntava all'ovale «grezzo», e appena arrivato il giro lo rimetteva nei
 // limiti di colpo — il cavallo saltava di lato fino a 3,4 (visto in prova dopo un
 // «tutti fuori», Simone 9/11).
+// Limite ESTERNO del tondino in quel punto: il bordo vero della pista (con le
+// strettoie e la svasatura) e comunque dentro il verrocchino, così il giro non
+// invade il corridoio dove aspetta la rincorsa.
+function tondinoOutAt(p) {
+  const q = positiveMod(p, track.length || 1);
+  const bordo = -(TRACK_HALF_WIDTH - trackNarrowAt(q) + mossaFlareAt(q) - TONDINO_MARGINE);
+  return Math.max(TONDINO_OUT, bordo);
+}
+function tondinoInAt(p) {
+  return Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(p, track.length || 1)) - TONDINO_MARGINE);
+}
+function calcolaTondino() {
+  TONDINO_OUT = VERROCCHINO_LANE + TONDINO_MARGINE_RINCORSA;
+  let dentro = Infinity, fuori = -Infinity;
+  for (let p = TONDINO_CP - TONDINO_RP; p <= TONDINO_CP + TONDINO_RP; p += 0.5) {
+    dentro = Math.min(dentro, tondinoInAt(p));
+    fuori = Math.max(fuori, tondinoOutAt(p));
+  }
+  if (!Number.isFinite(dentro) || !Number.isFinite(fuori) || dentro - fuori < 4) return;   // pista strana: resta il ripiego
+  TONDINO_CL = (dentro + fuori) / 2;
+  TONDINO_RL = (dentro - fuori) / 2 - 0.2;
+}
 function tondinoGoal(horse, time) {
   const wobble = Math.sin(time * 1.1 + horse.phase) * 0.025;
   const angle = (state.tondinoBase || 0) + (horse.tondinoOffset || 0) + wobble;
   const goalP = clamp(TONDINO_CP + Math.cos(angle) * TONDINO_RP, TONDINO_CP - TONDINO_RP - 2, MOSSA_BACK_LIMIT - 0.5);
-  const tondinoIn = Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(goalP, track.length || 1)) - 1.6);
-  const goalL = clamp(TONDINO_CL + Math.sin(angle) * TONDINO_RL, -TONDINO_LANE_MAX, tondinoIn);
+  const goalL = clamp(TONDINO_CL + Math.sin(angle) * TONDINO_RL, tondinoOutAt(goalP), tondinoInAt(goalP));
   return { goalP, goalL };
 }
 function tondinoBehavior(horse, dt, time) {
@@ -10851,9 +10884,9 @@ function tondinoBehavior(horse, dt, time) {
   const passoMax = 3.0 * dt;
   const pMax = MOSSA_BACK_LIMIT - 0.5;
   if (horse.mossaProgress > pMax) horse.mossaProgress = Math.max(pMax, horse.mossaProgress - passoMax);
-  const tondinoIn = Math.min(TONDINO_LANE_MAX, bordoInternoAt(positiveMod(horse.mossaProgress, track.length || 1)) - 1.6);
+  const tondinoIn = tondinoInAt(horse.mossaProgress), tondinoOut = tondinoOutAt(horse.mossaProgress);
   if (horse.mossaLane > tondinoIn) horse.mossaLane = Math.max(tondinoIn, horse.mossaLane - passoMax);
-  if (horse.mossaLane < -TONDINO_LANE_MAX) horse.mossaLane = Math.min(-TONDINO_LANE_MAX, horse.mossaLane + passoMax);
+  if (horse.mossaLane < tondinoOut) horse.mossaLane = Math.min(tondinoOut, horse.mossaLane + passoMax);
   horse.progress = horse.mossaProgress;
   horse.lane = horse.mossaLane;
   horse.laneVelocity = (horse.lane - prevLane) / Math.max(dt, 0.001);
@@ -11588,7 +11621,7 @@ function updateMossa(dt, time) {
       const along = mvX * s.tangent.x + mvZ * s.tangent.z;   // componente sulla pista
       const across = mvX * s.normal.x + mvZ * s.normal.z;    // componente laterale
       horse.mossaProgress = clamp(horse.mossaProgress + along, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
-      horse.mossaLane = clamp(horse.mossaLane + across, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+      horse.mossaLane = clamp(horse.mossaLane + across, MOSSA_LANE_OUT, MOSSA_LANE_IN);
       // ── ADDOSSO AL CANAPE: spingi in avanti (andatura ≥3) contro il canapo
       // frontale. A 3-4 ti FERMI (niente sgambettìo sul posto); a 5 lo FORZI →
       // "…ha forzato il canape" e le Contrade partono con MOSSA FALSA.
@@ -11625,7 +11658,7 @@ function updateMossa(dt, time) {
       // FARSI LARGO spingendo i vicini (la contesa pesata su mossa×difesa×potenza
       // decide chi cede), senza lo "scatto" di lato del vecchio 2.6.
       const lateral = (controls.latRight ? 1 : 0) - (controls.latLeft ? 1 : 0);
-      if (lateral) horse.mossaLane = clamp(horse.mossaLane + lateral * dt * 1.9, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+      if (lateral) horse.mossaLane = clamp(horse.mossaLane + lateral * dt * 1.9, MOSSA_LANE_OUT, MOSSA_LANE_IN);
     } else {
       // ── Comportamento per POSTA (0 = più interna … 8 = più esterna) ───────
       // Corsia: + = verso l'interno (centro campo), − = verso l'esterno (muro).
@@ -11861,14 +11894,18 @@ function updateMossa(dt, time) {
         horse.blockingRincorsa = false;
       }
 
-      if (settle > 0) {
+      // CHI STA OSTACOLANDO LA RINCORSA (9ª nel corridoio) NON si riallinea: è una
+      // scelta di strategia, non caos. Prima il riallineamento la riportava al
+      // canape e l'ostacolo non durava mai (Simone 9/11: «fa parte della strategia»).
+      const ostacola = horse.blockingRincorsa && tension;
+      if (settle > 0 && !ostacola) {
         // Dopo ~20s tutti i cavalli smettono di fare caos e si riallineano:
         // lateralmente verso la propria posta, longitudinalmente verso il fronte.
         laneGoal = lerp(laneGoal, postLane, settle * 0.8);
         progGoal = lerp(progGoal, MOSSA_MURO_CANAPO, settle);
         if (settle > 0.35) horse.behaviorState = "idle";
       }
-      if (attesa > 0) {
+      if (attesa > 0 && !ostacola) {
         laneGoal = lerp(laneGoal, postLane, attesa);
         progGoal = lerp(progGoal, MOSSA_MURO_CANAPO, attesa);
         if (attesa > 0.5) horse.behaviorState = "idle";
@@ -11901,7 +11938,7 @@ function updateMossa(dt, time) {
           progGoal = frontLine - back - 0.7;                               // si sfilano dietro, più delle altre
           // Verso il lato, ma DENTRO la pista: prima puntavano 3 corsie oltre il bordo
           // e si portavano dietro tutta la fila (sul telefono sparivano dall'inquadratura).
-          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.3 + agg * 0.1), -AI_LANE_LIMIT, MOSSA_LANE_IN);
+          laneGoal = clamp(lerp(pl, side * AI_LANE_LIMIT, 0.3 + agg * 0.1), MOSSA_LANE_OUT, MOSSA_LANE_IN);
           turnGoal = side * 0.45 + Math.sin(time * 0.6 + horse.phase) * 0.4;  // muso verso il lato (non girate su sé stesse)
         } else if (state.caosFront.indexOf(horse.id) !== -1) {
           // LE 6 ADDOSSO AI CANAPI: stringono da un lato e si accavallano fra loro,
@@ -11911,11 +11948,11 @@ function updateMossa(dt, time) {
           // sembrare tutte addossate su un lato. La fila resta larga come le poste.
           // Prima andavano TUTTE sul bordo (side*(limite-1.2)): sembrava che i
           // cavalli scappassero sul bordo della pista.
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, MOSSA_LANE_OUT, MOSSA_LANE_IN);
           progGoal = frontLine - Math.abs(Math.sin(time * 0.7 + horse.phase * 1.5)) * 0.5;   // appena uno scarto, restano sotto il canape
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 0.9;     // muso storto, ma non girate del tutto
         } else {
-          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+          laneGoal = clamp(lerp(pl, side * (AI_LANE_LIMIT - 1.2), 0.12) + Math.sin(time * 0.9 + horse.phase * 2) * 0.7, MOSSA_LANE_OUT, MOSSA_LANE_IN);
           const back = (Math.sin(time * 0.5 + horse.phase * 1.7) * 0.5 + 0.5) * (MOSSA_BACK_MAX + 0.8);
           progGoal = frontLine - back;                                   // vanno anche dietro
           turnGoal = Math.sin(time * 0.6 + horse.phase * 2.3) * 1.9;     // si girano (anche completamente)
@@ -12013,7 +12050,7 @@ function updateMossa(dt, time) {
       // Rincorsa dell'obiettivo RALLENTATA (1.6→0.9 e 2.0→1.1): il cavallo si
       // sposta e si gira con calma. NON toccare invece followRate più sotto:
       // quella è la velocità di RECUPERO della posta dopo una spinta.
-      horse.mossaLane += (clamp(laneGoal + (horse.capOffL || 0), -AI_LANE_LIMIT, MOSSA_LANE_IN) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
+      horse.mossaLane += (clamp(laneGoal + (horse.capOffL || 0), MOSSA_LANE_OUT, MOSSA_LANE_IN) - horse.mossaLane) * clamp(dt * (0.9 + attesa * 1.6), 0, 1);
       // (La nerbata non arretra più: la spinta laterale è nel blocco NERBATO comune sotto.)
       // CAPRICCIO: lo scarto all'indietro del cavallo che si ribella (calcolato
       // nel blocco CAPRICCI comune; qui il fantino AI lo subisce e lo recupera).
@@ -12032,7 +12069,7 @@ function updateMossa(dt, time) {
       // Di lato: si somma alla corsia (persistente). L'AI la riprende da sola
       // inseguendo il suo obiettivo; il giocatore la corregge con Q/P.
       if (isHuman(horse)) {
-        if (horse.capVL) horse.mossaLane = clamp(horse.mossaLane + horse.capVL * dt, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+        if (horse.capVL) horse.mossaLane = clamp(horse.mossaLane + horse.capVL * dt, MOSSA_LANE_OUT, MOSSA_LANE_IN);
         if (horse.capVP) horse.mossaProgress = clamp(horse.mossaProgress + horse.capVP * dt, MOSSA_BACK_LIMIT, MOSSA_FRONT_LIMIT);
       } else {
         // AI: scarti (indietro e di lato) che crescono col capriccio e che il
@@ -12087,7 +12124,7 @@ function updateMossa(dt, time) {
       const sd = horse.turnsSide || 1;
       horse.mossaTurn = sd * TURNS_ANGOLO;                        // muso girato fisso
       horse.mossaProgress = horse.turnsHoldProg ?? horse.mossaProgress;   // non avanza né arretra
-      horse.mossaLane = clamp(horse.mossaLane + sd * dt * 1.7, -AI_LANE_LIMIT, MOSSA_LANE_IN); // preme di lato
+      horse.mossaLane = clamp(horse.mossaLane + sd * dt * 1.7, MOSSA_LANE_OUT, MOSSA_LANE_IN); // preme di lato
       horse.shoveDir = sd;                                        // spinge il vicino da quel lato
       horse.canapeStop = false;
       horse.behaviorState = "turns";
@@ -12129,7 +12166,7 @@ function updateMossa(dt, time) {
     // vince durante i 4 secondi. NON arretra più (accumulava tutti i cavalli dietro).
     if ((horse.nerbLock || 0) > 0 && !horse.isRincorsa && horse.called && !horse.entering) {
       const nsd = horse.nerbSide || 1;
-      horse.mossaLane = clamp(horse.mossaLane + nsd * dt * 1.7, -AI_LANE_LIMIT, MOSSA_LANE_IN); // preme di lato
+      horse.mossaLane = clamp(horse.mossaLane + nsd * dt * 1.7, MOSSA_LANE_OUT, MOSSA_LANE_IN); // preme di lato
       horse.mossaTurn += (nsd * 0.4 - horse.mossaTurn) * clamp(dt * 3, 0, 1);    // muso un filo verso la spinta
       horse.shoveDir = nsd;                                                       // spinge il vicino da quel lato
       horse.canapeStop = false;
@@ -12148,7 +12185,7 @@ function updateMossa(dt, time) {
         const seg = Math.floor(((tt + off) % 21) / 7);      // 0=destra · 1=sinistra · 2=centro
         if (seg === 0 || seg === 1) {
           const sd = seg === 0 ? 1 : -1;
-          horse.mossaLane = clamp(horse.mossaLane + sd * dt * 2.3, -AI_LANE_LIMIT, MOSSA_LANE_IN);
+          horse.mossaLane = clamp(horse.mossaLane + sd * dt * 2.3, MOSSA_LANE_OUT, MOSSA_LANE_IN);
           horse.mossaTurn += (sd * 0.5 - horse.mossaTurn) * clamp(dt * 3, 0, 1);
           horse.shoveDir = sd;
         } else {
@@ -12210,8 +12247,17 @@ function updateMossa(dt, time) {
   // ── Calca al canapo (esclude la rincorsa) ──────────────────────────────
   resolveMossaCrowd(dt);
   // Reazione visiva a spinte e urti (cavallo-lab §6): dopo la calca, prima di placeHorse.
-  state.horses.forEach((h) => aggiornaReazione(h, dt,
-    (h.called && !h.entering && !h.isRincorsa) ? { dLat: h._dLat || 0, dProg: h._dProg || 0, coppia: h._coppia || 0 } : null));
+  state.horses.forEach((h) => {
+    aggiornaReazione(h, dt,
+      (h.called && !h.entering && !h.isRincorsa) ? { dLat: h._dLat || 0, dProg: h._dProg || 0, coppia: h._coppia || 0 } : null);
+    // TETTO al ritardo di vista: un cavallo incastrato viene respinto dalla calca
+    // un po' a ogni fotogramma e il suo obiettivo lo riporta avanti; la respinta
+    // entrava nel «debito», il recupero no → il debito cresceva senza fine e il
+    // cavallo veniva DISEGNATO sempre più avanti, fuori dai canapi (l'Istrice in
+    // produzione, 9/11; in prova la Tartuca a 5 m). Mai più di 1 di scarto a vista.
+    const RV = h.reaz;
+    if (RV) { RV.debitoP = clamp(RV.debitoP || 0, -REAZ_DEBITO_MAX, REAZ_DEBITO_MAX); RV.debitoL = clamp(RV.debitoL || 0, -REAZ_DEBITO_MAX, REAZ_DEBITO_MAX); }
+  });
 
   // HUD della rincorsa (Varco / Slancio) e messaggi situazionali.
   updateRincorsaHud(rincorsa);
@@ -13112,8 +13158,8 @@ function resolveMossaCrowd(dt) {
       // cede meno — quindi il 10% in piu' se lo prende chi spinge meglio.
       const tot = 2 * lPush * SPINTA_CANAPI;
         const laneB0 = back.lane, laneF0 = front.lane;
-        back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
-        front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
+        back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), MOSSA_LANE_OUT, MOSSA_LANE_IN);
+        front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), MOSSA_LANE_OUT, MOSSA_LANE_IN);
         // Braccio: chi sta dietro viene colpito DAVANTI (+), chi sta avanti DIETRO (−).
         const leva = clamp(Math.abs(progGap) / Math.max(minProgPair, 0.01), 0, 1);
         back._coppia = (back._coppia || 0) + (back.lane - laneB0) * leva;
@@ -18555,6 +18601,8 @@ function init() {
     calcolaMossaLaneIn();
     VERROCCHINO_LANE = verrocchinoLane();
     RINCORSA_LANE = rincorsaLane();
+    MOSSA_LANE_OUT = Math.min(-AI_LANE_LIMIT, -(mossaOuterEdge() - 0.9));   // si arriva fin davanti al varco
+    calcolaTondino();   // il tondino si adatta alla pista vera (dopo verrocchino e profilo)
     loadIdealLine();
     fetchGlobalAlbo();   // carica l'albo GLOBALE condiviso (async, non blocca il boot)
     fetchAcceptedHorses(() => fetchStatOverrides());   // cavalli accettati, poi gli override stat admin
