@@ -10820,7 +10820,7 @@ function releaseRace() {
   state.sanMartinoIncident = Math.random() < 1 / 6;
   state.sanMartinoIncidentDone = false;
   state.smLarghe = null;
-  state.horses.forEach((h) => { h.smLargo = false; });
+  state.horses.forEach((h) => { h.smLargo = false; h.vaLargo = null; h.zonaLargaPrima = null; });
   state.tempestaFellDone = false;   // guardia per la caduta provvisoria di Tempesta a San Martino
   state.gridoFellDone = false;      // idem per Grido
   state.tartucaFellDone = false;    // idem per la Tartuca (AI, San Martino)
@@ -11587,9 +11587,22 @@ function updateMossa(dt, time) {
         const slotP = horse.slotProgress ?? MOSSA_MURO_CANAPO;
         const slotL = horse.slotLane ?? horse.postLane ?? horse.mossaLane;
         const walkV = 2.8 + react * 1.2;                 // u/sec: si piazza alla posta più svelta
-        const dl = slotL - horse.mossaLane, dp = slotP - horse.mossaProgress;
+        // NON SI PASSA ATTRAVERSO GLI ALTRI (Simone 9/11): prima si scorre DI LATO
+        // dietro la fila già schierata, fino alla propria corsia; solo lì si va
+        // avanti alla posta. Andando in diagonale si tagliava in mezzo ai cavalli.
+        const dietroFila = Math.min(varcoProg, MOSSA_BACK_LIMIT + 0.3);
+        const inCorsia = Math.abs(slotL - horse.mossaLane) < 0.3;
+        const goalP = inCorsia ? slotP : dietroFila;
+        const dl = slotL - horse.mossaLane, dp = goalP - horse.mossaProgress;
         const dist = Math.hypot(dl, dp) || 1;
-        const step = Math.min(walkV * dt, dist);
+        let step = Math.min(walkV * dt, dist);
+        // Uno della fila arretrato (capriccio) proprio sulla strada: si aspetta
+        // che rientri invece di passargli attraverso.
+        const nl = horse.mossaLane + (dl / dist) * step, np = horse.mossaProgress + (dp / dist) * step;
+        const sbarrato = state.horses.some((o) => o !== horse && !o.isRincorsa && o.called && !o.entering
+          && Math.abs(o.lane - nl) < MOSSA_HORSE_WIDTH * 1.1 && Math.abs(o.progress - np) < HORSE_BLOCK_LENGTH
+          && Math.abs(o.lane - nl) < Math.abs(o.lane - horse.mossaLane) + 1e-3);
+        if (sbarrato && horse.enterTimer < 14) step = 0;
         horse.mossaLane += (dl / dist) * step;
         horse.mossaProgress += (dp / dist) * step;
         horse.progress = horse.mossaProgress;
@@ -11597,7 +11610,7 @@ function updateMossa(dt, time) {
         const crook = (1 - clamp(horse.stability ?? 0.6, 0, 1)) * 0.5 * (1 - clamp(horse.enterTimer / 3, 0, 1));
         horse.mossaTurn = lerp(horse.mossaTurn || 0, Math.sin(horse.phase * 2.3) * crook, clamp(dt * 2, 0, 1));
         horse.speedLevel = step > 0.001 ? 2.9 : 0.5;      // cammina finché si sposta, poi si placa
-        if (dist < 0.35 || horse.enterTimer > 12.0) { horse.entering = false; horse.enterPhase = undefined; horse.mossaTurn = 0; }
+        if ((inCorsia && dist < 0.35) || horse.enterTimer > 16.0) { horse.entering = false; horse.enterPhase = undefined; horse.mossaTurn = 0; }
         return;
       }
       // GIOCATORE: NON esce dalla funzione → cade nel blocco di controllo libero
@@ -13532,7 +13545,8 @@ function updatePlayer(dt, time) {
     // Solo se vai VERSO quel muro: se è la strettoia a venirti incontro mentre
     // tu rientri, il bordo ti accompagna dentro senza farti cadere.
     const versoMuro = player.lane > edge ? player.laneVelocity > 0 : player.laneVelocity < 0;
-    if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge, player.progress), "steccato");
+    if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge, player.progress), "steccato", null,
+      player.lane <= edge && controMaterassiOSteccatoAlto(player.progress) ? LARGO_CADUTA_MOLT : 1);
     player.lane = clamp(player.lane, -edgeOut, edge);
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
     // pista ogni volta che sfioravi lo steccato: è il "colonnino che ti tira verso
@@ -13980,6 +13994,8 @@ function updateAiHorse(horse, dt, time) {
   // INCIDENTE DI SAN MARTINO: le due di testa sorteggiate vanno LARGHE, fino ai
   // materassi (vedi updateRace). Qui, perché è qui che la guida sceglie la corsia.
   if (horse.smLargo) horse.targetLane = -aiOuterAvanti;
+  if (horse.vaLargo) horse.targetLane = -aiOuterLim;       // dritto/largo fino al bordo che ha accanto
+  horse.alBordoFuori = horse.lane <= -aiOuterLim + 0.6;   // per vaLargoTick: è sui materassi/steccato
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
   let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
@@ -14030,7 +14046,8 @@ function updateAiHorse(horse, dt, time) {
   const controColonnino = horse.lane >= aiInnerLim - 0.06 && horse.laneVelocity > RAIL_HIT_MIN_COLONNINI * 0.75;
   const controPalchi = horse.lane <= -(aiOuterLim - 0.06) && horse.laneVelocity < -RAIL_HIT_MIN;
   if (controColonnino || controPalchi) {
-    riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino, horse.progress), "steccato");
+    riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino, horse.progress), "steccato", null,
+      !controColonnino && controMaterassiOSteccatoAlto(horse.progress) ? LARGO_CADUTA_MOLT : 1);
   }
 
   // Nessun freno di curva nemmeno per le AI: il giocatore non ce l'ha piu', e
@@ -14218,6 +14235,7 @@ function updateRace(dt, time) {
     }
   }
 
+  vaLargoTick();
   // FRENO SILENZIOSO su BRUCO (AI): va dritto a San Martino e CADE. Per ~1000 palii,
   // nessun avviso a schermo. Solo se Bruco non è il giocatore e non è già a terra.
   if (brucoFallActive() && NARROW_READY) {
@@ -14409,7 +14427,14 @@ const RAIL_HIT_MIN_CORDA = 5.5;
 // medio (non solo di traverso e fortissimo); altrove la corda resta sicura; il
 // tamponamento pesa un quarto.
 const RAIL_HIT_MIN_COLONNINI = 3.4;
-const TAMPONAMENTO_PESO = 0.25;
+const TAMPONAMENTO_PESO = 0.15;   // era 0.25 (Simone 9/11: urti fra cavalli = cadute rare)
+// LARGHI SUI MATERASSI / SULLO STECCATO ALTO (Simone 9/11): si cade il 20% più
+// spesso andando dritti o larghi a San Martino (materassi) o larghi al Casato
+// (steccato alto). Le AI non ci finivano mai da sole: ogni passaggio in quei
+// tratti c'è una probabilità (più alta per chi ha poca «curva») che il cavallo
+// vada largo fino al bordo; lì il fantino rischia la caduta come per un urto pieno.
+const LARGO_CADUTA_MOLT = 1.2;
+const VA_LARGO_P = 0.045;  // per passaggio, fantino con curva 3: tarato per ~1,2 cadute da largo a palio (prima ~1 da urto)
 function aiColonniniCattivi(prog) {
   if (!NARROW_READY) return false;
   const q = positiveMod(prog || 0, track.length || 1);
@@ -14425,6 +14450,42 @@ function controMaterassiOSteccatoAlto(prog) {
   const m = trattoMaterassi(), c = trattoSteccatoAlto();
   return (q > m.da && q < m.a) || (q > c.da && q < c.a);
 }
+// anticipo: da quanto prima del tratto il cavallo comincia ad allargarsi (all'imbocco della curva).
+function zonaLarga(prog, anticipo = 0) {
+  if (!NARROW_READY) return null;
+  const q = positiveMod(prog || 0, track.length || 1);
+  const m = trattoMaterassi(), c = trattoSteccatoAlto();
+  if (q > m.da - anticipo && q < m.a) return "materassi";
+  if (q > c.da - anticipo && q < c.a) return "steccato";
+  return null;
+}
+const VA_LARGO_ANTICIPO = 20;
+function vaLargoTick() {
+  if (state.mode !== "race" || state.falseStartRunning || (state.raceClock || 0) < 3) return;
+  state.horses.forEach((h) => {
+    if (h.isRincorsa || isHuman(h) || h.finishTime) return;
+    const zona = (h.scosso || h.caduto) ? null : zonaLarga(h.progress, VA_LARGO_ANTICIPO);
+    if (zona && h.zonaLargaPrima !== zona && !h.smLargo) {
+      // Entra nel tratto: va largo? Più facile per chi gira male (curva bassa).
+      const curva = (h.jockey && h.jockey.curva) || 3;
+      const p = VA_LARGO_P * clamp(1 + (3 - curva) * 0.35, 0.4, 1.8);
+      h.vaLargo = Math.random() < p ? zona : null;
+    }
+    if (!zona) h.vaLargo = null;
+    h.zonaLargaPrima = zona;
+    if (h.vaLargo && h.alBordoFuori && zonaLarga(h.progress) === h.vaLargo) {
+      // Arrivato sui materassi / sullo steccato: urto pieno, rischio caduta (+20%).
+      const dove = h.vaLargo;
+      h.vaLargo = null;
+      const prima = !!h.scosso;
+      h.fallCd = 0;
+      riskFall(h, 1, dove, null, LARGO_CADUTA_MOLT);
+      if (!prima && h.scosso && state.messageTimer <= 0) {
+        showMessage(dove === "materassi" ? `${h.name} va largo sui materassi: caduta!` : `${h.name} batte sullo steccato del Casato: caduta!`, 2.2, "danger");
+      }
+    }
+  });
+}
 function fallImpactBordo(v, controColonnino, prog) {
   // Interno: colonnini di San Martino e Casato pericolosi, altrove la corda è sicura.
   // Esterno: si cade sui materassi e sullo steccato alto; contro i palchi altrove no
@@ -14434,7 +14495,7 @@ function fallImpactBordo(v, controColonnino, prog) {
     : (controMaterassiOSteccatoAlto(prog) ? RAIL_HIT_MIN : RAIL_HIT_MIN_CORDA);
   return clamp((Math.abs(v) - min) / RAIL_HIT_RANGE, 0, 1);
 }
-function riskFall(horse, impact, cause, other) {
+function riskFall(horse, impact, cause, other, molt = 1) {
   if (!horse || horse.scosso || state.mode !== "race") return;   // solo IN CORSA, non già scossi
   if ((state.raceClock || 0) < 3) return;                         // NON nei primi 3 secondi
   if ((horse.fallCd || 0) > 0) return;                            // un tiro di dado per volta
@@ -14444,7 +14505,7 @@ function riskFall(horse, impact, cause, other) {
   horse.fallCd = 1.6;
   const curva = (horse.jockey && horse.jockey.curva) || 3;
   const base = clamp(0.9 - (curva - 1) * 0.2, 0.1, 0.9);          // curva 1→.9 · 3→.5 · 5→.1
-  if (Math.random() < base * imp) {
+  if (Math.random() < base * imp * molt) {
     // IMPATTO GRANDE in curva: può andare giù ANCHE IL CAVALLO, non solo il
     // fantino. E se è DAVVERO grande, coinvolge due Contrade e siamo alla PRIMA
     // curva (metà del 1° giro; qui siamo già in curva per il check sopra) →
@@ -14819,14 +14880,10 @@ function resolveHorsePair(A, B, dt, feedback) {
         const closing = behindV - frontV;
         // Il davanti è la seconda Contrada coinvolta: serve alla maxi-caduta.
         if (closing > 2.5) {
-          // Nella calca di San Martino e del Casato l'urto ti butta contro il
-          // colonnino o lo steccato: è quella la caduta vera, e pesa per intero.
-          // Altrove l'urto da dietro fa cadere di rado. (Le AI in quelle curve
-          // stanno a 3-5 dal colonnino: legarlo alla distanza dal bordo, provato,
-          // non scattava mai.)
-          const contro = aiColonniniCattivi(behind.progress);
-          const imp = clamp((closing - 2.5) / 5, 0, 1) * (contro ? 1 : TAMPONAMENTO_PESO);
-          riskFall(behind, imp, contro ? "colonnino" : "tamponamento", front);
+          // Urto fra cavalli: fa cadere DI RADO, ovunque (Simone 9/11: «non devono
+          // più cadere così tanto perché sbattono fra loro»).
+          const imp = clamp((closing - 2.5) / 5, 0, 1) * TAMPONAMENTO_PESO;
+          riskFall(behind, imp, "tamponamento", front);
         }
       }
       behind.progress = front.progress - minGap;
@@ -18738,5 +18795,6 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
 
 
