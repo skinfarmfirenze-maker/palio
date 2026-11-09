@@ -123,6 +123,9 @@ const SPINTA_CANAPI = 1.32;   // quanto si sposta chi perde la contesa ai canapi
 // Spinta del giocatore con due comandi insieme nello stesso verso (P+L o Q+A):
 // forza ×4.5 invece di ×3 (+50%) nella contesa ai canapi.
 const SPINTA_DOPPIA = 4.5;
+// Ogni tacca di andatura sopra la 3 aggiunge il 25% alla spinta del giocatore
+// (4 → ×1.25, 5 → ×1.5): a 4 con P+L si spinge più che a 3 con P+L.
+const SPINTA_ANDATURA = 0.25;
 const LEADER_STAMINA_EXTRA_DRAIN = 0.9;
 const CAMPO_RADIUS = 68;
 const CAMPO_BASE_Z = -36;
@@ -12881,7 +12884,13 @@ function resolveMossaCrowd(dt) {
         // A/L girandosi contro: es. P+L) spinge PIÙ FORTE che con uno solo (Simone
         // 9/11): ×SPINTA_DOPPIA invece di ×3.
         const doppia = (h, verso) => isHuman(h) && controlsLateral() === verso && controlsTurn() === verso;
-        const bonus = (h, spinge, verso) => !spinge ? 1 : (doppia(h, verso) ? SPINTA_DOPPIA : 3);
+        // E conta l'ANDATURA (Simone 9/11): spingere a 4 vale più che a 3.
+        const andaturaSpinta = (h) => {
+          if (!isHuman(h)) return 1;
+          const a = clamp(Math.round(h.speedSetting || 2), 1, 5);
+          return a >= 4 ? 1 + SPINTA_ANDATURA * (a - 3) : 1;
+        };
+        const bonus = (h, spinge, verso) => !spinge ? 1 : (doppia(h, verso) ? SPINTA_DOPPIA : 3) * andaturaSpinta(h);
         const sBack = (back.jkMossa || 3) * (back.jkDifesa || 3) * (back.potenza || 3) * bonus(back, backSpinge, Math.sign(front.lane - back.lane));
         const sFront = (front.jkMossa || 3) * (front.jkDifesa || 3) * (front.potenza || 3) * bonus(front, frontSpinge, Math.sign(back.lane - front.lane));
         // Quanto ci si sposta davvero quando due cavalli si contendono la posta.
