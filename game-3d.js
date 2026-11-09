@@ -1923,14 +1923,14 @@ function buildCurvePadding() {
   // il muro esterno, non questo intervallo.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 10, a: SM_OUT + 25 }));
+      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 12.7, a: SM_OUT + 23.5 }));
     } catch (e) { console.error("materassi San Martino:", e); }
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
   // colmo e puntoni sul retro) al posto del vecchio loop di assi.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 6, a: CAS_OUT + NARROW_RELEASE + 6 }));
+      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 11.9, a: CAS_OUT + 7.9 }));
     } catch (e) { console.error("palizzata Casato:", e); }
   }
 }
@@ -2093,7 +2093,10 @@ function buildCrowdAndFlags() {
   // vicina. Così nessun figurante finisce sulla pista, né sull'arco né sul
   // rettilineo inferiore (dove lo scaling verso il centro falliva).
   const innerSamples = track.samples;
-  const safeDist = TRACK_HALF_WIDTH + 2.6;
+  // Distanza minima dalla linea centrale: segue il COLONNINO (bordoInternoAt),
+  // non più la mezza larghezza fissa. Dove il colonnino rientra, la gente sta
+  // subito dietro invece di lasciare una fascia di mattoni vuota.
+  const safeDistAt = (s) => bordoInternoAt(s.cum) + 2.6;
   let placed = 0;
   let guard = 0;
   const tmpVec = new THREE.Vector3();
@@ -2112,7 +2115,7 @@ function buildCrowdAndFlags() {
         bestS = innerSamples[k];
       }
     }
-    if (!bestS || Math.sqrt(bestD2) <= safeDist) continue;
+    if (!bestS || Math.sqrt(bestD2) <= safeDistAt(bestS)) continue;
     tmpVec.set(qx - bestS.point.x, 0, qz - bestS.point.z);
     if (tmpVec.dot(campoOutward(bestS.point)) >= 0) continue; // scarta il lato esterno
     addPerson(new THREE.Vector3(qx, 0.36 + Math.random() * 0.14, qz), 0.62 + Math.random() * 0.24);
@@ -2160,7 +2163,7 @@ function buildCrowdAndFlags() {
       const d2 = dx * dx + dz * dz;
       if (d2 < bestD2) { bestD2 = d2; bestS = innerSamples[k]; }
     }
-    if (!bestS || Math.sqrt(bestD2) <= safeDist) continue;
+    if (!bestS || Math.sqrt(bestD2) <= safeDistAt(bestS)) continue;
     tmpVec.set(qx - bestS.point.x, 0, qz - bestS.point.z);
     if (tmpVec.dot(campoOutward(bestS.point)) >= 0) continue;   // scarta il lato esterno
     dummy.position.set(qx, 0.34 + Math.random() * 0.12, qz);
