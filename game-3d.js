@@ -1974,7 +1974,7 @@ function buildCurvePadding() {
   // colmo e puntoni sul retro) al posto del vecchio loop di assi.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 11.9, a: CAS_OUT + 7.9 }));
+      addAllestimento(costruisciPalizzata(scenaCtxRef, { da: CAS_IN + 11.9, a: CAS_OUT + 17.9 }));
     } catch (e) { console.error("palizzata Casato:", e); }
   }
 }
