@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa } from "./cavallo-lab.js";
+import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";   // steccati, palchi, pubblico (chat grafica)
 // `tr` e non `T`: nel file ci sono gia' variabili locali chiamate T (le timeline
 // di estrazione e tratta) che la coprirebbero dentro quelle funzioni.
@@ -3488,16 +3488,28 @@ function updateHorseGlb(dt) {
     const infl = r.morphMesh && r.morphMesh.morphTargetInfluences;
     // CADUTO a terra: fermo davvero (zampe piantate, niente movimento).
     if (r.horse.caduto) { if (infl) infl.fill(0); continue; }
-    const gs = Math.abs((r.horse.progress || 0) - (r.horse.prevProgress ?? r.horse.progress)) / step;
+    const gsGrezza = Math.abs((r.horse.progress || 0) - (r.horse.prevProgress ?? r.horse.progress)) / step;
+    const allaMossa = state.mode === "mossa";
+    // Fuori dalla mossa la reazione a spinte e urti si spegne da sola.
+    if (!allaMossa && r.horse.reaz) aggiornaReazione(r.horse, dt, null);
+    // Alla mossa la velocità è filtrata (la calca la fa saltare da un frame all'altro).
+    r.gsF = allaMossa ? (r.gsF ?? gsGrezza) + (gsGrezza - (r.gsF ?? gsGrezza)) * (1 - Math.exp(-dt / 0.15)) : gsGrezza;
+    const gs = r.gsF;
     // race: 0 ai canapi / da fermo, → 1 in piena corsa.
     const race = clamp((gs - 0.4) / 6, 0, 1);
-    // Cadenza: passo lento fra i canapi (0.55×), galoppo pieno e veloce in corsa.
-    r.mixer.update(dt * (race > 0 ? clamp(gs * GAIT_K, 0.15, 6) : 0.55));
+    // PASSI LATERALI: spostato di lato dalla calca (o dai suoi comandi) il cavallo
+    // muove le zampe invece di scivolare rigido. 0..1 da fermo a 1,2 u/s di lato.
+    const passo = allaMossa && r.horse.reaz ? clamp(r.horse.reaz.passo / 1.2, 0, 1) : 0;
+    // Cadenza: alla mossa continua (prima saltava da 0.55 a 0.15 appena il cavallo
+    // si muoveva); in corsa galoppo pieno legato alla velocità.
+    const cad = allaMossa ? Math.max(0.55 + 0.9 * passo, gs * GAIT_K)
+                          : (race > 0 ? clamp(gs * GAIT_K, 0.15, 6) : 0.55);
+    r.mixer.update(dt * cad);
     // AMPIEZZA: fra i canapi le zampe si alzano POCO (0.32 = passo accennato, non
     // galoppo in aria); in corsa arriva al 100%. Scalo i pesi dopo il mixer, così
     // il cavallo si muove ma resta coi piedi a terra al canapo.
     if (infl) {
-      const amp = 0.32 + 0.68 * race;
+      const amp = Math.min(1, 0.32 + 0.68 * race + 0.22 * passo);
       if (amp < 0.999) for (let k = 0; k < infl.length; k += 1) infl[k] *= amp;
     }
     // ── SPENNACCHIERA che segue l'OSCILLAZIONE della testa: la testa GLB fa su e
@@ -3522,7 +3534,6 @@ function updateHorseGlb(dt) {
                          _spennPos.y + spenn.userData.offY,
                          _spennPos.z + spenn.userData.offZ);
       // Resta solo un filo di nutata, SOPRA la posizione vera.
-      const cad = race > 0 ? clamp(gs * GAIT_K, 0.15, 6) : 0.55;
       r.spennPhase = (r.spennPhase || 0) + dt * cad * 4.19;
       spenn.rotation.x = (spenn.userData.baseRotX ?? 0) + Math.sin(r.spennPhase) * (0.05 + 0.13 * race);
     }
@@ -3802,10 +3813,15 @@ function getHorseAnimationState(horse) {
 }
 
 function placeHorse(horse, time) {
-  const sample = sampleAt(horse.progress);
+  // Alla mossa il cavallo si disegna dove lo si VEDE: lo spostamento imposto di colpo
+  // dalla calca si recupera a velocità di spinta (cavallo-lab §6, "debito").
+  const RV = state.mode === "mossa" ? horse.reaz : null;
+  const progVista = (horse.progress || 0) - (RV ? RV.debitoP : 0);
+  const laneVista = horse.lane - (RV ? RV.debitoL : 0);
+  const sample = sampleAt(progVista);
   const animationState = getHorseAnimationState(horse);
   const profile = HORSE_ANIMATION_PROFILES[animationState] || HORSE_ANIMATION_PROFILES.gallop;
-  const offset = sample.normal.clone().multiplyScalar(horse.lane);
+  const offset = sample.normal.clone().multiplyScalar(laneVista);
   const movement = clamp(horse.speedLevel / 8, 0.16, 1.15);
   // Fase del passo INTEGRATA (fase += dt × frequenza), non time × frequenza. Con
   // time × frequenza ogni piccola variazione di speedLevel spostava la fase di
@@ -3825,7 +3841,7 @@ function placeHorse(horse, time) {
   horse.group.position.copy(sample.point).add(offset);
   // ATTENZIONE: sampleAt() NON restituisce `cum` — la quota si calcola dal
   // progress (modulo giro), come per la svasatura dei canapi.
-  horse.group.position.y = 0.02 + bob + trackHeightAt(positiveMod(horse.progress || 0, track.length || 1));
+  horse.group.position.y = 0.02 + bob + trackHeightAt(positiveMod(progVista, track.length || 1));
   // Il giocatore, in gara, è orientato dal proprio heading manuale; le AI (e il
   // giocatore alla mossa) seguono la tangente della pista. In ASSISTI il cavallo-
   // focus (rivale) è in autopilot: lo guida l'AI, quindi va orientato come un'AI
@@ -3859,6 +3875,16 @@ function placeHorse(horse, time) {
   // CAVALLO CADUTO: coricato sul fianco. Sovrascrive il roll normale (clampato a
   // ±0.16) finché cadutoRoll non torna a zero con la rialzata.
   if (horse.cadutoRoll) horse.group.rotation.z = horse.cadutoRoll;
+  // REAZIONE a spinte e urti (cavallo-lab §6), solo visiva. Ordine YXZ: il
+  // beccheggio gira attorno all'asse traverso del cavallo, non a quello del mondo.
+  const RZ = horse.reaz;
+  horse.group.rotation.order = "YXZ";
+  if (RZ && !horse.cadutoRoll) {
+    horse.group.rotation.y += RZ.y;
+    horse.group.rotation.z += RZ.r;
+    horse.group.rotation.x = RZ.p;
+    if (RZ.p < 0) horse.group.position.y += 1.6 * Math.sin(-RZ.p);   // si alza davanti facendo perno dietro
+  } else horse.group.rotation.x = 0;
   horse.lastCurve = sample.curve;
   horse.collisionFlash = Math.max(0, horse.collisionFlash - 0.045);
 
@@ -3909,7 +3935,7 @@ function placeHorse(horse, time) {
   }
   const jockey = horse.group.userData.jockey;
   jockey.rotation.x = -0.12 + Math.sin(gallop * 0.5) * 0.052 - clamp(horse.speedLevel - 6, 0, 3) * 0.025 + (animationState === "slowDown" ? 0.045 : 0);
-  jockey.rotation.z = -leanVel * 0.02;
+  jockey.rotation.z = -leanVel * 0.02 + (RZ ? RZ.j : 0);
   // VITTORIA: il fantino vincitore taglia il traguardo e resta col NERBO ALZATO
   // — braccio destro teso in alto, gesto leggibile anche da lontano. Nel replay
   // il nerbo si alza solo al momento del traguardo (replayAtEnd).
@@ -10087,6 +10113,7 @@ function startMossa(fromTratta = false) {
     // Agitazione da nervosismo: stato pulito a ogni mossa.
     horse.nervBackState = null; horse.lastHitAt = -99; horse.lastTouchAt = -99; horse.hitStreak = null;
     horse.capT = null; horse.capLeft = 0; horse.capMoveT = 0; horse.capVP = 0; horse.capVL = 0; horse.capOffP = 0; horse.capOffL = 0; horse.capTurn = 0;   // capricci: da capo
+    azzeraReazione(horse);   // reazione a spinte e urti: da capo
     horse.launching = false;
     horse.launchDelayTimer = 0;
     horse.launchHeadingDev = 0;
@@ -12111,6 +12138,9 @@ function updateMossa(dt, time) {
 
   // ── Calca al canapo (esclude la rincorsa) ──────────────────────────────
   resolveMossaCrowd(dt);
+  // Reazione visiva a spinte e urti (cavallo-lab §6): dopo la calca, prima di placeHorse.
+  state.horses.forEach((h) => aggiornaReazione(h, dt,
+    (h.called && !h.entering && !h.isRincorsa) ? { dLat: h._dLat || 0, dProg: h._dProg || 0, coppia: h._coppia || 0 } : null));
 
   // HUD della rincorsa (Varco / Slancio) e messaggi situazionali.
   updateRincorsaHud(rincorsa);
@@ -12885,6 +12915,9 @@ function resolveMossaCrowd(dt) {
   // partecipa ancora alla calca.
   const horses = state.horses.filter((h) => !h.isRincorsa && h.called && !h.entering);
   // (l'ingombro non è più fisso: lo calcola mossaFootprint in base alla rotazione)
+  // REAZIONE (cavallo-lab §6): quanto la calca sposta ogni cavallo in questo frame e
+  // dove lo colpisce. Solo misura: non cambia niente della calca.
+  horses.forEach((h) => { h._laneCalca = h.lane; h._progCalca = h.progress; h._coppia = 0; });
 
   // 1. MURO DEL CANAPO: limite RIGIDO, non una spinta. Prima era una repulsione
   //    proporzionale applicata ogni frame con buffer 1.3, mentre la posta punta a
@@ -12983,8 +13016,13 @@ function resolveMossaCrowd(dt) {
       // muoversi per davvero. La divisione resta la stessa — chi e' piu' forte
       // cede meno — quindi il 10% in piu' se lo prende chi spinge meglio.
       const tot = 2 * lPush * SPINTA_CANAPI;
+        const laneB0 = back.lane, laneF0 = front.lane;
         back.lane  = clamp(back.lane  + side * tot * (sFront / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
         front.lane = clamp(front.lane - side * tot * (sBack / (sBack + sFront)), -AI_LANE_LIMIT, MOSSA_LANE_IN);
+        // Braccio: chi sta dietro viene colpito DAVANTI (+), chi sta avanti DIETRO (−).
+        const leva = clamp(Math.abs(progGap) / Math.max(minProgPair, 0.01), 0, 1);
+        back._coppia = (back._coppia || 0) + (back.lane - laneB0) * leva;
+        front._coppia = (front._coppia || 0) - (front.lane - laneF0) * leva;
         // Chi viene spinto NON rientra subito alla sua posta: marcalo così il ritorno
         // (§3) lo salta finché è in contatto → la spinta RESTA.
         if (backSpinge) { front.spintoTimer = 0.6; nervPress(front, back.id); }
@@ -13041,6 +13079,8 @@ function resolveMossaCrowd(dt) {
       }
     }
   }
+
+  horses.forEach((h) => { h._dLat = h.lane - h._laneCalca; h._dProg = h.progress - h._progCalca; });
 
   // 3. RITORNO ALLA POSTA: forza debole che riporta ogni cavallo AI alla sua
   //    corsia dopo essere stato spostato dalla calca. TENUTA BASSA apposta: se

@@ -381,3 +381,112 @@ export function inclinazioneInCurva(v, curvatura, g = 9.81, max = 0.30) {
   const a = Math.atan((v * v * curvatura) / g);
   return Math.max(-max, Math.min(max, a));
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 6. REAZIONE AI CANAPI — spinte e urti che si VEDONO, senza tremolio
+// ════════════════════════════════════════════════════════════════════════════
+// Ai canapi i cavalli si toccano davvero (sagoma 0,66), ma chi viene spinto
+// scivolava di lato rigido, a gambe ferme, senza reagire. Qui il corpo risponde:
+//  · urto: si sbilancia via dal vicino, poi si APPOGGIA contro di lui finché preme;
+//  · colpito sulla spalla gira il davanti, colpito sulla groppa gira il dietro;
+//  · urto forte o nerbata: si alza un poco davanti;
+//  · il fantino oscilla in ritardo (inerzia);
+//  · spostato di lato, il cavallo fa i passi (velocità di passo per il mixer).
+// Tutto VISIVO: niente torna nella fisica della mossa (posizioni, calca,
+// allineamento), quindi non può innescare anelli di retroazione. Contro il
+// tremolio: ingressi filtrati (≥ 80 ms) e molle smorzate sotto 1,6 Hz.
+export const REAZIONE = {
+  filtro: 0.12,                 // s, filtro sugli ingressi
+  filtroLento: 0.8,             // s, pressione sostenuta (appoggio)
+  vMax: 2.5,                    // u/s: la calca non può più spostare un cavallo più in fretta di così, a vista
+  inseguo: 0.05,                // s: con che prontezza la vista recupera lo spostamento della calca
+  // Molle LENTE e quasi senza rimbalzo (z ≥ 0,8): il cavallo si sbilancia e torna,
+  // non dondola. Con f 1,1 Hz e z 0,6 una spinta di 37 cm lo faceva oscillare da +4,5°
+  // a −7° in 0,4 s: si leggeva come un tremito.
+  rollio:     { f: 0.7, z: 0.85, kColpo: 0.45, kAppoggio: 0.07, max: 0.12 },
+  imbardata:  { f: 0.6, z: 0.85, kColpo: 0.6, kAppoggio: 0.10, max: 0.16 },
+  beccheggio: { f: 1.0, z: 0.8,  kColpo: 1.0, soglia: 0.06, nerbata: 0.4, max: 0.06 },     // soglia: salto del filtro in un frame
+  fantino:    { f: 1.2, z: 0.7,  k: 0.8 },
+  passo:      { tau: 0.25 },
+};
+
+function molla(x, v, bersaglio, f, z, dt) {
+  const w = 2 * Math.PI * f;
+  const n = Math.max(1, Math.ceil(dt / 0.012));        // sottopassi: stabile anche a 30 fps
+  const h = dt / n;
+  for (let i = 0; i < n; i++) {
+    v += (-w * w * (x - bersaglio) - 2 * z * w * v) * h;
+    x += v * h;
+  }
+  return [x, v];
+}
+const _lim = (x, m) => Math.max(-m, Math.min(m, x));
+// Limite morbido: se la molla arriva al tetto si ferma lì (niente rimbalzo a scatto).
+function _tetto(x, v, m) { if (x > m) return [m, Math.min(v, 0)]; if (x < -m) return [-m, Math.max(v, 0)]; return [x, v]; }
+
+export function azzeraReazione(h) {
+  h.reaz = { r: 0, rv: 0, y: 0, yv: 0, p: 0, pv: 0, j: 0, jv: 0,
+             vF: 0, vL: 0, tF: 0, tL: 0, passo: 0, nerb: 0, debitoL: 0, debitoP: 0 };
+}
+
+// Da chiamare a ogni frame per ogni cavallo, DOPO la calca e PRIMA di placeHorse.
+// ingresso (alla mossa): { dLat, dProg: spostamento laterale e longitudinale imposto
+// dalla calca in questo frame (u), coppia: Σ dLat × braccio (+ = colpito davanti) }.
+// Fuori dalla mossa passare null: debiti e molle tornano a zero da soli.
+//
+// DEBITO: la calca a volte sposta un cavallo di 0,4-1,2 m in UN frame (sagome molto
+// sovrapposte): a vista era un teletrasporto. Lo spostamento resta giusto nella
+// logica, ma si VEDE recuperato a velocità di spinta (≤ vMax): placeHorse disegna
+// il cavallo a (corsia − debitoL, progress − debitoP).
+export function aggiornaReazione(h, dt, ingresso) {
+  if (!h.reaz) azzeraReazione(h);
+  const R = h.reaz, C = REAZIONE;
+  if (!(dt > 0)) return R;
+  R.debitoL += ingresso ? ingresso.dLat : 0;
+  R.debitoP += ingresso ? (ingresso.dProg || 0) : 0;
+  const passoMax = C.vMax * dt, k = 1 - Math.exp(-dt / C.inseguo);
+  const mostraL = _lim(R.debitoL * k, passoMax), mostraP = _lim(R.debitoP * k, passoMax);
+  R.debitoL -= mostraL; R.debitoP -= mostraP;
+  if (Math.abs(R.debitoL) < 1e-5) R.debitoL = 0;
+  if (Math.abs(R.debitoP) < 1e-5) R.debitoP = 0;
+  // La coppia segue la stessa parte dello spostamento che si vede.
+  const quota = ingresso && Math.abs(ingresso.dLat) > 1e-6 ? _lim(mostraL / ingresso.dLat, 1) : 0;
+  const vExt = mostraL / dt;
+  const tExt = ingresso ? (ingresso.coppia || 0) * Math.max(quota, 0) / dt : 0;
+
+  const a = 1 - Math.exp(-dt / C.filtro), aL = 1 - Math.exp(-dt / C.filtroLento);
+  const vPrima = R.vF, tPrima = R.tF;
+  R.vF += (vExt - R.vF) * a;  R.vL += (vExt - R.vL) * aL;
+  R.tF += (tExt - R.tF) * a;  R.tL += (tExt - R.tL) * aL;
+  const dv = R.vF - vPrima, dtq = R.tF - tPrima;
+
+  // ROLLIO (+ = schiena verso la corsia +): il colpo lo sbilancia nel verso della
+  // spinta, la pressione che dura lo fa appoggiare CONTRO chi spinge.
+  R.rv += C.rollio.kColpo * dv;
+  [R.r, R.rv] = molla(R.r, R.rv, -C.rollio.kAppoggio * _lim(R.vL / 0.5, 1), C.rollio.f, C.rollio.z, dt);
+  [R.r, R.rv] = _tetto(R.r, R.rv, C.rollio.max);
+
+  // IMBARDATA (+ = muso a sinistra, verso la corsia −): spinto davanti verso la
+  // corsia + → il muso va verso la corsia + (imbardata −); spinto dietro → il contrario.
+  R.yv += -C.imbardata.kColpo * dtq;
+  [R.y, R.yv] = molla(R.y, R.yv, -C.imbardata.kAppoggio * _lim(R.tL / 0.5, 1), C.imbardata.f, C.imbardata.z, dt);
+  [R.y, R.yv] = _tetto(R.y, R.yv, C.imbardata.max);
+
+  // BECCHEGGIO (− = si alza davanti): urto forte o nerbata appena presa.
+  const nerbNuova = (h.nerbLock || 0) > R.nerb + 1;      // nerbLock riparte da 4 s
+  R.nerb = h.nerbLock || 0;
+  if (Math.abs(dv) > C.beccheggio.soglia) R.pv -= C.beccheggio.kColpo * (Math.abs(dv) - C.beccheggio.soglia);
+  if (nerbNuova) { R.pv -= C.beccheggio.nerbata; R.rv += 0.25 * (h.nerbSide || 0); }
+  [R.p, R.pv] = molla(R.p, R.pv, 0, C.beccheggio.f, C.beccheggio.z, dt);
+  [R.p, R.pv] = _tetto(R.p, R.pv, C.beccheggio.max);
+
+  // FANTINO: segue il rollio del cavallo in ritardo, con un poco di controfase.
+  [R.j, R.jv] = molla(R.j, R.jv, -C.fantino.k * R.r, C.fantino.f, C.fantino.z, dt);
+
+  // PASSO: velocità laterale VISTA (spinta mostrata + movimento proprio), per le zampe.
+  const lv = h.lane - R.debitoL;
+  const vLat = R.laneVista === undefined ? 0 : Math.abs((lv - R.laneVista) / dt);
+  R.laneVista = lv;
+  R.passo += (Math.min(vLat, 3) - R.passo) * (1 - Math.exp(-dt / C.passo.tau));
+  return R;
+}
