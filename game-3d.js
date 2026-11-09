@@ -16239,6 +16239,14 @@ function bindEvents() {
       });
       return;
     }
+    // FIANCA: un colpo alla pressione, come il tasto F.
+    if (key === "fianca") {
+      button.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        premiFianca();
+      });
+      return;
+    }
     // Tastini ANDATURA (sinistra): un colpo per pressione, come X/O del controller.
     if (key === "gaitUp" || key === "gaitDown") {
       button.addEventListener("pointerdown", (event) => {
@@ -18330,6 +18338,8 @@ body.touch-device .hud-top-left{top:calc(env(safe-area-inset-top,0px) + 98px) !i
 body.touch-device .race-message{top:46% !important;left:27% !important;right:31% !important;font-size:17px !important;line-height:1.25 !important;padding:0 !important}
 .touch-nerb{width:112px !important;height:44px !important;left:auto !important;right:calc(var(--margine-sicuro) + 22px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:14px !important;font-weight:800 !important;letter-spacing:.1em !important;background:rgba(160,42,32,.86) !important;border-color:rgba(245,160,130,.6) !important;color:#fff5ec !important}
 .touch-nerb:active{background:rgba(200,60,46,.95) !important;transform:scale(.96)}
+.touch-fianca{width:50px !important;height:44px !important;left:auto !important;right:calc(var(--margine-sicuro) + 142px) !important;bottom:calc(env(safe-area-inset-bottom,0px) + 96px) !important;border-radius:12px !important;font-size:16px !important;font-weight:800 !important;background:rgba(40,110,62,.86) !important;border-color:rgba(150,220,170,.6) !important;color:#f1fff4 !important}
+.touch-fianca:active{background:rgba(52,140,80,.95) !important;transform:scale(.96)}
 body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;transform:translateX(-50%) !important;top:calc(env(safe-area-inset-top,0px) + 30px) !important;width:188px !important;height:116px !important}
 #rotateNotice{display:none}
 @media (orientation:portrait){body.touch-device #rotateNotice{display:flex}}`;
@@ -18347,6 +18357,7 @@ body.touch-device .rincorsa-watcher{left:50% !important;right:auto !important;tr
       tc.appendChild(b);
     };
     mk("touch-nerb", "nerb", "Nerbata", "NERBO");
+    mk("touch-fianca", "fianca", "Fianca", "F");   // FIANCA: piccolo, accanto a NERBO
     // D-PAD SINISTRA: ▲▼ andatura · ◀▶ scorrimento laterale (spariscono in corsa)
     mk("touch-gait touch-gait-up", "gaitUp", "Aumenta andatura", "▲");
     mk("touch-gait touch-gait-down", "gaitDown", "Riduci andatura", "▼");

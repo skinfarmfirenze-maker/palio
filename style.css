@@ -637,6 +637,23 @@ kbd {
   background: rgba(200, 60, 46, 0.95);
   transform: scale(0.96);
 }
+/* Tasto FIANCA (F): piccolo, subito a sinistra di NERBO. Lo scattino al via. */
+.touch-fianca {
+  width: 52px;
+  height: 46px;
+  right: calc(var(--margine-sicuro) + 146px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 800;
+  background: rgba(40, 110, 62, 0.86);
+  border-color: rgba(150, 220, 170, 0.6);
+  color: #f1fff4;
+}
+.touch-fianca:active {
+  background: rgba(52, 140, 80, 0.95);
+  transform: scale(0.96);
+}
 
 /* Tastini ANDATURA, in basso a SINISTRA (▲ accelera · ▼ rallenta). Lo sterzo NON
    è più qui: si guida inclinando il dispositivo. Rispettano la safe-area. */
