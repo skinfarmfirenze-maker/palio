@@ -120,6 +120,9 @@ const HORSE_BLOCK_LENGTH = 3.30;
 const HORSE_BLOCK_WIDTH = 1.02;
 const HORSE_PASS_CLEARANCE = 1.95;
 const SPINTA_CANAPI = 1.32;   // quanto si sposta chi perde la contesa ai canapi (+10%, poi +20% Simone 9/11: 1.10 × 1.2)
+// Spinta del giocatore con due comandi insieme nello stesso verso (P+L o Q+A):
+// forza ×4.5 invece di ×3 (+50%) nella contesa ai canapi.
+const SPINTA_DOPPIA = 4.5;
 const LEADER_STAMINA_EXTRA_DRAIN = 0.9;
 const CAMPO_RADIUS = 68;
 const CAMPO_BASE_Z = -36;
@@ -12874,8 +12877,13 @@ function resolveMossaCrowd(dt) {
         const premeFront = isHuman(front) ? (controlsLateral() || controlsTurn() || 0) : (front.shoveDir || 0);
         const backSpinge = premeBack && Math.sign(premeBack) === Math.sign(front.lane - back.lane);
         const frontSpinge = premeFront && Math.sign(premeFront) === Math.sign(back.lane - front.lane);
-        const sBack = (back.jkMossa || 3) * (back.jkDifesa || 3) * (back.potenza || 3) * (backSpinge ? 3 : 1);
-        const sFront = (front.jkMossa || 3) * (front.jkDifesa || 3) * (front.potenza || 3) * (frontSpinge ? 3 : 1);
+        // Il GIOCATORE che spinge con DUE comandi nello stesso verso (Q/P di lato +
+        // A/L girandosi contro: es. P+L) spinge PIÙ FORTE che con uno solo (Simone
+        // 9/11): ×SPINTA_DOPPIA invece di ×3.
+        const doppia = (h, verso) => isHuman(h) && controlsLateral() === verso && controlsTurn() === verso;
+        const bonus = (h, spinge, verso) => !spinge ? 1 : (doppia(h, verso) ? SPINTA_DOPPIA : 3);
+        const sBack = (back.jkMossa || 3) * (back.jkDifesa || 3) * (back.potenza || 3) * bonus(back, backSpinge, Math.sign(front.lane - back.lane));
+        const sFront = (front.jkMossa || 3) * (front.jkDifesa || 3) * (front.potenza || 3) * bonus(front, frontSpinge, Math.sign(back.lane - front.lane));
         // Quanto ci si sposta davvero quando due cavalli si contendono la posta.
       // Alzato del 10%: chi ha la potenza per farsi largo deve vedere l'altro
       // muoversi per davvero. La divisione resta la stessa — chi e' piu' forte
