@@ -4721,6 +4721,7 @@ function nextPlayerPost(n) {
 // Registra UN palio corso nel totale GLOBALE (tutti i dispositivi). Chiamato una
 // volta all'inizio di ogni palio. Aggiorna subito il locale, poi il server.
 function recordPalioRun() {
+  if (state.soloAllenamento) return;   // i palii da solo (traiettoria) non contano
   let a; try { a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}; } catch (e) { a = {}; }
   a = normalizeAlbo(a);
   a.totalePalii += 1;
@@ -4828,7 +4829,7 @@ async function fetchGlobalAlbo(force) {
   } catch (e) { return null; }   // niente rete/API: si resta sul fallback locale
 }
 function recordVictoryToAlbo(winner) {
-  if (!winner) return;
+  if (!winner || state.soloAllenamento) return;   // da solo non si vince niente
   // 1) Aggiornamento LOCALE immediato (feedback subito + fallback offline).
   let a; try { a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}; } catch (e) { a = {}; }
   a = normalizeAlbo(a);
@@ -6369,6 +6370,7 @@ function openModeChooser() {
           teleEvento("attesa", "veloce");
           return;
         }
+        state.soloAllenamento = false;
         state.teleGioco = "veloce";
         segnaPaliataVeloce();
         resetCampaign();          // azzera l'eventuale campagna (mette quickBudgets a null)
@@ -6387,6 +6389,7 @@ function openModeChooser() {
           teleEvento("attesa", "campagna");
           return;
         }
+        state.soloAllenamento = false;
         state.teleGioco = "campagna";
         const saved = loadCampaignSave();
         const start = () => { segnaCampagna(); closeCampaignOverlay(); beginCampaignSetup(); };
@@ -6402,6 +6405,33 @@ function openModeChooser() {
       row.append(col("Riprendi la Campagna", `${cName} · palio ${(saved.palioIndex || 0) + 1} · vittorie ${saved.wins || 0}.`, "#3a5db8", () => {
         closeCampaignOverlay(); resumeCampaign();
       }));
+    }
+    // ── TRAIETTORIA DA SOLO (solo su /creator): 5 palii senza avversari, poi le
+    // Contrade seguono la tua linea media con leggere variazioni.
+    if (suCreator()) {
+      const fatti = caricaTracceSolo().length;
+      const pronta = fatti >= TRACCE_SOLO_N;
+      const sub = pronta
+        ? `Fatti ${TRACCE_SOLO_N}/${TRACCE_SOLO_N}: le Contrade seguono la tua linea. Correndo ancora, il palio più vecchio esce dalla media.`
+        : `Palio ${fatti + 1} di ${TRACCE_SOLO_N} senza avversari. Dopo il 5° le Contrade seguono la tua linea.`;
+      const c = col("Traiettoria: corri da solo", sub, "#6b4e2e", () => {
+        state.soloAllenamento = true;
+        state.teleGioco = "solo";
+        resetCampaign();
+        closeCampaignOverlay(); openSelectScreen();
+      });
+      if (fatti > 0) {
+        const z = document.createElement("button"); z.className = "cmp-btn";
+        z.style.cssText = "margin-top:8px;font-size:12px;padding:6px 12px;background:#444";
+        z.textContent = `Azzera traiettoria (${fatti}/${TRACCE_SOLO_N})`;
+        z.addEventListener("click", () => {
+          if (confirm("Cancellare i palii da solo registrati? Le Contrade torneranno alla loro linea.")) {
+            azzeraTracceSolo(); closeCampaignOverlay(); openModeChooser();
+          }
+        });
+        c.append(z);
+      }
+      row.append(c);
     }
     panel.append(k, t, row);
   });
@@ -10403,6 +10433,7 @@ function startMossa(fromTratta = false) {
   // NON si anticipa NULLA dell'estrazione: né la posta del giocatore né chi è di
   // rincorsa. Tutti girano mescolati nel tondino finché il mossiere non chiama.
   showMessage("Al tondino: i cavalli girano in attesa della chiamata…", 3.0);
+  if (state.soloAllenamento) avviaCorsaSolo();   // traiettoria da solo: dritti in corsa
 }
 
 // Boost/malus TEMPORANEO di velocità legato alla mossa (asta): +9% per chi si
@@ -10549,8 +10580,10 @@ function releaseRace() {
   // autopilot): è il suo modo di correre che vogliamo far imparare alle AI.
   {
     const p = getPlayer();
-    const registro = !!(p && !p.autopilot && isMarioRossi(getAccount()));
+    const registro = !!(p && !p.autopilot && (state.soloAllenamento || isMarioRossi(getAccount())));
     state.tracciaCorsa = registro ? new Array(tracciaSlotTotali()).fill(null) : null;
+    state.tracciaSoloSomme = state.soloAllenamento ? new Array(tracciaSlotTotali()).fill(0) : null;
+    state.tracciaSoloConti = state.soloAllenamento ? new Array(tracciaSlotTotali()).fill(0) : null;
     assegnaTracceAlleAI();
   }
   if (state.chiamataA5) { const p = getPlayer(); if (p) p.chiamataNoStaminaT = 2; state.chiamataA5 = false; }   // partenza a chiamata: 0 stamina per 2s
@@ -14928,6 +14961,59 @@ function salvaTracciaMaestra(traccia, fantino, cavallo) {
     }));
   } catch (e) { /* niente */ }
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// LA TRAIETTORIA «DA SOLO» (Simone 9/11, solo su /creator)
+// Simone corre TRACCE_SOLO_N palii senza avversari; per ogni tratto di pista si
+// registra la corsia MEDIA tenuta nei tre giri. Fatti i 5 palii, la media dei 5
+// diventa la linea di TUTTE le AI (su questo browser), con leggere variazioni:
+// ognuna se ne scosta di poco (TRACCIA_SOLO_SCARTO), non dei ±2.6 delle tracce
+// normali. Ha la precedenza sulla traiettoria maestra.
+// ══════════════════════════════════════════════════════════════════════════════
+const TRACCE_SOLO_KEY = "palio.tracce.solo.v1";
+const TRACCE_SOLO_N = 5;
+const TRACCIA_SOLO_SCARTO = 1.0;
+function suCreator() {
+  try { return /^\/creator(\/|$)/.test(location.pathname) || location.hostname === "localhost" || location.hostname === "127.0.0.1"; } catch (e) { return false; }
+}
+function caricaTracceSolo() {
+  try { const a = JSON.parse(localStorage.getItem(TRACCE_SOLO_KEY)); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
+function salvaTracciaSolo(t) {
+  const tutte = caricaTracceSolo();
+  tutte.push(t);
+  while (tutte.length > TRACCE_SOLO_N) tutte.shift();   // si tengono gli ultimi 5
+  try { localStorage.setItem(TRACCE_SOLO_KEY, JSON.stringify(tutte)); } catch (e) { /* niente */ }
+  return tutte.length;
+}
+function azzeraTracceSolo() { try { localStorage.removeItem(TRACCE_SOLO_KEY); } catch (e) { /* niente */ } }
+// La linea media dei 5 palii da solo, o null finché non sono 5.
+function tracciaSoloMedia() {
+  const tutte = caricaTracceSolo();
+  if (tutte.length < TRACCE_SOLO_N) return null;
+  const n = tracciaSlotTotali();
+  const out = new Array(n).fill(null);
+  for (let i = 0; i < n; i += 1) {
+    let somma = 0, conta = 0;
+    tutte.forEach((t) => { const v = t[i]; if (v != null && Number.isFinite(v)) { somma += v; conta += 1; } });
+    if (conta) out[i] = Math.round((somma / conta) * 10) / 10;
+  }
+  return out;
+}
+// Il palio da solo comincia SUBITO in corsa: niente mossa, niente avversari.
+function avviaCorsaSolo() {
+  const p = getPlayer();
+  if (!p) return;
+  state.horses.filter((h) => h !== p).forEach(disposeHorseGroup);
+  state.horses = [p];
+  state.callOrder = [p];
+  p.isRincorsa = false; p.called = true; p.entering = false; p.enterPhase = undefined;
+  p.mossaProgress = MOSSA_FRONT_LIMIT - 1.0; p.progress = p.mossaProgress;
+  p.mossaLane = 0; p.lane = 0; p.mossaTurn = 0;
+  placeHorse(p, 0);
+  const rh = document.getElementById("rincorsaHud"); if (rh) rh.classList.remove("visible");
+  releaseRace();
+  showMessage(`Traiettoria: palio da solo ${Math.min(caricaTracceSolo().length + 1, TRACCE_SOLO_N)} di ${TRACCE_SOLO_N}`, 3.0, "good");
+}
 const TRACCE_MAX = 30;              // quante corse si tengono
 const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
 // Quanto l'AI aderisce alla linea umana: 0.88 = ci sta praticamente incollata.
@@ -14987,6 +15073,10 @@ function salvaTraccia(traccia) {
 function registraPuntoTraccia(player) {
   if (!state.tracciaCorsa || !player) return;
   const s = tracciaSlot(player.progress);
+  // Da solo: la MEDIA dei tre giri, non l'ultimo passaggio.
+  if (state.tracciaSoloSomme && s >= 0 && s < state.tracciaSoloSomme.length) {
+    state.tracciaSoloSomme[s] += player.lane; state.tracciaSoloConti[s] += 1;
+  }
   if (s >= 0 && s < state.tracciaCorsa.length) {
     state.tracciaCorsa[s] = Math.round(player.lane * 10) / 10;   // un decimale basta
   }
@@ -14994,6 +15084,18 @@ function registraPuntoTraccia(player) {
 // A ogni AI si assegna una corsa fra quelle registrate, con uno scarto suo: due
 // AI sulla stessa traccia non si sovrappongono.
 function assegnaTracceAlleAI() {
+  // LA TUA LINEA DA SOLO (5 palii fatti): ha la precedenza su tutto, con
+  // variazioni leggere.
+  const solo = state.soloAllenamento ? null : tracciaSoloMedia();
+  if (solo) {
+    state.horses.forEach((h) => {
+      if (h.player && !h.autopilot) return;
+      h.traccia = solo;
+      h.tracciaScarto = (Math.random() * 2 - 1) * TRACCIA_SOLO_SCARTO;
+      h.tracciaPeso = TRACCIA_PESO * (0.9 + Math.random() * 0.15);
+    });
+    return;
+  }
   const tutte = caricaTracce();
   state.tracceDisponibili = tutte;
   const maestra = caricaTracciaMaestra();
@@ -15051,6 +15153,20 @@ function finishRace() {
   state.raceRunout = 0;
   // La corsa è finita: la linea tenuta da Mario Rossi entra nell'archivio delle
   // ultime 30, da cui le AI pescheranno nei palii successivi.
+  if (state.tracciaCorsa && state.soloAllenamento && state.tracciaSoloSomme) {
+    const media = state.tracciaSoloSomme.map((v, i) => state.tracciaSoloConti[i]
+      ? Math.round((v / state.tracciaSoloConti[i]) * 10) / 10 : null);
+    const piena = media.filter((v) => v != null).length;
+    if (piena >= tracciaSlotTotali() * 0.5) {
+      const n = salvaTracciaSolo(media);
+      toastMsg(n >= TRACCE_SOLO_N
+        ? `Traiettoria registrata (${n}/${TRACCE_SOLO_N}): dal prossimo palio le Contrade seguono la tua linea.`
+        : `Traiettoria registrata: ${n}/${TRACCE_SOLO_N}. Ancora ${TRACCE_SOLO_N - n} da solo.`, 6000);
+    } else {
+      toastMsg("Palio troppo corto: traiettoria non registrata.", 4000);
+    }
+    state.tracciaCorsa = null; state.tracciaSoloSomme = null; state.tracciaSoloConti = null;
+  }
   if (state.tracciaCorsa) {
     const piena = state.tracciaCorsa.filter((v) => v != null).length;
     // Solo se ha davvero corso: una traccia con quattro punti non insegna niente.
@@ -15877,6 +15993,7 @@ function bindEvents() {
   // agosto / straordinario) → ESTRAZIONE delle Contrade (bandiere al Palazzo)
   // → TRATTA (sorteggio dei cavalli) → mossa/tondino.
   ui.startMossaButton.addEventListener("click", () => {
+    if (state.soloAllenamento) { startMossa(); return; }                   // traiettoria da solo: niente estrazione/Tratta
     if (state.campaign && state.campaign.setup) campaignConfirmContrada();  // → diventa Capitano
     else openPalioChooser();                                               // paliata veloce
   });
@@ -16048,6 +16165,7 @@ function teleLite(r) {
 }
 const TELE_CODA_MAX = 40;
 function teleAttiva() {
+  if (state.soloAllenamento) return false;   // i palii da solo non sporcano le statistiche
   try { if (localStorage.getItem("palio.teleProva") === "1") return true; } catch (e) { /* niente */ }
   const host = location.hostname;
   if (host === "localhost" || host === "127.0.0.1" || host === "") return false;
