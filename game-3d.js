@@ -307,15 +307,15 @@ const CAPRICCIO_PAUSA = { 5: 15, 4: 12, 3: 10, 2: 10, 1: 5 };
 const CAPRICCIO_DURATA = 10;
 // Intensità: 1 = lieve; calma 2 e 1 «più accentuato».
 const CAPRICCIO_FORZA = { 5: 1, 4: 1, 3: 1, 2: 1.7, 1: 1.7 };
-// Indietro ACCENTUATO (Simone 9/11): il cavallo che si ribella deve uscire dalla
-// fila abbastanza da rompere l'allineamento (MOSSA_ALIGN_GAP 2.6 dalla mediana),
-// così la rincorsa non può entrare e la mossa si allunga.
-const CAPRICCIO_V_INDIETRO = 0.55;   // u/s all'indietro (il giocatore corregge a 1.4)
-const CAPRICCIO_V_LATO = 0.35;       // u/s di lato (il giocatore corregge a 1.9 con Q/P)
+// CAPRICCI PIÙ LEGGERI (Simone 9/11, seconda volta): prima erano «accentuati»
+// per rompere l'allineamento, ma la fila restava sempre indietro e ogni mossa era
+// falsa. Ora un capriccio da solo resta sotto i 2.6 dell'allineamento.
+const CAPRICCIO_V_INDIETRO = 0.35;   // u/s all'indietro, era 0.55 (il giocatore corregge a 1.4)
+const CAPRICCIO_V_LATO = 0.25;       // u/s di lato, era 0.35 (il giocatore corregge a 1.9 con Q/P)
 // Per le AI la posizione lungo la pista è riscritta a ogni frame dall'obiettivo:
 // il capriccio lì è uno SCARTO che il fantino recupera a questa velocità, con un tetto.
-const CAPRICCIO_RECUPERO_AI = 0.20;  // u/s
-const CAPRICCIO_SCARTO_MAX = 3.2;    // u indietro (×FORZA, tetto ×1.25): oltre i 2.6 dell'allineamento
+const CAPRICCIO_RECUPERO_AI = 0.90;  // u/s — era 0.20: 16 s per rientrare, il capriccio dopo arrivava prima e la fila restava SEMPRE indietro (Simone 9/11: «rimangono tutti sempre dietro, sempre mossa falsa»)
+const CAPRICCIO_SCARTO_MAX = 2.0;    // u indietro (×FORZA, tetto ×1.25 → 2.5), era 3.2
 const CAPRICCIO_FORZA_SCARTO_MAX = 1.25;
 // ── NERBATA: colpo di nerbo che danneggia il cavallo accanto. Stesse regole per
 // giocatore e AI. 5 colpi "in canna", ricarica come un caricatore.
@@ -10819,6 +10819,8 @@ function releaseRace() {
   // sta in updateRace.
   state.sanMartinoIncident = Math.random() < 1 / 6;
   state.sanMartinoIncidentDone = false;
+  state.smLarghe = null;
+  state.horses.forEach((h) => { h.smLargo = false; });
   state.tempestaFellDone = false;   // guardia per la caduta provvisoria di Tempesta a San Martino
   state.gridoFellDone = false;      // idem per Grido
   state.tartucaFellDone = false;    // idem per la Tartuca (AI, San Martino)
@@ -12459,8 +12461,10 @@ function updateRincorsa(rincorsa, dt) {
         // rivale «messa male» da fregare, e nemmeno il fallback della mossa lunga
         // parte su una fila rotta: la rincorsa aspetta che rientri (Simone
         // 9/11: «la durata della mossa si allunga perché la rincorsa non può entrare»).
+        // Conta anche chi il capriccio l'ha FINITO ma sta ancora rientrando: se no
+        // la rincorsa partiva su una fila ancora rotta → mossa falsa.
         const capriccioFuoriFila = state.horses.some((o) => !o.isRincorsa && o.called && !o.entering
-          && (o.capLeft || 0) > 0 && (o.capOffP || 0) < -1.5);
+          && (o.capOffP || 0) < -1.5);
         const goodEntry = fieldAssembled &&
           (state.mossaFalsaCooldown || 0) <= 0 &&
           state.mossaTimer >= MOSSA_MIN_DURATION &&
@@ -13973,6 +13977,9 @@ function updateAiHorse(horse, dt, time) {
     if (spinta) horse.targetLane += clamp(spinta, -2.4, 2.4) * dt * 2.2;
   }
   horse.targetLane = clamp(horse.targetLane, -aiOuterAvanti, aiInnerAvanti);
+  // INCIDENTE DI SAN MARTINO: le due di testa sorteggiate vanno LARGHE, fino ai
+  // materassi (vedi updateRace). Qui, perché è qui che la guida sceglie la corsia.
+  if (horse.smLargo) horse.targetLane = -aiOuterAvanti;
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
   let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
@@ -14211,10 +14218,6 @@ function updateRace(dt, time) {
     }
   }
 
-  // ── INCIDENTE DI SAN MARTINO (se sorteggiato alla partenza) ────────────────
-  // Al PRIMO passaggio in curva: delle tre AI di testa, la più ESTERNA stringe
-  // e le fa battere → maxi-caduta con catena sulle attaccate. La finestra di
-  // progress (SM_IN..SM_OUT senza modulo) esiste solo al 1° giro.
   // FRENO SILENZIOSO su BRUCO (AI): va dritto a San Martino e CADE. Per ~1000 palii,
   // nessun avviso a schermo. Solo se Bruco non è il giocatore e non è già a terra.
   if (brucoFallActive() && NARROW_READY) {
@@ -14226,19 +14229,35 @@ function updateRace(dt, time) {
       triggerHorseFall(bru);                                   // e cade — silenzioso, niente showMessage
     }
   }
+  // INCIDENTE DI SAN MARTINO (Simone 9/11, al posto delle cadute a caso): al
+  // PRIMO San Martino le DUE AI di testa vanno LARGHE all'esterno, gli altri
+  // passano dietro; le due si IMPANCIANO sui materassi e cadono (cavallo e
+  // fantino). Si allargano camminando verso il bordo, non a scatto.
   if (state.sanMartinoIncident && !state.sanMartinoIncidentDone && NARROW_READY) {
-    const inCurva = state.horses.filter((h) => !h.scosso && !h.caduto && !h.isRincorsa
-      && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
-    const ai = inCurva.filter((h) => !isHuman(h)).sort((a, b) => b.progress - a.progress);
-    if (ai.length >= 3) {
-      state.sanMartinoIncidentDone = true;
-      const tre = ai.slice(0, 3);
-      const esterna = tre.reduce((m, h) => (h.lane < m.lane ? h : m), tre[0]);
-      const altre = tre.filter((h) => h !== esterna);
-      showMessage(`San Martino: ${esterna.name} stringe la curva — INCIDENTE!`, 3.2, "danger");
-      maxiCaduta(esterna, altre[0]);                       // catena sulle attaccate, giocatore incluso
-      if (altre[1] && !altre[1].caduto) triggerHorseFall(altre[1]);
-      state.cameraShake = Math.max(state.cameraShake || 0, 0.8);
+    if (!state.smLarghe) {
+      // Quando la testa arriva all'imbocco (1° giro: progress senza modulo), le
+      // due AI più avanti sono quelle che vanno larghe.
+      const due = state.horses.filter((h) => !h.scosso && !h.caduto && !h.isRincorsa && !isHuman(h))
+        .sort((a, b) => b.progress - a.progress).slice(0, 2);
+      if (due.length === 2 && due[0].progress > SM_IN - 14 && due[0].progress < SM_OUT) state.smLarghe = due.map((h) => h.id);
+    }
+    if (state.smLarghe) {
+      const due = state.smLarghe.map((id) => state.horses.find((h) => h.id === id)).filter(Boolean);
+      due.forEach((h) => {
+        if (h.caduto || h.scosso) { h.smLargo = false; return; }
+        h.smLargo = true;                                           // va largo (lo applica updateAiHorse)
+        const bordo = -(outerLimitAt(h.progress) - 0.6);            // i materassi
+        // Si impancia DENTRO la curva, sui materassi: larga ci arriva prima, poi ci sbatte.
+        if ((h.lane <= bordo && h.progress > SM_IN + 8) || h.progress > SM_OUT + 4) {
+          h.smLargo = false;
+          triggerHorseFall(h);
+          if (h.caduto && state.messageTimer <= 0) showMessage(`San Martino: ${h.name} si impancia sui materassi!`, 2.6, "danger");
+        }
+      });
+      if (due.every((h) => !h.smLargo)) {
+        state.sanMartinoIncidentDone = true;
+        state.cameraShake = Math.max(state.cameraShake || 0, 0.8);
+      }
     }
   }
 
@@ -14423,6 +14442,7 @@ function riskFall(horse, impact, cause, other) {
   const imp = clamp(impact, 0, 1);
   if (imp < 0.12) return;                                         // urto troppo lieve: niente rischio
   horse.fallCd = 1.6;
+  const curva = (horse.jockey && horse.jockey.curva) || 3;
   const base = clamp(0.9 - (curva - 1) * 0.2, 0.1, 0.9);          // curva 1→.9 · 3→.5 · 5→.1
   if (Math.random() < base * imp) {
     // IMPATTO GRANDE in curva: può andare giù ANCHE IL CAVALLO, non solo il
@@ -18718,4 +18738,5 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
 
