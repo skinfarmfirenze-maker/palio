@@ -204,6 +204,7 @@ let RINCORSA_LANE = -(TRACK_HALF_WIDTH - 1.4);
 // e il paletto del verrocchino, entro cui la rincorsa si lancia. Il paletto
 // segna il confine interno del varco; i 9 cavalli al canapo restano a destra.
 const RINCORSA_VARCO_WIDTH = 3.6;   // varco d'entrata (verrocchino più interno)
+const RINCORSA_GAP_VERRO = 0.8;     // la rincorsa AI aspetta a 0.8 dal paletto (a ridosso)
 let VERROCCHINO_LANE = -(TRACK_HALF_WIDTH - RINCORSA_VARCO_WIDTH);
 // Velocità di spostamento dentro i canapi: la velocità (andatura) muove il
 // cavallo nella direzione in cui è girato. (andatura-2) * questo valore.
@@ -10145,6 +10146,7 @@ function startMossa(fromTratta = false) {
     if (horse.isRincorsa) {
       horse.lane = RINCORSA_LANE;
       horse.progress = RINCORSA_START_PROGRESS;
+      horse.aiLaneR = null;                        // nuova mossa: si riaccosta da fuori
     }
     // Posto definitivo al canapo (dove il cavallo si schiererà una volta chiamato).
     horse.slotProgress = horse.mossaProgress;
@@ -12230,6 +12232,7 @@ function updateRincorsa(rincorsa, dt) {
       rincorsa.rincorsaSpeed = 0;
       rincorsa.wantsToEnter = false;
       rincorsa.speedLevel = 2.6;
+      rincorsa.aiLaneR = rincorsa.lane;                     // da qui si accosta al verrocchino
       if (dist < 0.4) rincorsa.revealTimer = 0;             // arrivata: comportamento normale
       return;
     }
@@ -12487,8 +12490,19 @@ function updateRincorsa(rincorsa, dt) {
       state.corridorMsgCd = 3.0;
     }
   }
-  // Corsia FISSA solo per la rincorsa AI; quella umana la muove liberamente (Q/P, A/L).
-  if (!rincorsa.humanSteered) rincorsa.lane = RINCORSA_LANE;
+  // Rincorsa AI: A RIDOSSO DEL VERROCCHINO (Simone 9/11: «quando la rincorsa AI
+  // fianca il cavallo deve essere già a ridosso del verrocchino se è possibile
+  // entrare»). Mentre aspetta si accosta al paletto, così quando fianca entra
+  // dritta lì. Se il varco è occupato (una Contrada arretrata nel corridoio) resta
+  // larga, sulla corsia esterna, e si accosta appena si libera. Ci va camminando,
+  // mai a scatto. Quella umana la muove liberamente il giocatore (Q/P, A/L).
+  if (!rincorsa.humanSteered) {
+    const meta = rincorsaCorridorBlocked() ? RINCORSA_LANE : VERROCCHINO_LANE - RINCORSA_GAP_VERRO;
+    if (rincorsa.aiLaneR == null) rincorsa.aiLaneR = RINCORSA_LANE;
+    const passo = (rincorsa.wantsToEnter ? 2.4 : 1.2) * dt;
+    rincorsa.aiLaneR += clamp(meta - rincorsa.aiLaneR, -passo, passo);
+    rincorsa.lane = rincorsa.aiLaneR;
+  }
   // ── CAPRICCI anche per la RINCORSA (Simone 9/11), mentre aspetta il momento:
   // stessi tempi e forze per calma dei cavalli ai canapi. Non mentre CARICA: il
   // lancio non si tocca. Giocatore: lo strattone si somma ai comandi e lo
