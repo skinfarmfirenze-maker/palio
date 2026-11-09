@@ -5749,7 +5749,6 @@ function setEstrazioneLine(text, color) {
 function estrazioneSkip() {
   const E = state.estrazione, T = E && E.timeline;
   if (!T) return;
-  if (T.drawnIdx < E.drawn.length) return;   // finché non si sa chi corre, non si salta
   while (T.drawnIdx < E.drawn.length) {
     exposeFlag(E.drawn[T.drawnIdx], 1, E.diritto.length + T.drawnIdx, true);
     T.drawnIdx += 1;
@@ -5840,12 +5839,6 @@ function ensureEstrazioneCrowd() {
 function updateEstrazione(dt, time) {
   const E = state.estrazione, T = E && E.timeline;
   if (!T) return;
-  // "Salta" compare solo quando sono uscite TUTTE le Contrade che corrono il
-  // Palio: il sorteggio di chi corre si guarda sempre fino in fondo.
-  if (!T.done) {
-    const sk = document.getElementById("estrSkipBtn");
-    if (sk) sk.style.display = T.drawnIdx < E.drawn.length ? "none" : "";
-  }
   T.shake = Math.max(0, T.shake - dt * 1.6);
 
   // Srotolamento progressivo delle bandiere appena esposte.
@@ -5963,7 +5956,7 @@ function buildEstrazioneHud() {
     tipo.label + (tipo.data ? " — " + tipo.data : "") +
     ' · Palazzo Comunale' + ctx + '</p></div>' +
     '<div class="es-bottom"><div id="estrLine"></div><div class="es-btns">' +
-    '<button type="button" id="estrSkipBtn" style="display:none">Salta l’estrazione</button>' +
+    '<button type="button" id="estrSkipBtn">Salta l’estrazione</button>' +
     '<button type="button" id="estrGoBtn" class="go" style="display:none">Vai alla Tratta →</button>' +
     '</div></div>';
   document.body.appendChild(hud);
