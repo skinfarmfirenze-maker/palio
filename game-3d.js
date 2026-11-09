@@ -10189,7 +10189,26 @@ function startMossa(fromTratta = false) {
     });
     const cor = cmp.corrupted || {};
     Object.keys(cor).forEach((hid) => {
-      if (cor[hid] !== playerId) return;         // solo i fantini corrotti DA TE
+      // FANTINO DI UN'AI COMPRATO DA UN'ALTRA AI. Prima non succedeva niente:
+      // la compravendita serviva solo a toglierlo dal mercato del giocatore.
+      // Ora, con la stessa affidabilità (60%), lavora per chi l'ha pagato:
+      // ordine "perdi" (fazione) → non prova a vincere; senza ordini → va
+      // addosso alla rivale più forte del corruttore. Il TUO fantino comprato
+      // da un'AI ha un blocco suo più sotto: qui si salta.
+      if (cor[hid] !== playerId) {
+        if (hid === playerId) return;
+        if (Math.random() >= 0.60) return;
+        const h = byId[hid]; if (!h) return;
+        const compratore = cor[hid];
+        const orders = (cmp.corruptOrders && cmp.corruptOrders[hid]) || null;
+        if (orders && orders.indexOf("perdi") >= 0) { h.corruptPerdi = true; return; }
+        const tgt = topRunningRivalId(compratore);
+        if (tgt && tgt !== h.id && byId[tgt]) {
+          h.allyTargetId = tgt; h.allyHelp = true;
+          setVendetta(h, tgt);
+        }
+        return;
+      }
       // Il fantino comprato è meno affidabile della Contrada: onora nel 60% dei
       // casi, negli altri intasca e corre come gli pare. Prima la corruzione era
       // una certezza — pagavi ed eri sicuro del risultato.
@@ -10232,7 +10251,9 @@ function startMossa(fromTratta = false) {
   // la cosa si vede dal cavallo che si sfila, non si legge.)
     const boughtBy = cor[playerId];
     const me = byId[playerId];
-    if (playing && me && boughtBy && boughtBy !== playerId) {
+    // Stessa affidabilità del fantino che compri tu: tradisce solo nel 60% dei
+    // casi, negli altri intasca e ti resta fedele.
+    if (playing && me && boughtBy && boughtBy !== playerId && Math.random() < 0.60) {
       me.soldTo = boughtBy;
       const tgt = topRunningRivalId(boughtBy) || (RIVALS[boughtBy] ? Object.keys(RIVALS[boughtBy])[0] : null);
       me.soldTargetId = (tgt && byId[tgt] && tgt !== playerId) ? tgt : null;
