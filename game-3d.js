@@ -1054,7 +1054,12 @@ function calcolaMossaLaneIn() {
   MOSSA_LANE_IN = AI_LANE_LIMIT - maxIn;
 }
 // Limite di corsia ESTERNO effettivo a una data progressione di gara.
-function outerLimitAt(progress) { return AI_LANE_LIMIT - trackNarrowAt(positiveMod(progress || 0, track.length || 1)); }
+function outerLimitAt(progress) {
+  // Con la svasatura della mossa: attorno ai canapi la pista è più larga all'esterno
+  // e la rincorsa (AI) che fianca larga non deve essere strizzata verso il centro.
+  const c = positiveMod(progress || 0, track.length || 1);
+  return AI_LANE_LIMIT - trackNarrowAt(c) + mossaFlareAt(c);
+}
 
 // ── ALTIMETRIA VISIVA ────────────────────────────────────────────────────────
 // La quota del terreno lungo l'anello, SOLO estetica: non tocca velocità,
@@ -13244,7 +13249,12 @@ function updatePlayer(dt, time) {
   // larghezza: negli imbuti ti viene incontro. L'interno (colonnini) è fisso.
   // 10,9 come le AI: era rimasto a 10,85 quando abbiamo alzato il loro.
   const edge = TRACK_HALF_WIDTH - 0.6 - trackInnerAt(positiveMod(player.progress, track.length || 1));   // il colonnino segue il suo profilo
-  const edgeOut = edge - trackNarrowAt(positiveMod(player.progress, track.length || 1));
+  // Bordo ESTERNO: indipendente dal colonnino (prima era edge − strettoia, quindi
+  // sottraeva anche il rientro del colonnino) e con la svasatura della mossa. Senza,
+  // al via la rincorsa che fiancava a −14.4 si ritrovava il muro a −9.5 e veniva
+  // trasportata al centro in un fotogramma (Simone 9/11: deve restare esterna).
+  const cumP = positiveMod(player.progress, track.length || 1);
+  const edgeOut = TRACK_HALF_WIDTH - 0.6 - trackNarrowAt(cumP) + mossaFlareAt(cumP);
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
     // rischi la caduta (impatto dalla velocità laterale al momento del contatto).
