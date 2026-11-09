@@ -329,11 +329,37 @@ export function costruisciPalazzi(ctx, opz = {}) {
   const camp = ctx.campioni;
   const semeGen = rnd(opz.seme ?? 20260822);
 
-  // 1) Il FILO delle facciate: oltre il fondo dei palchi nel punto in cui la
-  //    pista è più larga (ai canapi), così non li tocca mai.
-  let maxLargo = 0;
-  camp.forEach((s) => { maxLargo = Math.max(maxLargo, ctx.largoEsterno(s)); });
-  const R = opz.filo ?? (maxLargo + (opz.fondoPalchi ?? 5.31) + (opz.gap ?? MISP.gap));
+  // 1) Il FILO delle facciate, oltre il fondo dei palchi.
+  //    BASE: l'anello di sempre, tarato sulla pista larga dei canapi (bordo a
+  //    14,55 dall'asse = TRACK_HALF_WIDTH + svasatura piena della mossa). Dove il
+  //    bordo esterno va OLTRE (dal 9/11 l'editor delle strettoie lo lascia
+  //    arrivare a 17,5 per far stare la mossa), il filo arretra SOLO LÌ: prima il
+  //    massimo del fabbisogno entro ±W, poi la media entro ±W/2. Una media di
+  //    massimi presi su una finestra più larga non scende mai sotto il fabbisogno
+  //    del punto: le facciate restano sempre oltre i palchi.
+  //    Prima l'anello prendeva il bordo più largo di TUTTO il giro: allargare la
+  //    mossa di 2 spostava indietro di 2 tutti i palazzi della piazza.
+  const oltrePalchi = (opz.fondoPalchi ?? 5.31) + (opz.gap ?? MISP.gap);
+  const Rbase = (opz.largoBase ?? 14.55) + oltrePalchi;
+  const nC = camp.length;
+  const giroL = camp[nC - 1].cum + camp[nC - 1].point.distanceTo(camp[0].point);
+  const distCum = (a, b) => { const d = Math.abs(a - b) % giroL; return Math.min(d, giroL - d); };
+  const finestra = (val, W, unisci) => camp.map((s, i) => {
+    let acc = unisci(null, val[i]);
+    for (const verso of [1, -1]) {
+      for (let k = 1; k < nC / 2; k += 1) {
+        const j = (i + verso * k + nC) % nC;
+        if (distCum(camp[j].cum, s.cum) > W) break;
+        acc = unisci(acc, val[j]);
+      }
+    }
+    return acc;
+  });
+  const W = opz.raccordo ?? 12;
+  const serve = camp.map((s) => Math.max(Rbase, ctx.largoEsterno(s) + oltrePalchi));
+  const massimi = finestra(serve, W, (a, v) => (a === null ? v : Math.max(a, v)));
+  const medie = finestra(massimi, W / 2, (a, v) => (a === null ? { s: v, n: 1 } : { s: a.s + v, n: a.n + 1 }));
+  const raggio = opz.filo != null ? camp.map(() => opz.filo) : medie.map((m) => m.s / m.n);
 
   // Il filo segue la NORMALE della pista, come palancata e palchi (stazioni()).
   // Prima era RADIALE (dal centro della piazza): su rettilinei e arco è la
@@ -342,7 +368,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
   // normale e il palazzo di San Martino, un blocco dritto da un capo all'altro
   // della curva, stava a 10,8 dall'asse: DENTRO i palchi, e con la pista
   // allargata dentro la pista. Lungo la normale l'anello è la curva parallela
-  // al bordo, liscia, sempre R oltre l'asse: oltre il fondo dei palchi ovunque.
+  // al bordo, liscia, al raggio del filo oltre l'asse: oltre il fondo dei palchi ovunque.
   const staz = [];
   for (let i = 0; i <= camp.length; i += 1) {
     const s = camp[i % camp.length];
@@ -350,7 +376,7 @@ export function costruisciPalazzi(ctx, opz = {}) {
     const f = (s.normal && s.normal.isVector3)
       ? s.normal.clone().multiplyScalar(s.normal.dot(radiale) >= 0 ? 1 : -1)
       : radiale.clone();
-    const p = s.point.clone().addScaledVector(f, R);
+    const p = s.point.clone().addScaledVector(f, raggio[i % nC]);
     p.y = ctx.quota(s);
     staz.push({ p, f, cum: s.cum, giro: (i % camp.length) / camp.length });
   }
@@ -802,5 +828,5 @@ export function costruisciPalazzi(ctx, opz = {}) {
     g.add(sg);
   });
 
-  return { gruppo: g, filo: R, blocchi: blocchi.length };
+  return { gruppo: g, filo: Rbase, filoMax: Math.max(...raggio), blocchi: blocchi.length };
 }
