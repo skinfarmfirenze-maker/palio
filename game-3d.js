@@ -977,7 +977,7 @@ function computeTrackNarrows() {
 }
 // ── PROFILO DELLE STRETTOIE ──────────────────────────────────────────────────
 // Disegnato da Simone sull'editor «Strettoie del Campo» (7/11/2026, ridisegnato
-// il 9/11 con la mossa larga all'esterno: proposta v183). Ogni punto è
+// il 9/11 con la mossa larga all'esterno: v183; San Martino rifatto: v203). Ogni punto è
 // [posizione, strettoia]: la strettoia è quanto il bordo ESTERNO entra rispetto al
 // tufo pieno (23); negativa = allarga. Fra due punti consecutivi la curva è uno
 // smoothstep, a giro chiuso (l'ultimo punto si raccorda col primo scavalcando il via).
@@ -988,8 +988,8 @@ let STRETTOIE = [];
 function preparaStrettoie() {
   STRETTOIE = [
     [0.9, -3.10], [5.5, -3.40], [52.6, 4.50], [81.1, 3.00],
-    [SM_IN - 41.1, 1.15], [SM_IN - 26.0, 2.35], [SM_IN + 2.5, 6.55],
-    [SM_OUT - 12.7, 3.35], [SM_OUT - 2.2, 1.20], [SM_OUT + 23.5, 8.15],
+    [SM_IN - 41.1, 1.15], [SM_IN - 26.0, 2.35], [SM_IN + 2.9, 5.75],
+    [SM_OUT - 11.8, 5.45], [SM_OUT + 6.0, 3.10], [SM_OUT + 35.2, 8.40],
     [CAS_IN - 17.7, 3.05], [CAS_IN - 5.3, 3.70], [CAS_OUT + 0.6, 8.15],
     [CAS_OUT + 42.0, -2.05], [CAS_OUT + 47.6, -3.00],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
@@ -1008,7 +1008,7 @@ function trackNarrowAt(cum) {
   return a[1] + (b[1] - a[1]) * t * t * (3 - 2 * t);
 }
 // ── PROFILO DEL COLONNINO (bordo INTERNO) ────────────────────────────────────
-// Disegnato da Simone sull'editor (7/11/2026, ridisegnato il 9/11: v183). Ogni punto è [posizione, rientro]:
+// Disegnato da Simone sull'editor (7/11/2026, ridisegnato il 9/11: v183, v203). Ogni punto è [posizione, rientro]:
 // rientro + = il colonnino entra in pista, − = arretra verso la piazza. Stessa
 // matematica delle strettoie (smoothstep fra punti consecutivi, a giro chiuso).
 // Bordo interno = TRACK_HALF_WIDTH − trackInnerAt(cum).
@@ -1016,7 +1016,7 @@ let INTERNI = [];
 function preparaInterni() {
   INTERNI = [
     [5.3, 4.80], [51.1, -0.05], [SM_IN - 49.3, 5.30], [SM_IN - 29.6, 4.35],
-    [SM_IN + 9.2, 1.25], [CAS_OUT - 2.1, -1.35], [CAS_OUT + 28.6, 1.95],
+    [SM_IN + 10.8, 3.10], [SM_OUT - 0.4, 1.50], [CAS_OUT - 2.1, -1.35], [CAS_OUT + 28.6, 1.95],
   ].map(([c, n]) => [positiveMod(c, track.length), n]).sort((a, b) => a[0] - b[0]);
 }
 function trackInnerAt(cum) {
@@ -1945,7 +1945,10 @@ function buildCurvePadding() {
   // il muro esterno, non questo intervallo.
   if (NARROW_READY && scenaCtxRef) {
     try {
-      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 12.7, a: SM_OUT + 23.5 }));
+      // Dal punto 8 al punto 10 del bordo esterno (regola di Simone), ma MAI
+      // davanti alla Cappella: coprirebbero le basi dei pilastri (v203: il punto
+      // 10 è passato a 218.7, la Cappella comincia a 211.65).
+      addAllestimento(costruisciMaterassi(scenaCtxRef, { da: SM_OUT - 11.8, a: Math.min(SM_OUT + 35.2, getStraightCenterP() - 25.0) }));
     } catch (e) { console.error("materassi San Martino:", e); }
   }
   // Al CASATO: palizzata di legno del modulo di scenografia (tavoloni verticali,
