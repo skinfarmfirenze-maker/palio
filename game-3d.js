@@ -3759,7 +3759,11 @@ function getHorseAnimationState(horse) {
     if (horse.speedLevel > 1.2) return "walk";
     return "afterRaceIdle";
   }
-  if (horse.sliding || horse.collisionFlash > 0.55) return "stumbleRecovery";
+  // Alla MOSSA i cavalli stanno appoggiati l'uno all'altro e la calca
+  // (resolveMossaCrowd) rinnova collisionFlash a ogni frame: lo "stumble" non
+  // finiva mai e diventava un tremolio laterale perenne a 5 Hz (rollio ±0.045).
+  // Ai canapi un contatto non fa inciampare nessuno: si spinge, non si trema.
+  if (horse.sliding || (horse.collisionFlash > 0.55 && state.mode !== "mossa")) return "stumbleRecovery";
   if (horse.braking || horse.staminaLimited) return "slowDown";
   if (horse.boosting && horse.speedLevel >= 6.8) return "startBurst";
   if (Math.abs(horse.laneVelocity) > 2.45) return horse.laneVelocity > 0 ? "turnRight" : "turnLeft";
@@ -3775,7 +3779,18 @@ function placeHorse(horse, time) {
   const profile = HORSE_ANIMATION_PROFILES[animationState] || HORSE_ANIMATION_PROFILES.gallop;
   const offset = sample.normal.clone().multiplyScalar(horse.lane);
   const movement = clamp(horse.speedLevel / 8, 0.16, 1.15);
-  const gaitTime = time * (profile.frequency + horse.speedLevel * 0.72) + horse.phase;
+  // Fase del passo INTEGRATA (fase += dt × frequenza), non time × frequenza. Con
+  // time × frequenza ogni piccola variazione di speedLevel spostava la fase di
+  // time × Δf: alla mossa speedLevel cambia a ogni urto e, dopo qualche minuto di
+  // gioco, la fase saltava di radianti interi da un frame all'altro → fantino che
+  // beccheggia a scatti. Più a lungo si giocava, peggio era. (time = 0 = solo posa.)
+  let gdt = 0;
+  if (time > 0) {
+    gdt = (horse.gaitT == null || time < horse.gaitT) ? 0 : Math.min(time - horse.gaitT, 0.1);
+    horse.gaitT = time;
+    horse.gaitPhase = (horse.gaitPhase || 0) + gdt * (profile.frequency + horse.speedLevel * 0.72);
+  }
+  const gaitTime = (horse.gaitPhase || 0) + horse.phase;
   // Niente rimbalzo verticale procedurale sui cavalli GLB: la loro animazione di
   // galoppo dà già il movimento del corpo, e il doppio effetto li faceva galleggiare.
   const bob = horse.group.userData.glbHorse ? 0 : Math.sin(gaitTime * 1.22) * profile.bob * movement;
@@ -3791,7 +3806,13 @@ function placeHorse(horse, time) {
   // Beccheggio/rollio limitati: il movimento laterale dà solo un leggero
   // ondeggiamento (utile per "sculare" alla mossa) ma il cavallo resta sempre
   // dritto e robusto, non si corica mai fino a sparire.
-  const leanVel = clamp(horse.laneVelocity, -4, 4);
+  // laneVelocity è una derivata GREZZA frame su frame: alla mossa, coi cavalli
+  // appoggiati, la calca la fa cambiare segno a ogni frame e rollio (×0.03),
+  // imbardata (×0.02) e fantino (×0.02) tremavano. Filtrata (~0.1 s) l'inclinazione
+  // resta la stessa, il tremolio no.
+  const leanRaw = clamp(horse.laneVelocity || 0, -4, 4);
+  horse.leanVelS = (horse.leanVelS ?? leanRaw) + (leanRaw - (horse.leanVelS ?? leanRaw)) * clamp(gdt * 10, 0, 1);
+  const leanVel = horse.leanVelS;
   // Alla mossa il cavallo può essere GIRATO sul posto (giocatore con A/L, AI per
   // nervosismo) senza cambiare posizione: si somma un angolo di rotazione.
   const mossaTurn = state.mode === "mossa" ? (horse.mossaTurn || 0) : 0;
@@ -3860,7 +3881,7 @@ function placeHorse(horse, time) {
   }
   const jockey = horse.group.userData.jockey;
   jockey.rotation.x = -0.12 + Math.sin(gallop * 0.5) * 0.052 - clamp(horse.speedLevel - 6, 0, 3) * 0.025 + (animationState === "slowDown" ? 0.045 : 0);
-  jockey.rotation.z = -horse.laneVelocity * 0.02;
+  jockey.rotation.z = -leanVel * 0.02;
   // VITTORIA: il fantino vincitore taglia il traguardo e resta col NERBO ALZATO
   // — braccio destro teso in alto, gesto leggibile anche da lontano. Nel replay
   // il nerbo si alza solo al momento del traguardo (replayAtEnd).
