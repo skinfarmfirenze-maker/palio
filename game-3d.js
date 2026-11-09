@@ -12760,7 +12760,7 @@ function updateRincorsaWatcher(rincorsa) {
 
   if (timerEl) {
     const t = Math.floor(state.mossaTimer);
-    timerEl.textContent = `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, "0")} / 5:00`;
+    timerEl.textContent = `${Math.floor(t / 60)}:${(t % 60).toString().padStart(2, "0")}`;   // niente durata massima a vista (Simone 9/11)
   }
 }
 
