@@ -1741,16 +1741,20 @@ function buildStartLine() {
   // ATTENZIONE: sampleAt() NON restituisce `cum` (ce l'hanno solo i campioni grezzi
   // di track.samples). Qui la linea sta a progress 0, quindi la svasatura si calcola
   // da quel valore: usando s.cum si otteneva NaN e l'intero canape spariva.
-  const flareQui = mossaFlareAt(0);
+  // Il canape sta 0.8 DIETRO la linea (vedi -0.8 sulla tangente): bordi e svasatura
+  // vanno letti lì, non a 0 (dal 9/11 il colonnino e il bordo esterno cambiano molto
+  // proprio attorno ai canapi).
+  const cumC = positiveMod(-0.8, track.length || 1);
+  const flareQui = mossaFlareAt(cumC);
   // NIENTE SCACCHIERA. Qui c'era una fila di cassette bianche e nere alternate
   // che attraversava la pista sotto il canape, come la linea d'arrivo di un
   // ippodromo. In Piazza non c'e': sotto i canapi c'e' il tufo e basta.
   // Il canape ANTERIORE tocca i PALCHI ESTERNI: la ringhiera sta 0.72 oltre il
   // bordo svasato della pista, e il canapo si ancora lì — non deve restare un
   // varco fra la fune e lo steccato.
-  const estCanape = -(TRACK_HALF_WIDTH + flareQui + 0.72);
+  const estCanape = -(TRACK_HALF_WIDTH + flareQui - trackNarrowAt(cumC) + 0.72);
   const a = s.point.clone().addScaledVector(s.normal, estCanape).addScaledVector(s.tangent, -0.8);
-  const b = s.point.clone().addScaledVector(s.normal, bordoInternoAt(s.cum)).addScaledVector(s.tangent, -0.8);
+  const b = s.point.clone().addScaledVector(s.normal, bordoInternoAt(cumC)).addScaledVector(s.tangent, -0.8);
   state.canapi = new THREE.Group();
   // UN CANAPE SOLO, di canapa. Prima ce n'erano due, e il secondo era ROSSO:
   // davanti ai cavalli, in Piazza, di canape ce n'e' uno — e la fune e' di
@@ -1782,11 +1786,13 @@ function buildVerrocchino() {
   // sinistra del paletto (verso il bordo sinistro) resta aperto: è il varco da cui
   // la rincorsa si lancia.
   const ropeInner = back.point.clone().addScaledVector(back.normal, VERROCCHINO_LANE).setY(0.52);
-  const bordoInBack = bordoInternoAt(back.cum);
+  // sampleAt() non ha `cum`: il bordo si legge dalla progressione del canapo.
+  const cumB = positiveMod(MOSSA_BACK_LIMIT, track.length || 1);
+  const bordoInBack = bordoInternoAt(cumB);
   const ropeRight = back.point.clone().addScaledVector(back.normal, bordoInBack).setY(0.52);
   group.add(makeCylinderBetween(ropeInner, ropeRight, 0.05, materials.rope));
   // Doppino a terra: attraversa tutta la pista e segna la linea del secondo canapo.
-  const groundA = back.point.clone().addScaledVector(back.normal, -TRACK_HALF_WIDTH).setY(0.1);
+  const groundA = back.point.clone().addScaledVector(back.normal, -(TRACK_HALF_WIDTH + mossaFlareAt(cumB) - trackNarrowAt(cumB))).setY(0.1);
   const groundB = back.point.clone().addScaledVector(back.normal, bordoInBack).setY(0.1);
   group.add(makeCylinderBetween(groundA, groundB, 0.022, materials.rope));
 
@@ -15587,6 +15593,19 @@ function updateCamera(dt) {
       .clone()
       .addScaledVector(camForward, -9.2 - speedZoom * 1.55 + brakeTuck)
       .add(new THREE.Vector3(0, 5.85 + speedZoom * 0.52 + droneBob, 0));
+    if (state.mode === "mossa") {
+      // Alla MOSSA la camera sta sulla pista DIETRO al cavallo, e non oltre il bordo
+      // esterno di lì: con la rincorsa a -14.4 in fondo allo slancio, 9.2 indietro
+      // lungo la tangente finiva sopra le prime file dei palchi.
+      const dietro = 9.2 + speedZoom * 1.55 - brakeTuck;
+      const camCum = positiveMod(player.progress - dietro, track.length || 1);
+      const camS = sampleAt(player.progress - dietro);
+      const maxFuori = TRACK_HALF_WIDTH + mossaFlareAt(camCum) - trackNarrowAt(camCum) - 1.0;
+      const lat = Math.max(player.lane ?? 0, -maxFuori);
+      desiredPos = camS.point.clone()
+        .addScaledVector(camS.normal, lat)
+        .setY(playerPos.y + 5.85 + speedZoom * 0.52 + droneBob);
+    }
     if (useHeadingCam) {
       // mira un po' avanti lungo l'heading, miscelando con la pista che arriva
       // per anticipare la curva.
