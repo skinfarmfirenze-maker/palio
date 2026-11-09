@@ -4203,6 +4203,7 @@ const AZIONI_TASTI = [
   { id: "KeyQ", nome: "Spinta a sinistra (canapi)" },
   { id: "KeyP", nome: "Spinta a destra (canapi)" },
   { id: "KeyC", nome: "Cambia camera" },
+  { id: "KeyF", nome: "Fianca (scatto al via)" },
 ];
 const TASTI_VIETATI = new Set(["Enter", "NumpadEnter", "Escape", "Tab", "MetaLeft", "MetaRight", "ContextMenu"]);
 let tastiScelti = null;          // { azione: tasto fisico }
@@ -4247,7 +4248,7 @@ function aggiornaAiutoTasti() {
   const t = leggiTasti();
   const k = (az) => "<kbd>" + escapeHtml(nomeTasto(t[az])) + "</kbd>";
   box.innerHTML =
-    '<div class="ctrl-row"><strong>Mossa:</strong> ' + k("KeyA") + "/" + k("KeyL") + " gira &nbsp; " + k("KeyM") + "/" + k("Space") + " velocità (1=indietro · 2=fermo · 3-5 avanti)</div>"
+    '<div class="ctrl-row"><strong>Mossa:</strong> ' + k("KeyA") + "/" + k("KeyL") + " gira &nbsp; " + k("KeyM") + "/" + k("Space") + " velocità (1=indietro · 2=fermo · 3-5 avanti) &nbsp; " + k("KeyF") + " fianca</div>"
     + '<div class="ctrl-row"><strong>Gara:</strong> ' + k("KeyM") + " accelera &nbsp; " + k("Space") + " rallenta &nbsp; " + k("KeyA") + "/" + k("KeyL") + " sterza</div>"
     + '<div class="ctrl-row"><kbd>Invio</kbd> avanti/salta &nbsp; <kbd>↑</kbd><kbd>↓</kbd> scegli &nbsp; ' + k("KeyC") + " cambia camera</div>";
   try { traduciAlbero(box); } catch (e) { /* niente */ }
@@ -10461,8 +10462,83 @@ function startMossa(fromTratta = false) {
 // Boost/malus TEMPORANEO di velocità legato alla mossa (asta): +9% per chi si
 // aggiudica la mossa pagando (4s), −6% per la rivale bloccata (3s). Il timer viene
 // scalato in updateRace; il moltiplicatore entra nelle righe di velocità.
+// ══════════════════════════════════════════════════════════════════════════════
+// FIANCA (tasto F, Simone 9/11): lo SCATTINO per partire davanti agli altri.
+// Alle Contrade al canape: premuto al momento giusto del via dà uno scatto. Se non
+// lo premi (o lo premi fuori tempo) il cavallo parte comunque, normale.
+//  · da FIANCA_PERFETTA s prima del via fino al via        → fiancata perfetta
+//  · da FIANCA_ANTICIPO s prima fino a FIANCA_PERFETTA     → in anticipo (meno)
+//  · entro FIANCA_RITARDO s DOPO il via                     → in ritardo (buona)
+// Una pressione «a vuoto» (il via non arriva entro FIANCA_ANTICIPO) si può
+// ripetere dopo FIANCA_RIPROVA s: niente scatto gratis premendo a raffica.
+// Alla RINCORSA il tasto fa fiancare: andatura al massimo, si lancia.
+// Le AI fiancano secondo la MOSSA del fantino (FIANCA_AI: probabilità di
+// perfetta e di anticipo; il resto parte normale).
+// ══════════════════════════════════════════════════════════════════════════════
+const FIANCA_PERFETTA = 0.35, FIANCA_ANTICIPO = 1.0, FIANCA_RITARDO = 0.5, FIANCA_RIPROVA = 2.0;
+const FIANCA_EFFETTO = {
+  perfetta: { mult: 1.12, durata: 2.5, msg: "Fiancata perfetta!" },
+  anticipo: { mult: 1.05, durata: 2.0, msg: "Fiancata in anticipo" },
+  ritardo:  { mult: 1.07, durata: 2.0, msg: "Fiancata in ritardo" },
+};
+const FIANCA_AI = {   // mossa del fantino → [probabilità perfetta, probabilità anticipo]
+  1: [0.10, 0.25], 2: [0.20, 0.30], 3: [0.35, 0.30], 4: [0.50, 0.25], 5: [0.65, 0.20],
+};
+function applicaFianca(h, tipo) {
+  const e = FIANCA_EFFETTO[tipo]; if (!h || !e) return;
+  h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
+  if (tipo !== "anticipo") {
+    h.launchDelayTimer = 0; h.launching = false;   // nessun ritardo di reazione
+    // e niente «partenza lenta»: parte a velocità piena (il resto lo fa fiancaMult)
+    if (isHuman(h)) {
+      const piena = andaturaToSpeed(h.effectiveSpeedLevel || 3);
+      if (h.travelSpeed < piena) h.travelSpeed = piena;
+    } else if (h.targetSpeedLevel) {
+      h.speedLevel = Math.max(h.speedLevel || 0, h.targetSpeedLevel * 0.92);
+    }
+  }
+  if (h.startQuality && h.startQuality !== "closed") h.startQuality = "clean";
+  if (isHuman(h)) showMessage(e.msg, 1.6, "good");
+}
+function premiFianca() {
+  const p = getPlayer(); if (!p || p.finishTime) return;
+  const now = performance.now() / 1000;
+  if (state.mode === "mossa") {
+    if (p.isRincorsa) {            // la rincorsa FIANCA: si lancia
+      p.speedSetting = ANDATURA_MAX;
+      showMessage("Fianca!", 0.9, "good");
+      return;
+    }
+    if (state.fiancaPremutoA != null && now - state.fiancaPremutoA < FIANCA_RIPROVA) return;
+    state.fiancaPremutoA = now;
+    return;
+  }
+  if (state.mode === "race" && !p.fiancaTipo && !p.isRincorsa && (state.raceClock || 0) <= FIANCA_RITARDO) {
+    applicaFianca(p, "ritardo");
+  }
+}
+// Al VIA: la fiancata del giocatore (premuta prima) e quelle delle AI.
+function fiancaAlVia() {
+  const now = performance.now() / 1000;
+  state.horses.forEach((h) => { h.fiancaTipo = null; h.fiancaMult = 1; h.fiancaTimer = 0; });
+  state.horses.forEach((h) => {
+    if (h.isRincorsa) return;
+    if (isHuman(h)) {
+      const d = state.fiancaPremutoA != null ? now - state.fiancaPremutoA : Infinity;
+      if (d >= 0 && d <= FIANCA_PERFETTA) applicaFianca(h, "perfetta");
+      else if (d > FIANCA_PERFETTA && d <= FIANCA_ANTICIPO) applicaFianca(h, "anticipo");
+      return;
+    }
+    const [perf, ant] = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)];
+    const r = Math.random();
+    if (r < perf) applicaFianca(h, "perfetta");
+    else if (r < perf + ant) applicaFianca(h, "anticipo");
+  });
+  state.fiancaPremutoA = null;
+}
 function mossaSpeedMod(horse) {
-  return (horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1;
+  const fianca = (horse && horse.fiancaTimer > 0) ? (horse.fiancaMult || 1) : 1;
+  return fianca * ((horse && horse.mossaModTimer > 0) ? (horse.mossaModMult || 1) : 1);
 }
 // Prepara TUTTI i cavalli allo scatto: andatura, velocita' di crociera, heading,
 // ritardo di reazione, rampa di accelerazione, corsia di partenza. La usano sia
@@ -10635,6 +10711,7 @@ function releaseRace() {
   });
 
   viaDaiCanapi();
+  fiancaAlVia();   // FIANCA (tasto F): DOPO il via, così vince su ritardi e qualità dello scatto
 
 
   // ── INCIDENTE DI SAN MARTINO (1 palio su 6) ────────────────────────────────
@@ -13872,7 +13949,7 @@ function updateRace(dt, time) {
     }
   }
 
-  state.horses.forEach((h) => { if (h.mossaModTimer > 0) h.mossaModTimer -= dt; });   // asta: scala i boost/malus temporanei della mossa
+  state.horses.forEach((h) => { if (h.mossaModTimer > 0) h.mossaModTimer -= dt; if (h.fiancaTimer > 0) h.fiancaTimer -= dt; });   // asta: scala i boost/malus temporanei della mossa
   const preRanking = getRanking();
   state.currentLeader = preRanking[0] || null;
   state.currentLast = preRanking[preRanking.length - 1] || null;
@@ -16108,11 +16185,15 @@ function bindEvents() {
     if (!isRaceMode() && (event.key === "ArrowLeft" || event.key === "ArrowUp")) { event.preventDefault(); uiMoveFocus(-1); return; }
     if (!isRaceMode() && (event.key === "ArrowRight" || event.key === "ArrowDown")) { event.preventDefault(); uiMoveFocus(1); return; }
     const code = tastoLogico(event.code);   // tasti personalizzati (Impostazioni) → azione
-    if (!code || !["KeyA", "KeyL", "KeyW", "KeyS", "KeyM", "KeyK", "Space", "KeyC", "Tab", "KeyQ", "KeyP"].includes(code)) return;
+    if (!code || !["KeyA", "KeyL", "KeyW", "KeyS", "KeyM", "KeyK", "Space", "KeyC", "Tab", "KeyQ", "KeyP", "KeyF"].includes(code)) return;
     event.preventDefault();
     if (code === "KeyC") {
       if (event.repeat) return;
       cycleCameraMode();
+      return;
+    }
+    if (code === "KeyF") {
+      if (!event.repeat) premiFianca();
       return;
     }
     if (!event.repeat) {
