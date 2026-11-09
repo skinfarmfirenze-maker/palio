@@ -13221,7 +13221,6 @@ function updatePlayer(dt, time) {
     const versoMuro = player.lane > edge ? player.laneVelocity > 0 : player.laneVelocity < 0;
     if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge), "steccato");
     player.lane = clamp(player.lane, -edgeOut, edge);
-    registraPuntoTraccia(player);   // la linea che tiene finisce nella traccia di questo palio
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
     // pista ogni volta che sfioravi lo steccato: è il "colonnino che ti tira verso
     // di sé". Appena lo toccavi in curva restavi incollato — ogni tentativo di
@@ -13249,6 +13248,11 @@ function updatePlayer(dt, time) {
     showMessage("Stai andando largo: sterza in curva", 0.55, "danger");
   }
   recordPlayerLine(player); // memorizza la tua traiettoria per le AI
+  // La linea che tieni finisce nella traccia di questo palio, a OGNI frame.
+  // Prima la chiamata stava dentro il blocco «urto sullo steccato»: si registrava
+  // solo quando toccavi un muro, e la traccia restava quasi vuota (palii da solo
+  // mai salvati, «troppo corto»).
+  registraPuntoTraccia(player);
   placeHorse(player, time);
 
   if (player.progress >= track.length * FINISH_LAPS && !player.finishTime) {
