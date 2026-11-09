@@ -10030,7 +10030,7 @@ function startMossa(fromTratta = false) {
     horse.rincorsaThinkTimer = 0;
     horse.wantsToEnter = false;
     // "Fantino comprato": azzerato a ogni mossa, lo riattiva la corruzione sotto.
-    horse.soldTo = null; horse.soldTargetId = null; horse.soldBurst = 0; horse.soldNext = 0;
+    horse.soldTo = null; horse.soldTargetId = null; horse.soldBurst = 0; horse.soldNext = 0; horse.soldSpin = false;
     // Agitazione da nervosismo: stato pulito a ogni mossa.
     horse.nervBackState = null; horse.lastHitAt = -99; horse.lastTouchAt = -99; horse.hitStreak = null;
     horse.capT = null; horse.capLeft = 0; horse.capMoveT = 0; horse.capVP = 0; horse.capVL = 0; horse.capOffP = 0; horse.capOffL = 0;   // capricci: da capo
@@ -10236,6 +10236,9 @@ function startMossa(fromTratta = false) {
         if (hid === playerId) return;
         if (Math.random() >= 0.60) return;
         const h = byId[hid]; if (!h) return;
+        // Se la sua Contrada ha un accordo col GIOCATORE, vince la parola della
+        // Contrada: il giocatore ha pagato e la compravendita non la puo' vedere.
+        if (h.friendlyToPlayer || h.allyBeneficiaryId === playerId) return;
         const compratore = cor[hid];
         const orders = (cmp.corruptOrders && cmp.corruptOrders[hid]) || null;
         if (orders && orders.indexOf("perdi") >= 0) { h.corruptPerdi = true; return; }
@@ -11787,6 +11790,10 @@ function updateMossa(dt, time) {
         horse.capOffL = clamp(recupera((horse.capOffL || 0) + (horse.capVL || 0) * dt), -max, max);
       }
     } else {
+      // Capriccio INTERROTTO (TURNS, agitato, tutti fuori): la pausa riparte da capo.
+      // Senza questo capT restava <= 0 e, appena finita la girata, partiva subito un
+      // altro capriccio da 10 s: il cavallo nervoso non tornava mai in mano al fantino.
+      if ((horse.capLeft || 0) > 0) horse.capT = CAPRICCIO_PAUSA[clamp(Math.round(horse.calma || 3), 1, 5)];
       horse.capVP = 0; horse.capVL = 0; horse.capLeft = 0;
       if (horse.capOffP) horse.capOffP += Math.sign(-horse.capOffP) * Math.min(Math.abs(horse.capOffP), CAPRICCIO_RECUPERO_AI * 3 * dt);
       if (horse.capOffL) horse.capOffL += Math.sign(-horse.capOffL) * Math.min(Math.abs(horse.capOffL), CAPRICCIO_RECUPERO_AI * 3 * dt);
@@ -15855,7 +15862,9 @@ function bindEvents() {
     // S/A/L/M/W/Q/P perché sono comandi di gara).
     if (uiIsTyping(event)) return;
     // INVIO fuori dai campi: avanza / salta / conferma la fase corrente.
-    if (event.key === "Enter") { event.preventDefault(); uiActivate(); return; }
+    // Un solo scatto per pressione (come il gamepad): tenendo premuto, l'auto-ripetizione
+    // saltava l'estrazione appena aperta e premeva anche «Vai alla Tratta».
+    if (event.key === "Enter") { event.preventDefault(); if (!event.repeat) uiActivate(); return; }
     // Frecce: scorrono i pulsanti dei menu (comodo anche senza gamepad).
     if (!isRaceMode() && (event.key === "ArrowLeft" || event.key === "ArrowUp")) { event.preventDefault(); uiMoveFocus(-1); return; }
     if (!isRaceMode() && (event.key === "ArrowRight" || event.key === "ArrowDown")) { event.preventDefault(); uiMoveFocus(1); return; }
