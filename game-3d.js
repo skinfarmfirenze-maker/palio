@@ -9209,6 +9209,9 @@ const LEADER_GAP_MAX = 30;
 // (distanza cumulativa). Silenzioso.
 function playerPositionHandicap(player) {
   if (!player || state.mode !== "race") return 1;
+  // Non nei primi 6 s dopo il via: lì conta come hai fiancato (Simone 11/11: «chi
+  // fianca bene deve partire fra i primi 4»), non va risucchiato indietro subito.
+  if (state.viaA != null && (state.tGioco || 0) - state.viaA < 6) return 1;
   let ahead = 0;
   for (const h of state.horses) {
     if (h === player || h.isRincorsa) continue;
@@ -10485,15 +10488,22 @@ function startMossa(fromTratta = false) {
 // ══════════════════════════════════════════════════════════════════════════════
 const FIANCA_FORZA = 2.0, FIANCA_BUONA_DOPO = 1.2;
 const FIANCA_EFFETTO = {
-  perfetta: { mult: 1.08, durata: 2.5, msg: "Hai fiancato avanti a tutti!" },   // negli ultimi 2 s prima del verrocchino
-  anticipo: { mult: 1.05, durata: 2.0, msg: "Hai fiancato in tempo!" },         // entro 1,2 s dopo
+  // PARTENZA IN TRE CLASSI (Simone 11/11: «chi fianca bene parte fra i primi 4, chi
+  // medio nel mezzo, chi tardi fra gli ultimi 3»; prima l'andatura 4 contava più della
+  // partenza). Oltre al moltiplicatore, ogni classe ha la sua RAMPA: da dove parte la
+  // velocità (rampa0) e in quanti secondi arriva piena (rampaT).
+  perfetta: { mult: 1.15, durata: 3.5, rampa0: 0.6, rampaT: 2.0, msg: "Hai fiancato avanti a tutti!" },   // negli ultimi 2 s prima del verrocchino
+  anticipo: { mult: 1.08, durata: 3.0, rampa0: 0.5, rampaT: 2.5, msg: "Hai fiancato in tempo!" },         // entro 1,2 s dopo
 };
 // Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
 const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
+const PARTENZA_TARDI = { rampaT: 6.0, ritardo: 0.5 };   // senza fiancata: da fermo, mezzo secondo dopo, piena in 6 s
 const DISTRATTO_P = { 1: 0.40, 2: 0.25, 3: 0.12, 4: 0.05, 5: 0.02 };   // mossa del fantino → probabilità di restare fermo al via 0,8-1,8 s
 // mossa del fantino → [buona (+8%), dopo (+5%), forza il canape] (il resto parte normale)
 const FIANCA_AI = {
-  1: [0.10, 0.25, 0.03], 2: [0.20, 0.30, 0.02], 3: [0.35, 0.30, 0.01], 4: [0.50, 0.25, 0.005], 5: [0.65, 0.20, 0],
+  // più fiancate buone/medie (Simone 11/11): così in media 2-3 restano «tardi» e la
+  // partenza del giocatore pesa davvero (buona → primi 4, tardi → ultimi 3).
+  1: [0.20, 0.40, 0.03], 2: [0.30, 0.40, 0.02], 3: [0.40, 0.40, 0.01], 4: [0.50, 0.35, 0.005], 5: [0.60, 0.30, 0],
 };
 // Il cavallo che gli sta subito davanti (stessa linea, a meno di un corpo), se c'è.
 // «a» + articolo: al Nicchio, alla Torre, all'Oca, allo …
@@ -10525,6 +10535,9 @@ function applicaFianca(h, tipo) {
     return;
   }
   h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
+  // RAMPA della classe: si parte già lanciati (rampa0) e si arriva pieni in rampaT.
+  h.launchRamp = Math.max(h.launchRamp || 0, e.rampa0);
+  h.rampaVel = 1 / e.rampaT;
   if (tipo === "anticipo" && h.launching) h.launchDelayTimer = Math.min(h.launchDelayTimer, 0.15);   // F appena dopo il via: si sveglia
   if (tipo === "perfetta") h.balzoT = BALZO_DURATA;   // scattino pronunciato al via (Simone: opzione B)
   if (tipo === "perfetta") {
@@ -10660,6 +10673,13 @@ function fiancaAlVia() {
     else if (tipo === "anticipo") applicaFianca(h, "anticipo");
   });
   state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; });
+  // Chi non ha fiancato: da fermo, un attimo dopo, rampa lunga. (Il giocatore può
+  // ancora premere F entro 1,2 s: passa a «in tempo».)
+  state.horses.forEach((h) => {
+    if (h.isRincorsa || h.fiancaTipo) return;
+    h.rampaVel = 1 / PARTENZA_TARDI.rampaT;
+    if (!isHuman(h)) { h.launchDelayTimer = (h.launchDelayTimer || 0) + PARTENZA_TARDI.ritardo; h.launching = true; }
+  });
   state.rincorsaFiancaAt = null;
   state.forzaCanape = null;   // via buono arrivato prima della mossa falsa: niente falsa
 }
@@ -10731,6 +10751,7 @@ state.horses.forEach((horse) => {
     // Nessuno "scoppio" alla partenza: l'avanzamento riparte da ZERO e raggiunge
     // la velocità piena GRADUALMENTE in 4 secondi (launchRamp 0→1 lineare).
     horse.launchRamp = 0;
+    horse.rampaVel = 1 / 4;   // la classe di partenza la decide fiancaAlVia
     // Corsia di partenza: ogni cavallo va dritto dalla propria posizione di mossa
     // per qualche secondo prima di cercare la traiettoria ideale.
     horse.startLane = horse.lane;
@@ -13570,7 +13591,7 @@ function updatePlayer(dt, time) {
   // Il cavallo si muove nella direzione dell'heading; il moto viene proiettato
   // sulla pista in avanzamento (progress) e spostamento laterale (lane).
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
-  player.launchRamp = Math.min(1, (player.launchRamp ?? 1) + dt / 4 * (player.sprint || 1));
+  player.launchRamp = Math.min(1, (player.launchRamp ?? 1) + dt * (player.rampaVel || 1 / 4) * (0.85 + 0.15 * (player.sprint || 1)));
   const travel = player.travelSpeed * curvePenalty * dt * RACE_SPEED_MULT * player.launchRamp;
   const fwdX = Math.sin(player.heading);
   const fwdZ = Math.cos(player.heading);
@@ -14134,7 +14155,7 @@ function updateAiHorse(horse, dt, time) {
   // Contrade con la curva invece di scaraventarcisi dentro.
   const curvePenalty = 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
-  horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
+  horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt * (horse.rampaVel || 1 / 4) * (0.85 + 0.15 * (horse.sprint || 1)));
   const progPrimaLibero = horse.progress;
   horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if (liberoAlVia && horse.raceTurn) {
@@ -19035,6 +19056,7 @@ function programmaAndatura(h) {
   if (NARROW_READY && ((c >= SM_IN && c <= SM_OUT) || (c >= CAS_IN && c <= CAS_OUT))) return 3;
   return giro === 1 ? 3 : 4;   // fuori dalle curve: giro 1 a 4, giro 2 a 3, giro 3 a 4
 }
+
 
 
 
