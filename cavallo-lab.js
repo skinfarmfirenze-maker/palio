@@ -737,7 +737,7 @@ function _aggiornaZampe(mesh, dt, cavallo) {
   Z.v += (vI - Z.v) * a; Z.vAv += (vAvI - Z.vAv) * a; Z.om += (Math.max(-3, Math.min(3, omI)) - Z.om) * a;
   const gal = _ss(ZAMPE.vGaloppo[0], ZAMPE.vGaloppo[1], Z.v);
   const pos = Z.geo.attributes.position, infl = mesh.morphTargetInfluences;
-  if (gal >= 1) { ripristinaZampe(mesh); Z.cy = Z.cyv = Z.cp = Z.cpv = 0; return false; }
+  if (gal >= 1) { ripristinaZampe(mesh); Z.cy = Z.cyv = Z.cp = Z.cpv = 0; if (cavallo) cavallo.scattoVista = null; return false; }
   // andatura dalla velocità vista
   const scala = Math.abs(_zs.z) || 1;                // unità di gioco per unità del modello
   const vEff = Math.hypot(Z.v, Math.abs(Z.om) * 0.8);   // girarsi sul posto = fare i passi
@@ -752,6 +752,11 @@ function _aggiornaZampe(mesh, dt, cavallo) {
   const dy = -(1.0 + 1.5 * k) * Math.cos(4 * Math.PI * Z.fase) * piega;
   const stati = {};
   for (const n of ZAMPE_ORDINE) stati[n] = _statoGamba(ZAMPE_DATI.gambe[n], n, Z.fase, k, corsa, piega, dy);
+  const SC = _scatto(Z, cavallo, dt);               // §9: scatto al via, canape forzato, distratto
+  if (SC) for (const n of ZAMPE_ORDINE) {
+    const O = ZAMPE_DATI.gambe[n].ant ? SC.ant : SC.post;
+    for (const q in O) stati[n][q] += O[q];
+  }
   const out = pos.array;
   _posaZampe(Z.riposo, stati, dy, out);
   // sfumatura verso il galoppo registrato (posizioni del clip calcolate qui, poi pesi a zero)
@@ -782,14 +787,93 @@ function _aggiornaZampe(mesh, dt, cavallo) {
     yawB = verso * R6.muso * (1 - M6.beccaAmp + M6.beccaAmp * becca);
     pitchB = M6.giu * R6.muso * (0.7 + 0.3 * becca);
   }
-  [Z.cy, Z.cyv] = _molla(Z.cy, Z.cyv, yawB, 1.1, 0.8, dt);
-  [Z.cp, Z.cpv] = _molla(Z.cp, Z.cpv, pitchB, 1.1, 0.8, dt);
-  if (Math.abs(Z.cy) > 1e-4 || Math.abs(Z.cp) > 1e-4) _posaCollo(out, Z.cy * (1 - gal), Z.cp * (1 - gal));
+  if (SC && SC.guarda) { yawB = SC.guarda; pitchB = -0.12; }           // distratto: guarda la folla
+  const fCollo = SC && SC.sorpreso ? 3.0 : 1.1;                         // si accorge del via: la testa scatta avanti
+  [Z.cy, Z.cyv] = _molla(Z.cy, Z.cyv, yawB, fCollo, 0.8, dt);
+  [Z.cp, Z.cpv] = _molla(Z.cp, Z.cpv, pitchB, fCollo, 0.8, dt);
+  const cpTot = Z.cp + (SC ? SC.collo : 0);
+  if (Math.abs(Z.cy) > 1e-4 || Math.abs(cpTot) > 1e-4) _posaCollo(out, Z.cy * (1 - gal), cpTot * (1 - gal));
   pos.needsUpdate = true;
-  Z.attivo = true; Z.dy = dy * (1 - gal); Z.colloYaw = Z.cy * (1 - gal); Z.colloPitch = Z.cp * (1 - gal);
+  Z.attivo = true; Z.dy = dy * (1 - gal); Z.colloYaw = Z.cy * (1 - gal); Z.colloPitch = cpTot * (1 - gal);
   return true;
 }
 
+
+// ════════════════════════════════════════════════════════════════════════════
+// 9. SCATTO DAI CANAPI — raccolta, spinta, prime falcate; canape forzato; distratto
+// ════════════════════════════════════════════════════════════════════════════
+// Simone 11/11: «migliora lo scattino di F alla mossa, deve essere una mossa in cui chi
+// è reattivo scatta, chi è distratto rimane lì come un coglione». Prima al via il corpo
+// SCIVOLAVA avanti di 1,6 u e tornava (seno su progVista): finto. Ora, a vista:
+//  · RACCOLTA (0-0,3 s): il dietro si abbassa (garretti piegati, posteriori sotto il
+//    corpo), il davanti si alza (anteriori piegati in su), testa su;
+//  · SPINTA (0,15-0,5 s): posteriori distesi indietro, anteriori che allungano avanti,
+//    il corpo si distende e si butta avanti; il fantino si piega sul collo (fino a 1 s);
+//  · poi le falcate le fa §7 con la velocità vera (la fiancata buona la dà il gioco).
+// Intensità: fiancata buona («perfetta») 1; «anticipo» (F appena dopo il via) 0,6;
+// partenza normale 0,35; DISTRATTO che si accorge tardi 0,55, con la testa che scatta.
+// Il DISTRATTO (h.distratto, deciso dal gioco al via) finché aspetta (h.launching) resta
+// fermo a guardare la folla, testa girata. Il CANAPE FORZATO (h.scattoT ai canapi): si
+// butta di petto contro la corda, muso giù, testa su all'urto, poi torna.
+// Uscita: h.scattoVista = { pitch, dy, fantino } per placeHorse (beccheggio e quota del
+// gruppo, piega in avanti del fantino); le gambe e il collo li pone qui §7.
+export const SCATTO = {
+  intensita: { perfetta: 1.0, anticipo: 0.6, normale: 0.35, sorpreso: 0.55, canape: 1.0 },
+  durata: 1.2,          // s
+  guarda: 0.45,         // rad: quanto gira la testa il distratto
+};
+const _bmp = (t, a, b) => { if (t <= a || t >= b) return 0; const x = (t - a) / (b - a); return Math.sin(Math.PI * x); };
+function _scatto(Z, h, dt) {
+  if (!h) return null;
+  // ── trigger
+  const via = h.launchRamp != null && h.launchRamp < 0.08 && !h.launching;
+  if (h.launchRamp != null && h.launchRamp > 0.5) h._scattoVia = false;
+  let nuovo = null;
+  if ((h.scattoT || 0) > 0.42 && !(h._sc && h._sc.tipo === "canape" && h._sc.t < 0.6)) nuovo = "canape";
+  else if (via && !h._scattoVia) {
+    h._scattoVia = true;
+    nuovo = h.fiancaTipo === "perfetta" ? "perfetta" : h.fiancaTipo === "anticipo" ? "anticipo" : (h._eraDistratto ? "sorpreso" : "normale");
+  } else if (h.fiancaTipo === "anticipo" && h._sc && h._sc.tipo !== "anticipo" && h._sc.tipo !== "perfetta" && h._sc.t > 0.2 && !h._anticipoVisto) {
+    nuovo = "anticipo"; h._anticipoVisto = true;
+  } else if ((h.balzoT || 0) > 0.5 && !(h._sc && h._sc.tipo === "perfetta")) nuovo = "perfetta";
+  if (!h.fiancaTipo) h._anticipoVisto = false;
+  if (nuovo) h._sc = { tipo: nuovo, t: 0, A: SCATTO.intensita[nuovo] };
+  // ── distratto che aspetta: testa girata verso la folla
+  const aspetta = !!(h.distratto && h.launching);
+  if (aspetta) { if (!h._latoGuarda) h._latoGuarda = Math.random() < 0.5 ? -1 : 1; h._eraDistratto = true; }
+  else if (!h.launching && h._eraDistratto && h.launchRamp > 0.5) h._eraDistratto = false;
+  const c = h._sc;
+  if (!c && !aspetta) { h.scattoVista = null; return null; }
+  const out = { ant: {}, post: {}, collo: 0, guarda: aspetta ? h._latoGuarda * SCATTO.guarda : 0, sorpreso: false };
+  let pitch = 0, dyg = 0, fantino = 0;
+  if (c) {
+    c.t += dt;
+    const t = c.t, A = c.A;
+    if (c.tipo === "canape") {
+      // di petto contro la corda: anteriori avanti, posteriori che spingono, muso giù,
+      // all'urto (t ≈ 0,25) la testa va su; poi torna
+      const s = _bmp(t, 0, 0.5), urto = _bmp(t, 0.18, 0.45);
+      out.ant = { U: 0.45 * s, C: -0.25 * s };
+      out.post = { U: 0.25 * s, C: -0.3 * s };
+      out.collo = 0.12 * s - 0.3 * urto;
+      pitch = 0.10 * s; dyg = 0.02 * s; fantino = 0.25 * s;
+      if (t > 0.6) h._sc = null;
+    } else {
+      const r = _bmp(t, 0, 0.3), sp = _bmp(t, 0.15, 0.52);
+      out.ant = { U: (0.55 * r + 0.7 * sp) * A, C: (-1.1 * r - 0.3 * sp) * A, Pas: -0.5 * r * A, Zo: -0.5 * r * A };
+      out.post = { U: (-0.25 * r + 0.3 * sp) * A, C: (0.5 * r - 0.35 * sp) * A };
+      out.collo = (-0.2 * r + 0.15 * sp) * A;
+      pitch = (-0.30 * r + 0.08 * sp) * A;          // raccolta: muso su (il dietro si siede); spinta: avanti
+      dyg = (-0.06 * r + 0.05 * sp) * A;
+      const e1 = Math.min(1, t / 0.2), e2 = Math.max(0, Math.min(1, (t - 0.8) / 0.6));
+      fantino = 0.35 * A * e1 * (1 - e2);
+      out.sorpreso = c.tipo === "sorpreso" && t < 0.4;
+      if (t > SCATTO.durata + 0.2) h._sc = null;
+    }
+  }
+  h.scattoVista = { pitch, dy: dyg, fantino };
+  return out;
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // 8. CADUTA DEL CAVALLO — corpo rigido con gravità e contatto vero col tufo

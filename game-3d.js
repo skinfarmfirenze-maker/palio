@@ -3942,6 +3942,9 @@ function placeHorse(horse, time) {
     horse.group.rotation.x -= SALTO_BECCHEGGIO * sj;
   }
   if (!horse.cadutoRoll && !CV) reazioneNerbataCorpo(horse, gdt, sample);
+  // SCATTO DAI CANAPI (cavallo-lab §9): raccolta sui posteriori e spinta al via, petto contro la corda
+  const SV = horse.scattoVista;
+  if (SV && !CV) { horse.group.rotation.x += SV.pitch || 0; horse.group.position.y += SV.dy || 0; }
   horse.lastCurve = sample.curve;
   horse.collisionFlash = Math.max(0, horse.collisionFlash - 0.045);
 
@@ -3993,6 +3996,7 @@ function placeHorse(horse, time) {
   const jockey = horse.group.userData.jockey;
   jockey.rotation.x = -0.12 + Math.sin(gallop * 0.5) * 0.052 - clamp(horse.speedLevel - 6, 0, 3) * 0.025 + (animationState === "slowDown" ? 0.045 : 0);
   jockey.rotation.z = -leanVel * 0.02 + (RZ ? RZ.j : 0);
+  if (horse.scattoVista) jockey.rotation.x += horse.scattoVista.fantino || 0;   // si piega sul collo allo scatto (cavallo-lab §9)
   // VITTORIA: il fantino vincitore taglia il traguardo e resta col NERBO ALZATO
   // — braccio destro teso in alto, gesto leggibile anche da lontano. Nel replay
   // il nerbo si alza solo al momento del traguardo (replayAtEnd).
@@ -10486,6 +10490,7 @@ const FIANCA_EFFETTO = {
 };
 // Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
 const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
+const DISTRATTO_P = { 1: 0.40, 2: 0.25, 3: 0.12, 4: 0.05, 5: 0.02 };   // mossa del fantino → probabilità di restare fermo al via 0,8-1,8 s
 // mossa del fantino → [buona (+8%), dopo (+5%), forza il canape] (il resto parte normale)
 const FIANCA_AI = {
   1: [0.10, 0.25, 0.03], 2: [0.20, 0.30, 0.02], 3: [0.35, 0.30, 0.01], 4: [0.50, 0.25, 0.005], 5: [0.65, 0.20, 0],
@@ -10520,6 +10525,7 @@ function applicaFianca(h, tipo) {
     return;
   }
   h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
+  if (tipo === "anticipo" && h.launching) h.launchDelayTimer = Math.min(h.launchDelayTimer, 0.15);   // F appena dopo il via: si sveglia
   if (tipo === "perfetta") h.balzoT = BALZO_DURATA;   // scattino pronunciato al via (Simone: opzione B)
   if (tipo === "perfetta") {
     h.launchDelayTimer = 0; h.launching = false;   // nessun ritardo di reazione
@@ -10543,7 +10549,7 @@ function scattino(h) { if (h) h.scattoT = SCATTINO_DURATA; }
 function scattinoVista(h) {
   let v = 0;
   if (state.mode === "mossa" && h.scattoT > 0) v += SCATTINO_AMPIEZZA * Math.sin(Math.PI * (1 - h.scattoT / SCATTINO_DURATA));
-  if (h.balzoT > 0) v += BALZO_AMPIEZZA * Math.sin(Math.PI * (1 - h.balzoT / BALZO_DURATA));
+  // (il «balzo» al via non è più uno scivolamento avanti e indietro: scatta il corpo, cavallo-lab §9)
   return v;
 }
 function fiancaForzaCanape(h) {
@@ -10706,7 +10712,20 @@ state.horses.forEach((horse) => {
     horse.raceTurn = isHuman(horse) ? 0 : (horse.mossaTurn || 0);
     // Ritardo di reazione individuale: chi è più reattivo scatta prima. La
     // rincorsa è già lanciata, quindi non subisce ritardo.
-    horse.launchDelay = (1 - horse.reactivity) * LAUNCH_MAX_DELAY + (horse.corruptDelay || 0);   // rivale corrotta = +2,5s
+    // ATTENZIONE AL VIA (Simone 11/11, chat Fantini e cavalli): «chi è reattivo scatta,
+    // chi è distratto rimane lì come un coglione». Prontezza del fantino, nervosismo,
+    // muso girato. Il DISTRATTO resta fermo 0,8-1,8 s (prima al massimo 0,35 s per
+    // tutti). La fiancata buona lo azzera comunque.
+    // Probabilità di essere DISTRATTO dalla MOSSA del fantino, un po' di più se il
+    // cavallo è molto nervoso o ha il muso girato. (La formula della consegna dava
+    // 6-9 distratti su 10: ai canapi il nervosismo è alto per tutti.) Il GIOCATORE no:
+    // la sua partenza la decide lui con la F.
+    const pDistratto = clamp((DISTRATTO_P[clamp(Math.round(horse.jkMossa || 3), 1, 5)] || 0.12)
+      + 0.15 * Math.max(0, (horse.nervousnessCurrent || 0) - 0.6)
+      + (Math.abs(horse.mossaTurn || 0) > 0.6 ? 0.15 : 0), 0, 0.7);
+    horse.distratto = !horse.isRincorsa && !isHuman(horse) && Math.random() < pDistratto;
+    horse.launchDelay = (horse.distratto ? 0.8 + Math.random() * 1.0 : (1 - horse.reactivity) * LAUNCH_MAX_DELAY)
+      + (horse.corruptDelay || 0);   // rivale corrotta = +2,5s
     horse.launchDelayTimer = horse.isRincorsa ? 0 : horse.launchDelay;
     horse.launching = horse.launchDelayTimer > 0;
     // Nessuno "scoppio" alla partenza: l'avanzamento riparte da ZERO e raggiunge
