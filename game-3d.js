@@ -13616,6 +13616,7 @@ function updatePlayer(dt, time) {
   // trasportata al centro in un fotogramma (Simone 9/11: deve restare esterna).
   const cumP = positiveMod(player.progress, track.length || 1);
   const edgeOut = TRACK_HALF_WIDTH - 0.6 - trackNarrowAt(cumP) + mossaFlareAt(cumP);
+  if (!(player.lane < -edgeOut)) player.sulMaterasso = 0;   // staccato dal bordo esterno: si riparte da zero
   if (player.lane > edge || player.lane < -edgeOut) {
     // Urto sullo steccato (interno o materassi): se ci arrivi di traverso forte,
     // rischi la caduta (impatto dalla velocità laterale al momento del contatto).
@@ -13624,6 +13625,14 @@ function updatePlayer(dt, time) {
     const versoMuro = player.lane > edge ? player.laneVelocity > 0 : player.laneVelocity < 0;
     if (versoMuro) riskFall(player, fallImpactBordo(player.laneVelocity, player.lane > edge, player.progress), "steccato", null,
       player.lane <= edge && controMaterassiOSteccatoAlto(player.progress) ? LARGO_CADUTA_MOLT : 1);
+    // MATERASSI DI SAN MARTINO E STECCATO ALTO DEL CASATO (Simone 11/11): il giocatore
+    // che ci va contro, o ci resta attaccato per più di 0,3 s, cade DI SICURO, a
+    // prescindere dal copione e da quanti sono già a terra (caduta forzata).
+    if (player.lane < -edgeOut && isHuman(player) && state.mode === "race" && (state.raceClock || 0) > 3
+        && !player.scosso && !player.caduto && controMaterassiOSteccatoAlto(player.progress)) {
+      player.sulMaterasso = (player.sulMaterasso || 0) + dt;
+      if (versoMuro || player.sulMaterasso > 0.3) cade(player, "fuori", null, true);
+    }
     player.lane = clamp(player.lane, -edgeOut, edge);
     // NIENTE RADDRIZZAMENTO. Qui il gioco riportava il muso sulla tangente della
     // pista ogni volta che sfioravi lo steccato: è il "colonnino che ti tira verso
