@@ -15770,17 +15770,17 @@ function avviaCorsaSolo() {
   showMessage(`Traiettoria: palio da solo ${Math.min(caricaTracceSolo().length + 1, TRACCE_SOLO_N)} di ${TRACCE_SOLO_N}`, 3.0, "good");
 }
 // ══════════════════════════════════════════════════════════════════════════════
-// LA LINEA DISEGNATA DA SIMONE (editor /creator/traiettoria/, 9/11, ridisegnata)
+// LA LINEA DISEGNATA DA SIMONE (editor /creator/traiettoria/, ridisegnata l'11/11)
 // «Sempre la linea disegnata»: vince su TUTTO — palii da solo, maestra, tracce.
 // I palii da solo restano solo da vedere nell'editor. Un valore di corsia ogni
 // TRACCIA_PASSO (4) unità di pista, slot = floor(cum/4), valore a centro slot,
 // già dentro i limiti di corsia. Punti disegnati [cum, corsia] (Hermite monotona,
-// a giro chiuso): [0.9, 2.00], [49.7, 7.55], [89.2, 4.60], [SM_IN-10.1, 3.35],
-// [SM_IN+12.1, 4.10], [SM_OUT+10.3, -5.40], [SM_OUT+28.5, -0.70],
-// [CAS_IN-15.5, -2.75], [CAS_OUT-9.2, 5.80], [CAS_OUT+17.0, -1.65].
+// a giro chiuso): [0.9, 2.00], [49.7, 7.55], [89.2, 4.60], [SM_IN-24.8, 4.60],
+// [SM_IN+7.9, 2.35], [SM_OUT-6.2, -0.85], [SM_OUT+7.0, -6.10], [SM_OUT+28.5, -0.70],
+// [CAS_IN-15.5, -2.75], [CAS_OUT-8.9, 3.95], [CAS_OUT+8.6, -2.95].
 // Se il tracciato cambia lunghezza, va rifatta nell'editor.
 // ══════════════════════════════════════════════════════════════════════════════
-const TRACCIA_BASE = [2.1,2.6,3.1,3.7,4.3,4.9,5.5,6.1,6.6,7,7.3,7.5,7.5,7.5,7.3,7,6.6,6.2,5.8,5.4,5,4.8,4.6,4.4,4.3,4.2,4,3.9,3.8,3.7,3.6,3.5,3.5,3.4,3.4,3.4,3.4,3.5,3.6,3.8,4,4.1,3.7,2.4,0.5,-1.6,-3.5,-4.9,-5.4,-4.8,-3.4,-1.9,-0.9,-0.7,-0.8,-0.8,-1,-1.1,-1.3,-1.5,-1.7,-1.9,-2.1,-2.3,-2.5,-2.6,-2.7,-2.7,-2.7,-2,-0.8,0.8,2.5,4,5.2,5.8,5.5,4.5,2.9,1.2,-0.3,-1.4,-1.6,-1.5,-1.3,-1,-0.6,-0.1,0.4,0.9,1.4,1.8];
+const TRACCIA_BASE = [2.1,2.6,3.2,3.8,4.4,5,5.5,6.1,6.6,7,7.3,7.5,7.5,7.5,7.2,6.9,6.5,6,5.6,5.2,4.9,4.7,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.6,4.4,4.2,3.9,3.6,3.2,2.8,2.4,1.8,1,0.1,-1.1,-2.9,-5,-6.1,-5.7,-4.6,-3.1,-1.7,-0.8,-0.7,-0.8,-0.8,-1,-1.1,-1.3,-1.5,-1.7,-1.9,-2.1,-2.3,-2.5,-2.6,-2.7,-2.7,-2.7,-2.2,-1.2,0,1.3,2.5,3.4,3.9,3.5,1.6,-0.7,-2.5,-2.9,-2.8,-2.6,-2.3,-1.8,-1.4,-0.8,-0.3,0.3,0.9,1.4,1.8];
 const TRACCIA_BASE_SCARTO = 4.0;   // linea personale di ogni Contrada: ±4 dalla disegnata (Simone 11/11, era ±2)
 const TRACCE_MAX = 30;              // quante corse si tengono
 const TRACCIA_PASSO = 4;            // un campione ogni 4 unità di pista
