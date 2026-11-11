@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI, armaFantinoCaduto, passoFantinoCaduto } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe, aggiornaCaduta } from "./cavallo-lab.js";
+import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe, aggiornaCaduta, creaCanapeFune } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";
 // NERBATA visiva (chat Grafica): carica, colpo, ritorno. Il colpito reagisce quando ARRIVA la frusta.
 const NERBATA_ANIM = 0.5;          // durata del gesto (prima 0.32, posa fissa)
@@ -1795,7 +1795,9 @@ function buildStartLine() {
   // UN CANAPE SOLO, di canapa. Prima ce n'erano due, e il secondo era ROSSO:
   // davanti ai cavalli, in Piazza, di canape ce n'e' uno — e la fune e' di
   // canapa, grossa. Ingrossato da 0.058 a 0.085 perche' e' una corda vera.
-  state.canapi.add(makeCylinderBetween(a.clone().setY(0.54), b.clone().setY(0.54), 0.085, materials.rope));
+  // FUNE PESANTE (cavallo-lab §10): cade col suo peso quando fianca la rincorsa.
+  try { state.canapeFune = creaCanapeFune(THREE, a, b, 0.54, 0.085, materials.rope); state.canapi.add(state.canapeFune.mesh); }
+  catch (e) { state.canapeFune = null; state.canapi.add(makeCylinderBetween(a.clone().setY(0.54), b.clone().setY(0.54), 0.085, materials.rope)); }
   const groundCanapo = new THREE.Group();
   groundCanapo.add(makeCylinderBetween(a.clone().setY(0.095), b.clone().setY(0.095), 0.025, materials.rope));
   addAllestimento(groundCanapo);
@@ -15362,7 +15364,26 @@ function updateAtmosphere(dt, time) {
     });
   }
 
-  if (state.canapi) {
+  if (state.canapi && state.canapeFune) {
+    // IL CANAPE (cavallo-lab §10): fune pesante che cade quando FIANCA LA RINCORSA
+    // (Simone 11/11), e in gara o nella mossa falsa; tesa di nuovo quando si rifà la mossa.
+    state.canapi.visible = true; state.canapi.position.y = 0; state.canapi.rotation.z = 0;
+    if (!state.falseStartRunning && (state.mode === "race" || state.mode === "finished")) state.canapiDrop += dt;
+    const cade = state.mode === "race" || state.mode === "finished" || state.falseStartRunning
+      || (state.mode === "mossa" && state.rincorsaFiancaAt != null);
+    // gli zoccoli: posizione, velocità vista e muso di ogni cavallo; chi passa sopra la fune
+    // a terra se la porta un poco fra le zampe e la scompiglia (Simone 11/11)
+    const canapePiedi = [];
+    for (const h of state.horses) {
+      const g = h.group; if (!g) continue;
+      const P = g.position, pv = h._pvCanape;
+      let vx = 0, vz = 0;
+      if (pv && dt > 0) { vx = (P.x - pv.x) / dt; vz = (P.z - pv.y) / dt; if (vx * vx + vz * vz > 1600) { vx = 0; vz = 0; } }
+      if (pv) pv.set(P.x, P.z); else h._pvCanape = new THREE.Vector2(P.x, P.z);
+      if (cade) canapePiedi.push({ x: P.x, z: P.z, vx, vz, fx: Math.sin(g.rotation.y), fz: Math.cos(g.rotation.y) });
+    }
+    state.canapeFune.aggiorna(dt, cade, state.mode === "race" || state.mode === "finished", canapePiedi);
+  } else if (state.canapi) {
     if (state.mode === "race" || state.mode === "finished" || state.falseStartRunning) {
       // durante il falso avvio canapiDrop è già avanzato da updateFalseStartRunout;
       // in gara/finished lo avanza qui. In entrambi i casi il canapo si abbassa.

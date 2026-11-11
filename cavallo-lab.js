@@ -805,10 +805,11 @@ function _aggiornaZampe(mesh, dt, cavallo) {
 // Simone 11/11: «migliora lo scattino di F alla mossa, deve essere una mossa in cui chi
 // è reattivo scatta, chi è distratto rimane lì come un coglione». Prima al via il corpo
 // SCIVOLAVA avanti di 1,6 u e tornava (seno su progVista): finto. Ora, a vista:
-//  · RACCOLTA (0-0,3 s): il dietro si abbassa (garretti piegati, posteriori sotto il
-//    corpo), il davanti si alza (anteriori piegati in su), testa su;
-//  · SPINTA (0,15-0,5 s): posteriori distesi indietro, anteriori che allungano avanti,
-//    il corpo si distende e si butta avanti; il fantino si piega sul collo (fino a 1 s);
+//  · RACCOLTA (0-0,3 s): il dietro si carica (garretti piegati, posteriori sotto il
+//    corpo); il davanti resta BASSO (anteriori appena piegati): niente impennata, non
+//    deve sembrare un salto sopra il canape (Simone);
+//  · SPINTA (0,15-0,5 s): posteriori distesi indietro, anteriori che allungano avanti
+//    radenti, muso giù, il corpo si butta avanti; il fantino si piega sul collo;
 //  · poi le falcate le fa §7 con la velocità vera (la fiancata buona la dà il gioco).
 // Intensità: fiancata buona («perfetta») 1; «anticipo» (F appena dopo il via) 0,6;
 // partenza normale 0,35; DISTRATTO che si accorge tardi 0,55, con la testa che scatta.
@@ -860,11 +861,14 @@ function _scatto(Z, h, dt) {
       if (t > 0.6) h._sc = null;
     } else {
       const r = _bmp(t, 0, 0.3), sp = _bmp(t, 0.15, 0.52);
-      out.ant = { U: (0.55 * r + 0.7 * sp) * A, C: (-1.1 * r - 0.3 * sp) * A, Pas: -0.5 * r * A, Zo: -0.5 * r * A };
-      out.post = { U: (-0.25 * r + 0.3 * sp) * A, C: (0.5 * r - 0.35 * sp) * A };
-      out.collo = (-0.2 * r + 0.15 * sp) * A;
-      pitch = (-0.30 * r + 0.08 * sp) * A;          // raccolta: muso su (il dietro si siede); spinta: avanti
-      dyg = (-0.06 * r + 0.05 * sp) * A;
+      // Scatto BASSO e potente (Simone: «non deve saltare il canape»): il dietro si
+      // carica, gli anteriori NON si alzano — si piegano appena e allungano avanti
+      // radenti, il corpo si butta avanti col muso basso. Niente impennata.
+      out.ant = { U: (0.12 * r + 0.65 * sp) * A, C: (-0.45 * r - 0.25 * sp) * A, Pas: -0.25 * r * A, Zo: -0.25 * r * A };
+      out.post = { U: (-0.3 * r + 0.35 * sp) * A, C: (0.55 * r - 0.4 * sp) * A };
+      out.collo = (0.05 * r + 0.18 * sp) * A;     // testa avanti e giù, non su
+      pitch = (-0.08 * r + 0.10 * sp) * A;        // appena seduto, poi muso giù nella spinta
+      dyg = (-0.05 * r + 0.02 * sp) * A;
       const e1 = Math.min(1, t / 0.2), e2 = Math.max(0, Math.min(1, (t - 0.8) / 0.6));
       fantino = 0.35 * A * e1 * (1 - e2);
       out.sorpreso = c.tipo === "sorpreso" && t < 0.4;
@@ -1123,4 +1127,175 @@ function _aggiornaCaduta(mesh, dt, h) {
   h.cadVista = { roll: ph, pitch: th, yaw: ps, dx: cc[0] - _rv[0], dy: yc - _rv[1], dz: cc[2] - _rv[2] };
   if (impatto) h.cadImpatto = Math.max(h.cadImpatto || 0, impatto);
   return true;
+}
+
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 10. IL CANAPE — fune pesante che cade quando fianca la rincorsa, e gli zoccoli la scompigliano
+// ════════════════════════════════════════════════════════════════════════════
+// Simone 11/11: «il canape anteriore (è una fune pesante) cada dal momento in cui fianca
+// la rincorsa». Prima era un cilindro rigido che scendeva di 0,58 in 0,34 s tremolando e
+// spariva. Ora è una FUNE a 46 nodi (Verlet): finché è tesa sta fra i due pali; quando
+// cade i capi scendono lungo i pali e il peso la porta giù — si incurva in mezzo, tocca il
+// tufo, rimbalza appena e si adagia storta, un poco ondulata. Chi parte davanti se la porta un poco fra le
+// zampe: gli zoccoli la trascinano e la sollevano, la fune si piega in anse e si scompiglia
+// a terra (il suo peso la trattiene). Dopo un po' (in gara) sparisce. Torna tesa
+// quando si rifà la mossa. Solo a vista. THREE lo passa il gioco (questo modulo non lo importa).
+export const CANAPE = {
+  nodi: 46, lasco: 1.015,   // fune spessa ma flessibile: tanti nodi, si piega in anse (non una stecca)
+  g: 10.9,                  // u/s²
+  smorza: 0.995,            // smorzamento Verlet per passo
+  attritoTufo: 0.82,        // a terra la fune quasi non scivola
+  iter: 14,                 // vincoli di lunghezza per passo
+  sparisce: 7.0,            // s a terra prima di sparire (in gara)
+  // ZOCCOLI (Simone: «chi parte avanti si porta un pochino dietro fra le zampe il canape…
+  // lo deve un po' sfilacciare in terra»): i nodi a terra sotto le zampe di un cavallo che
+  // passa vengono trascinati col suo moto e sollevati un poco; il peso della fune li
+  // trattiene (non si allontanano più di `tirata` da dove sono caduti).
+  // zoccoli misurati sul cavallo del gioco (u dal centro del cavallo, lungo il muso):
+  // anteriori a +1,05, posteriori a −0,82, ±0,18 di lato; raggioZ copre la falcata.
+  zampe: { davanti: 1.05, dietro: -0.82, raggioZ: 0.45, largo: 0.4, presa: 0.55, alzaV: 1.6, vMax: 6.0 },
+  tirata: 1.6,              // u: quanto un pezzo di fune si lascia trascinare via da dove è caduto
+  onda: 0.7,                // u/s: quando cade si scompone un poco di lato, a terra non resta una stecca
+};
+export function creaCanapeFune(THREE, a, b, alto, raggio, materiale) {
+  const K = CANAPE, N = K.nodi, R = 8;
+  const A = new THREE.Vector3(a.x, alto, a.z), B = new THREE.Vector3(b.x, alto, b.z);
+  const lungTesa = A.distanceTo(B), seg = lungTesa * K.lasco / (N - 1);
+  const p = new Float32Array(N * 3), q = new Float32Array(N * 3);
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(N * R * 3), nor = new Float32Array(N * R * 3), idx = [];
+  for (let i = 0; i < N - 1; i += 1) for (let j = 0; j < R; j += 1) {
+    const a0 = i * R + j, a1 = i * R + (j + 1) % R, b0 = a0 + R, b1 = a1 + R;
+    idx.push(a0, b0, a1, a1, b0, b1);
+  }
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("normal", new THREE.BufferAttribute(nor, 3));
+  geo.setIndex(idx);
+  const mesh = new THREE.Mesh(geo, materiale);
+  mesh.castShadow = true; mesh.frustumCulled = false;
+  const st = { cade: false, tTerra: 0, giu: false, posato: null, moto: 0, onda: false };
+  const nx = -(B.z - A.z) / lungTesa, nz = (B.x - A.x) / lungTesa;   // orizzontale, di traverso alla fune
+  const tesa = () => {
+    for (let i = 0; i < N; i += 1) {
+      const t = i / (N - 1), sag = 0.035 * Math.sin(Math.PI * t);   // la fune tesa pende appena
+      p[3 * i] = A.x + (B.x - A.x) * t; p[3 * i + 1] = alto - sag; p[3 * i + 2] = A.z + (B.z - A.z) * t;
+    }
+    q.set(p); st.cade = false; st.tTerra = 0; st.giu = false; st.posato = null; mesh.visible = true;
+  };
+  const tubo = () => {
+    const T = new THREE.Vector3(), U = new THREE.Vector3(), V = new THREE.Vector3(), su = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < N; i += 1) {
+      const i0 = Math.max(0, i - 1), i1 = Math.min(N - 1, i + 1);
+      T.set(p[3 * i1] - p[3 * i0], p[3 * i1 + 1] - p[3 * i0 + 1], p[3 * i1 + 2] - p[3 * i0 + 2]).normalize();
+      U.copy(su).addScaledVector(T, -su.dot(T)); if (U.lengthSq() < 1e-6) U.set(1, 0, 0); U.normalize();
+      V.copy(T).cross(U);
+      for (let j = 0; j < R; j += 1) {
+        const ang = (j / R) * Math.PI * 2, c = Math.cos(ang), s2 = Math.sin(ang), k = 3 * (i * R + j);
+        const nx = U.x * c + V.x * s2, ny = U.y * c + V.y * s2, nz = U.z * c + V.z * s2;
+        nor[k] = nx; nor[k + 1] = ny; nor[k + 2] = nz;
+        pos[k] = p[3 * i] + nx * raggio; pos[k + 1] = p[3 * i + 1] + ny * raggio; pos[k + 2] = p[3 * i + 2] + nz * raggio;
+      }
+    }
+    geo.attributes.position.needsUpdate = true; geo.attributes.normal.needsUpdate = true;
+  };
+  tesa(); tubo();
+  const passo = (h, piedi) => {
+    const terra = raggio, Zp = K.zampe;
+    // appena sganciata: un'ondina di traverso, diversa a ogni caduta (due seni lungo la fune)
+    if (st.onda) {
+      st.onda = false;
+      const f1 = Math.random() * 6.283, f2 = Math.random() * 6.283, k1 = 1.1 + Math.random() * 0.6, k2 = 2.7 + Math.random() * 1.0;
+      for (let i = 0; i < N; i += 1) {
+        const t = i / (N - 1), v = K.onda * (0.6 * Math.sin(6.283 * k1 * t + f1) + 0.4 * Math.sin(6.283 * k2 * t + f2));
+        q[3 * i] -= nx * v * h; q[3 * i + 2] -= nz * v * h;
+      }
+    }
+    // zoccoli: i nodi a terra sotto le zampe vengono trascinati col cavallo e alzati appena
+    if (piedi && piedi.length) for (let i = 0; i < N; i += 1) {
+      const k = 3 * i;
+      if (p[k + 1] > terra + 0.06) continue;
+      for (const c of piedi) {
+        const dx = p[k] - c.x, dz = p[k + 2] - c.z;
+        const fz = dx * c.fx + dz * c.fz, lat = dx * c.fz - dz * c.fx;
+        if (Math.abs(lat) > Zp.largo || fz > Zp.davanti + 0.5 || fz < Zp.dietro - 0.5) continue;
+        const g1 = Math.exp(-(((fz - Zp.davanti) / Zp.raggioZ) ** 2)), g2 = Math.exp(-(((fz - Zp.dietro) / Zp.raggioZ) ** 2));
+        const w = Math.max(g1, g2) * (1 - Math.abs(lat) / Zp.largo) * Zp.presa;
+        if (w < 0.02) continue;
+        // il pezzo va verso la velocità dello zoccolo (al massimo vMax: a gran velocità lo
+        // zoccolo la colpisce e la scalcia, non se la porta via), e uno zoccolo che la prende
+        // la alza appena. Nel passo di Verlet la velocità è (p − q)/h.
+        const sc = c.v > Zp.vMax ? Zp.vMax / c.v : 1, tx = c.vx * sc, tz = c.vz * sc;
+        const ux = (p[k] - q[k]) / h, uz = (p[k + 2] - q[k + 2]) / h, uy = (p[k + 1] - q[k + 1]) / h;
+        q[k] = p[k] - (ux + (tx - ux) * w) * h; q[k + 2] = p[k + 2] - (uz + (tz - uz) * w) * h;
+        const vy = Zp.alzaV * w * Math.min(1, c.v / 5);
+        if (uy < vy) q[k + 1] = p[k + 1] - vy * h;
+      }
+    }
+    for (let i = 0; i < N; i += 1) {
+      const k = 3 * i;
+      for (let c = 0; c < 3; c += 1) {
+        const v = (p[k + c] - q[k + c]) * K.smorza;
+        q[k + c] = p[k + c];
+        p[k + c] += v + (c === 1 ? -K.g * h * h : 0);
+      }
+    }
+    for (let it = 0; it < K.iter; it += 1) {
+      for (let i = 0; i < N - 1; i += 1) {
+        const k = 3 * i, l = k + 3;
+        const dx = p[l] - p[k], dy = p[l + 1] - p[k + 1], dz = p[l + 2] - p[k + 2];
+        const d = Math.hypot(dx, dy, dz) || 1e-6, e = (d - seg) / d * 0.5;
+        p[k] += dx * e; p[k + 1] += dy * e; p[k + 2] += dz * e;
+        p[l] -= dx * e; p[l + 1] -= dy * e; p[l + 2] -= dz * e;
+      }
+      // sganciata ai due pali: i capi sono liberi e la fune viene giù tutta col suo peso
+      // il peso la trattiene: un pezzo non si allontana più di K.tirata da dove è caduto
+      if (st.posato) for (let i = 0; i < N; i += 1) {
+        const k = 3 * i, dx = p[k] - st.posato[k], dz = p[k + 2] - st.posato[k + 2], d = Math.hypot(dx, dz);
+        if (d > K.tirata) { const e = (d - K.tirata) / d * 0.5; p[k] -= dx * e; p[k + 2] -= dz * e; }
+      }
+      // il tufo
+      for (let i = 0; i < N; i += 1) {
+        const k = 3 * i;
+        if (p[k + 1] < terra) {
+          p[k + 1] = terra;
+          q[k] = p[k] - (p[k] - q[k]) * K.attritoTufo; q[k + 2] = p[k + 2] - (p[k + 2] - q[k + 2]) * K.attritoTufo;
+          if (q[k + 1] < terra - 0.002) q[k + 1] = terra + (terra - q[k + 1]) * 0.25;   // rimbalzo piccolo
+        }
+      }
+    }
+  };
+  // piedi: [{ x, z, vx, vz, fx, fz }] — posizione (mondo), velocità e direzione del muso
+  // dei cavalli vicini (le dà il gioco a ogni frame); fuori serve solo chi è sulla fune.
+  const vicino = (piedi) => {
+    if (!piedi || !piedi.length) return null;
+    const out = [];
+    for (const c of piedi) {
+      if (!Number.isFinite(c.x + c.z + c.vx + c.vz + c.fx + c.fz)) continue;   // dati non validi: si ignora
+      let dmin = Infinity;
+      for (let i = 0; i < N; i += 3) dmin = Math.min(dmin, Math.hypot(p[3 * i] - c.x, p[3 * i + 2] - c.z));
+      if (dmin < 2.6) out.push({ ...c, v: Math.hypot(c.vx, c.vz) });
+    }
+    return out.length ? out : null;
+  };
+  const aggiorna = (dt, cade, spariscaDopo, piedi) => {
+    if (!cade) { if (st.cade || st.giu || !mesh.visible) { tesa(); tubo(); } return; }
+    if (!st.cade) st.onda = true;
+    st.cade = true;
+    if (!mesh.visible) return;
+    const zampe = st.giu ? vicino(piedi) : null;
+    if (st.giu && st.tTerra > 2.0 && !zampe && st.moto <= 0) {
+      if (spariscaDopo && st.tTerra > K.sparisce) mesh.visible = false;
+      st.tTerra += dt; return;                          // ferma a terra e nessuno sopra: niente calcoli
+    }
+    if (zampe) st.moto = 1.0; else st.moto -= dt;       // dopo che passano, ancora 1 s per assestarsi
+    const n = Math.max(1, Math.ceil(dt / (1 / 240))), h = Math.min(dt, 0.05) / n;
+    for (let i = 0; i < n; i += 1) passo(h, zampe);
+    let alto2 = 0; for (let i = 1; i < N - 1; i += 1) alto2 = Math.max(alto2, p[3 * i + 1]);
+    if (alto2 < raggio + 0.03 && !st.giu) { st.giu = true; st.posato = Float32Array.from(p); }
+    if (st.giu) st.tTerra += dt;
+    tubo();
+  };
+  return { mesh, aggiorna, tesa, stato: st };
 }
