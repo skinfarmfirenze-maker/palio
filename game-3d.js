@@ -13812,6 +13812,13 @@ function updateAiHorse(horse, dt, time) {
     const ahead = state.horses.filter((o) => o !== horse && !o.launching
       && o.progress > horse.progress - HORSE_BLOCK_LENGTH * 0.4
       && o.progress < horse.progress + HORSE_BLOCK_LENGTH * 5.0);
+    // TAPPO: davanti, sulla mia corsia, a meno di due corpi, e non più veloce di me.
+    // Dura un po' (TAPPO_TEMPO) così il sorpasso, una volta iniziato, si completa.
+    const tappo = ahead.some((o) => !o.caduto && o.progress > horse.progress + 0.2
+      && o.progress < horse.progress + HORSE_BLOCK_LENGTH * 2.2
+      && Math.abs(o.lane - horse.lane) < HORSE_PASS_CLEARANCE
+      && (o.travelSpeed || 0) <= (horse.travelSpeed || 0) + 0.3);
+    if (tappo) horse.tappoT = TAPPO_TEMPO;
     if (ahead.length) {
       const innerSign = -Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
       const maxAhead = HORSE_BLOCK_LENGTH * 5.0;
@@ -13978,13 +13985,16 @@ function updateAiHorse(horse, dt, time) {
       // l'umano teneva li' all'ultimo giro, e appena partite si schiacciavano
       // tutte da un lato.
       const avvio = clamp(((state.raceClock || 0) - 2) / 6, 0, 1);
-      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95) * avvio * ripresaSM);
+      // SORPASSO CONTRO IL TAPPO sul rettilineo: la linea non tira indietro (Simone 11/11).
+      const inSorpasso = (horse.tappoT || 0) > 0 && (sample.curve || 0) < 0.18;
+      if (horse.tappoT) horse.tappoT = Math.max(0, horse.tappoT - dt);
+      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95) * avvio * ripresaSM * (inSorpasso ? 0 : 1));
       // TETTO DI SCOSTAMENTO. Le decisioni prese qui sopra (sorpasso, marcatura,
       // parata) restano, ma non possono portare l'AI lontano dalla linea che
       // l'umano teneva in questo punto: si sposta per passare o per chiudere, poi
       // rientra. Senza questo tetto, una singola manovra la mandava larga e la
       // traccia non si vedeva più.
-      const scosto = TRACCIA_SCOSTO + (1 - avvio * ripresaSM) * 2 * AI_LANE_LIMIT;   // in partenza (e all'imbocco di SM) il tetto non stringe
+      const scosto = (inSorpasso ? TAPPO_SCOSTO : TRACCIA_SCOSTO) + (1 - avvio * ripresaSM) * 2 * AI_LANE_LIMIT;   // in partenza (e all'imbocco di SM) il tetto non stringe
       horse.targetLane = clamp(horse.targetLane, umana - scosto, umana + scosto);
     }
   }
@@ -15645,6 +15655,9 @@ const TRACCIA_PESO = 0.88;
 // infilarsi in un varco, chiudere la porta a chi arriva — restando comunque
 // legata alla linea che l'umano teneva in quel punto.
 const TRACCIA_SCOSTO = 3.8;
+// Contro un TAPPO, sul rettilineo, ci si può allargare fino a ±5 dalla linea (Simone 11/11).
+const TAPPO_SCOSTO = 5.0;
+const TAPPO_TEMPO = 1.5;     // secondi: il sorpasso iniziato non si interrompe a metà
 // Le andature con cui si puo' rivedere il Palio (bottoni nell'HUD del replay).
 const REPLAY_VELOCITA = [0.5, 0.8, 1, 1.5];
 // ── COME LE AI PRENDONO LE CURVE (frazioni della semi-larghezza, 11.5) ──────
