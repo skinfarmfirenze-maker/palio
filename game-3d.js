@@ -10736,6 +10736,8 @@ state.horses.forEach((horse) => {
       // NIENTE raddrizzamento automatico: se alla mossa eri girato/inclinato,
       // parti così come sei e sei tu a doverti raddrizzare con lo sterzo.
       horse.heading = sampleAt(horse.progress).yaw + (horse.mossaTurn || 0) + horse.launchHeadingDev;
+      // girato al via: prima si raddrizza sul posto, poi parte (updatePlayer)
+      horse.giraAlVia = Math.abs(angleDiff(sampleAt(horse.progress).yaw, horse.heading)) > GIRA_AL_VIA_SOGLIA;
     } else {
       // Velocità massima al via = obiettivo AI; la rincorsa eredita lo slancio.
       const baseTarget = horse.isRincorsa
@@ -13547,6 +13549,20 @@ function updatePlayer(dt, time) {
     return;
   }
   if (player.launching) return; // ritardo di reazione al via: ancora fermo
+  // PARTITO GIRATO (Simone 12/11): il muso torna sulla pista SUL POSTO, poi si parte.
+  // Niente avanzamento né spostamento di lato finché non è quasi dritto; la rampa di
+  // partenza resta ferma e riparte da dove era.
+  if (player.giraAlVia && player.heading !== undefined && state.mode === "race") {
+    const d = angleDiff(sampleAt(player.progress).yaw, player.heading);
+    if (Math.abs(d) > GIRA_AL_VIA_FINE) {
+      player.heading += Math.sign(d) * Math.min(Math.abs(d), GIRA_AL_VIA_VEL * dt);
+      player.laneVelocity = 0;
+      player.speedLevel = Math.max(player.speedLevel || 0, 2);   // passi sul posto mentre gira
+      placeHorse(player, time);
+      return;
+    }
+    player.giraAlVia = false;
+  }
 
   const controls = getControls();
   const left = controls.left;
@@ -19307,3 +19323,8 @@ function bersaglioPartenza(h) {
   const t = Math.min(1, pr / PARTENZE_RACCORDO), w = 1 - t * t * (3 - 2 * t);
   return corsiaPartenza(v, Math.min(PARTENZE_FINE, pr + PARTENZE_AVANTI)) + h.partenzaOff * w;
 }
+
+// ── PARTITO GIRATO (Simone 12/11) ──────────────────────────────────────────────
+const GIRA_AL_VIA_SOGLIA = 0.3;   // rad (~17°): sotto si parte come prima
+const GIRA_AL_VIA_FINE = 0.08;    // rad: quasi dritto, si parte
+const GIRA_AL_VIA_VEL = 2.5;      // rad/s: un quarto di giro in ~0,6 s
