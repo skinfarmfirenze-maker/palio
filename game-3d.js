@@ -4704,7 +4704,7 @@ const FRENI_END = {
   // il cavallo prosegue scosso. Il contatore globale era a 9374 quando la regola
   // e' stata messa, quindi si spegne da sola al palio 10374 e le cadute tornano
   // com'erano — cavalli a terra e maxi-cadute comprese. Nessuno deve fare niente.
-  soloFantiniCadono: 15374,
+  soloFantiniCadono: 0,   // SPENTO (Simone 11/11): ora cadono anche i cavalli, 1 caduta su 3
   // ── PANTERA E AQUILA DA BOMBOLONE ──────────────────────────────────
   // Per i PROSSIMI 5 palii Pantera e Aquila, quando escono nel lotto,
   // corrono da bomboloni. Il contatore globale era a 9734 quando la regola
@@ -10895,7 +10895,7 @@ function releaseRace() {
   state.sanMartinoIncident = Math.random() < 1 / 6;
   state.sanMartinoIncidentDone = false;
   state.smLarghe = null;
-  state.horses.forEach((h) => { h.smLargo = false; h.vaLargo = null; h.zonaLargaPrima = null; });
+  state.horses.forEach((h) => { h.cadPiano = null; h.curvaCadutaPrima = null; h.cadutaLato = null; });
   state.tempestaFellDone = false;   // guardia per la caduta provvisoria di Tempesta a San Martino
   state.gridoFellDone = false;      // idem per Grido
   state.tartucaFellDone = false;    // idem per la Tartuca (AI, San Martino)
@@ -14081,9 +14081,10 @@ function updateAiHorse(horse, dt, time) {
   horse.targetLane = clamp(horse.targetLane, -aiOuterAvanti, aiInnerAvanti);
   // INCIDENTE DI SAN MARTINO: le due di testa sorteggiate vanno LARGHE, fino ai
   // materassi (vedi updateRace). Qui, perché è qui che la guida sceglie la corsia.
-  if (horse.smLargo) horse.targetLane = -aiOuterAvanti;
-  if (horse.vaLargo) horse.targetLane = -aiOuterLim;       // dritto/largo fino al bordo che ha accanto
+  // CADUTA PIANIFICATA: verso i materassi/steccato (fuori) o il colonnino (dentro).
+  if (horse.cadPiano) horse.targetLane = horse.cadPiano.lato === "fuori" ? -aiOuterLim : aiInnerLim;
   horse.alBordoFuori = horse.lane <= -aiOuterLim + 0.6;   // per vaLargoTick: è sui materassi/steccato
+  horse.alBordoDentro = horse.lane >= aiInnerLim - 0.6;   // …o sul colonnino
   const previousLane = horse.lane;
   // In curva e durante l'uscita larga insegue la corsia più in fretta.
   let laneFollow = (sample.curve > 0.18 || (horse.exitWide || 0) > 0.01) ? 4.2 : 2.6;
@@ -14335,41 +14336,20 @@ function updateRace(dt, time) {
   if (brucoFallActive() && NARROW_READY) {
     const bru = state.horses.find((h) => h.id === "bruco" && !isHuman(h) && !h.isRincorsa
       && !h.scosso && !h.caduto && h.progress > SM_IN + 2 && h.progress < SM_OUT + 2);
-    if (bru) {
-      bru.lane = Math.min(bru.lane, -(AI_LANE_LIMIT * 0.6));   // va largo/dritto verso l'esterno (non taglia la curva)
-      bru.targetLane = bru.lane;
-      triggerHorseFall(bru);                                   // e cade — silenzioso, niente showMessage
-    }
+    if (bru) pianificaCaduta(bru, "sm", { silenzioso: true });   // cade dove si cade a San Martino (Simone 11/11)
   }
   // INCIDENTE DI SAN MARTINO (Simone 9/11, al posto delle cadute a caso): al
   // PRIMO San Martino le DUE AI di testa vanno LARGHE all'esterno, gli altri
-  // passano dietro; le due si IMPANCIANO sui materassi e cadono (cavallo e
-  // fantino). Si allargano camminando verso il bordo, non a scatto.
+  // passano dietro; le due si IMPANCIANO sui materassi (fantino sempre, cavallo
+  // 1 volta su 3). Si allargano camminando verso il bordo, non a scatto.
   if (state.sanMartinoIncident && !state.sanMartinoIncidentDone && NARROW_READY) {
-    if (!state.smLarghe) {
-      // Quando la testa arriva all'imbocco (1° giro: progress senza modulo), le
-      // due AI più avanti sono quelle che vanno larghe.
-      const due = state.horses.filter((h) => !h.scosso && !h.caduto && !h.isRincorsa && !isHuman(h))
-        .sort((a, b) => b.progress - a.progress).slice(0, 2);
-      if (due.length === 2 && due[0].progress > SM_IN - 14 && due[0].progress < SM_OUT) state.smLarghe = due.map((h) => h.id);
-    }
-    if (state.smLarghe) {
-      const due = state.smLarghe.map((id) => state.horses.find((h) => h.id === id)).filter(Boolean);
-      due.forEach((h) => {
-        if (h.caduto || h.scosso) { h.smLargo = false; return; }
-        h.smLargo = true;                                           // va largo (lo applica updateAiHorse)
-        const bordo = -(outerLimitAt(h.progress) - 0.6);            // i materassi
-        // Si impancia DENTRO la curva, sui materassi: larga ci arriva prima, poi ci sbatte.
-        if ((h.lane <= bordo && h.progress > SM_IN + 8) || h.progress > SM_OUT + 4) {
-          h.smLargo = false;
-          triggerHorseFall(h);
-          if (h.caduto && state.messageTimer <= 0) showMessage(`San Martino: ${h.name} si impancia sui materassi!`, 2.6, "danger");
-        }
-      });
-      if (due.every((h) => !h.smLargo)) {
-        state.sanMartinoIncidentDone = true;
-        state.cameraShake = Math.max(state.cameraShake || 0, 0.8);
-      }
+    // Quando la testa arriva all'imbocco (1° giro: progress senza modulo), le due
+    // AI più avanti vanno larghe e si impancano sui materassi (190-210).
+    const due = state.horses.filter((h) => !h.scosso && !h.caduto && !h.isRincorsa && !isHuman(h))
+      .sort((a, b) => b.progress - a.progress).slice(0, 2);
+    if (due.length === 2 && due[0].progress > SM_IN - 14 && due[0].progress < SM_OUT) {
+      due.forEach((h) => { h.cadPiano = null; pianificaCaduta(h, "sm", { lato: "fuori" }); });
+      state.sanMartinoIncidentDone = true;
     }
   }
 
@@ -14383,7 +14363,7 @@ function updateRace(dt, time) {
       state.tempestaFellDone = true;
       // Nessun messaggio dedicato: dev'essere indistinguibile da una caduta normale
       // (triggerHorseFall mostra già gli effetti di una caduta qualsiasi).
-      triggerHorseFall(t);
+      pianificaCaduta(t, "sm", { silenzioso: true });   // dove si cade a San Martino
       state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
     }
   }
@@ -14394,7 +14374,7 @@ function updateRace(dt, time) {
       && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
     if (g) {
       state.gridoFellDone = true;
-      triggerHorseFall(g);
+      pianificaCaduta(g, "sm", { silenzioso: true });
       state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
     }
   }
@@ -14405,7 +14385,7 @@ function updateRace(dt, time) {
       && !isHuman(h) && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
     if (tt) {
       state.tartucaFellDone = true;
-      triggerHorseFall(tt);
+      pianificaCaduta(tt, "sm", { silenzioso: true });
       state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
     }
   }
@@ -14416,7 +14396,7 @@ function updateRace(dt, time) {
       && !isHuman(h) && h.progress > CAS_IN + 2 && h.progress < CAS_OUT + 4);
     if (gf) {
       state.giraffaFellDone = true;
-      triggerHorseFall(gf);
+      pianificaCaduta(gf, "cas", { silenzioso: true });   // dove si cade al Casato
       state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
     }
   }
@@ -14425,9 +14405,8 @@ function updateRace(dt, time) {
   if (frenoAttivo("dragoSelvaFall") && NARROW_READY) {
     state.horses.forEach((h) => {
       if ((h.id === "drago" || h.id === "selva") && !h.isRincorsa && !h.scosso && !h.caduto && !isHuman(h)
-          && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4) {
-        triggerHorseFall(h);
-        state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
+          && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4 && !h.cadPiano) {
+        pianificaCaduta(h, "sm", { silenzioso: true });
       }
     });
   }
@@ -14544,38 +14523,66 @@ function controMaterassiOSteccatoAlto(prog) {
   const m = trattoMaterassi(), c = trattoSteccatoAlto();
   return (q > m.da && q < m.a) || (q > c.da && q < c.a);
 }
-// anticipo: da quanto prima del tratto il cavallo comincia ad allargarsi (all'imbocco della curva).
-function zonaLarga(prog, anticipo = 0) {
+// ══ DOVE SI CADE (Simone 11/11, misure della chat Grafica) ═══════════════════
+// Il fantino cade SEMPRE; il cavallo in 1 caduta su 3.
+const CADUTA_CAVALLO_P = 1 / 3;
+function cade(h, lato, ctx) {
+  if (!h || h.scosso) return;
+  h.cadutaLato = lato || null;
+  if (Math.random() < CADUTA_CAVALLO_P) triggerHorseFall(h);
+  else triggerFall(h, ctx);
+}
+// San Martino: 80% impanciati sui materassi (190-210), 20% sul colonnino del punto
+// 5 (162-169). Casato: 50% colonnino dell'angolo interno (297-303), 50% steccato
+// alto (310-320). In cum, legati alle ancore della pista.
+function finestraCaduta(curva, lato) {
+  if (curva === "sm") return lato === "fuori" ? [SM_OUT + 6.5, SM_OUT + 26.5] : [SM_IN + 7.4, SM_IN + 14.4];
+  return lato === "fuori" ? [CAS_OUT - 2.1, CAS_OUT + 7.9] : [CAS_IN + 8.9, CAS_IN + 14.9];
+}
+// Una caduta decisa (a caso, a copione, incidente) diventa un PIANO: il cavallo va
+// verso quel lato e cade dentro la sua finestra. silenzioso = niente scritta.
+function pianificaCaduta(h, curva, opz = {}) {
+  if (!h || h.scosso || h.caduto || h.cadPiano) return;
+  const lato = opz.lato || (Math.random() < (curva === "sm" ? 0.8 : 0.5) ? "fuori" : "dentro");
+  const [da, a] = finestraCaduta(curva, lato);
+  h.cadPiano = { curva, lato, da, a, silenzioso: !!opz.silenzioso };
+}
+// L'imbocco della curva in cui si decide (cum): da 20 prima fino alla fine delle finestre.
+function curvaDiCaduta(cum) {
   if (!NARROW_READY) return null;
-  const q = positiveMod(prog || 0, track.length || 1);
-  const m = trattoMaterassi(), c = trattoSteccatoAlto();
-  if (q > m.da - anticipo && q < m.a) return "materassi";
-  if (q > c.da - anticipo && q < c.a) return "steccato";
+  if (cum > SM_IN - 20 && cum < SM_OUT + 26.5) return "sm";
+  if (cum > CAS_IN - 20 && cum < CAS_OUT + 7.9) return "cas";
   return null;
 }
-const VA_LARGO_ANTICIPO = 20;
 function vaLargoTick() {
   if (state.mode !== "race" || state.falseStartRunning || (state.raceClock || 0) < 3) return;
+  const L = track.length || 1;
   state.horses.forEach((h) => {
-    if (h.isRincorsa || isHuman(h) || h.finishTime) return;
-    const zona = (h.scosso || h.caduto) ? null : zonaLarga(h.progress, VA_LARGO_ANTICIPO);
-    if (zona && h.zonaLargaPrima !== zona && !h.smLargo) {
-      // Entra nel tratto: va largo? Più facile per chi gira male (curva bassa).
-      const curva = (h.jockey && h.jockey.curva) || 3;
-      const p = VA_LARGO_P * clamp(1 + (3 - curva) * 0.35, 0.4, 1.8);
-      h.vaLargo = Math.random() < p ? zona : null;
+    if (h.isRincorsa || h.finishTime) return;
+    const cum = positiveMod(h.progress || 0, L);
+    const curva = (h.scosso || h.caduto) ? null : curvaDiCaduta(cum);
+    // Entrando nella curva, una AI può cadere (più facile se il fantino gira male):
+    // stesso numero di cadute di prima, decide solo DOVE.
+    if (curva && h.curvaCadutaPrima !== curva && !isHuman(h)) {
+      const cv = (h.jockey && h.jockey.curva) || 3;
+      const base = clamp(0.9 - (cv - 1) * 0.2, 0.1, 0.9);
+      if (Math.random() < VA_LARGO_P * clamp(1 + (3 - cv) * 0.35, 0.4, 1.8) * base) pianificaCaduta(h, curva);
     }
-    if (!zona) h.vaLargo = null;
-    h.zonaLargaPrima = zona;
-    if (h.vaLargo && h.alBordoFuori && zonaLarga(h.progress) === h.vaLargo) {
-      // Arrivato sui materassi / sullo steccato: urto pieno, rischio caduta (+20%).
-      const dove = h.vaLargo;
-      h.vaLargo = null;
-      const prima = !!h.scosso;
-      h.fallCd = 0;
-      riskFall(h, 1, dove, null, LARGO_CADUTA_MOLT);
-      if (!prima && h.scosso && state.messageTimer <= 0) {
-        showMessage(dove === "materassi" ? `${h.name} va largo sui materassi: caduta!` : `${h.name} batte sullo steccato del Casato: caduta!`, 2.2, "danger");
+    h.curvaCadutaPrima = curva;
+    const P = h.cadPiano;
+    if (!P) return;
+    if (h.scosso || h.caduto) { h.cadPiano = null; return; }
+    const nellaFinestra = cum >= P.da && cum <= P.a;
+    const alBordo = P.lato === "fuori" ? h.alBordoFuori : h.alBordoDentro;
+    const passata = cum > P.a && cum < P.a + 30;
+    if ((nellaFinestra && (alBordo || isHuman(h) || cum > P.a - 1.5)) || passata) {
+      h.cadPiano = null;
+      cade(h, P.lato);
+      if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
+        const msg = P.curva === "sm"
+          ? (P.lato === "fuori" ? `San Martino: ${h.name} si impancia sui materassi!` : `San Martino: ${h.name} batte sul colonnino!`)
+          : (P.lato === "fuori" ? `Casato: ${h.name} batte sullo steccato!` : `Casato: ${h.name} batte sul colonnino!`);
+        showMessage(msg, 2.4, "danger");
       }
     }
   });
@@ -14606,8 +14613,14 @@ function riskFall(horse, impact, cause, other, molt = 1) {
     // MAXI-CADUTA: si porta a terra anche le attaccate all'esterno.
     const primaCurva = (horse.progress || 0) < track.length * 0.5;
     if (imp >= PILEUP_IMPACT && other && !other.scosso && primaCurva) maxiCaduta(horse, other);
-    else if (imp >= HORSE_DOWN_IMPACT && Math.random() < HORSE_DOWN_CHANCE) triggerHorseFall(horse);
-    else triggerFall(horse, { other });   // lato di caduta: opposto al cavallo che ha urtato
+    else {
+      // Una AI che cade a San Martino o al Casato cade DOVE si cade lì (piano),
+      // non nel punto dell'urto (Simone 11/11: «nient'altro a San Martino»).
+      const curvaC = !isHuman(horse) ? curvaDiCaduta(positiveMod(horse.progress || 0, track.length || 1)) : null;
+      if (curvaC) { pianificaCaduta(horse, curvaC); return; }
+      const lato = cause === "materassi" || cause === "steccato" && horse.lane < 0 ? "fuori" : "dentro";
+      cade(horse, lato, { other });
+    }
   }
 }
 
@@ -14648,7 +14661,10 @@ function triggerHorseFall(horse) {
   if (frenoAttivo("soloFantiniCadono")) return;
   horse.caduto = true;
   horse.cadutoTimer = HORSE_DOWN_TIME + Math.random() * 1.6;
-  horse.cadutoDir = Math.random() < 0.5 ? -1 : 1;
+  // LATO (Simone 11/11, chat Fantini): sui materassi / steccato alto si cade verso
+  // l'ESTERNO; sul colonnino o per una scivolata/urto si cade sul fianco INTERNO.
+  // cadutaLato lo legge anche cavallo-lab per la dinamica.
+  horse.cadutoDir = horse.cadutaLato === "fuori" ? -1 : (horse.cadutaLato === "dentro" ? 1 : (Math.random() < 0.5 ? -1 : 1));
   // SCIVOLATA: il cavallo non si inchioda sul posto — VOLA in avanti e verso
   // l'ESTERNO (sinistra) con lo slancio che aveva, e si ferma strisciando.
   // La velocità la si stima dal moto dell'ultimo frame (≈60fps); se non c'è
@@ -18889,6 +18905,7 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
 
 
 
