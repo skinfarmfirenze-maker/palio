@@ -10517,7 +10517,7 @@ const FIANCA_EFFETTO = {
 };
 // Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
 const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
-const PARTENZA_TARDI = { rampaT: 4.0, ritardo: 0.15, rampa0: 0.25 };   // senza fiancata: parte SUBITO, piano (25%), piena in 4 s (Simone 11/11: «deve comunque partire anche se pianino»)
+const PARTENZA_TARDI = { rampaT: 2.5, ritardo: 0.15, rampa0: 0.25 };   // ripresa in 2,5 s, non 4: penalizzati una trentina di metri, non cinquanta (Simone 11/11)   // senza fiancata: parte SUBITO, piano (25%), piena in 4 s (Simone 11/11: «deve comunque partire anche se pianino»)
 const DISTRATTO_P = { 1: 0.40, 2: 0.25, 3: 0.12, 4: 0.05, 5: 0.02 };   // mossa del fantino → probabilità di restare fermo al via 0,8-1,8 s
 // mossa del fantino → [buona (+8%), dopo (+5%), forza il canape] (il resto parte normale)
 const FIANCA_AI = {
