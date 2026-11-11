@@ -3493,9 +3493,11 @@ function attaccaHorseGlbInner(horse) {
 // La cadenza delle zampe è legata alla VELOCITÀ REALE sul terreno (unità/sec),
 // non al livello di animazione: così le falcate combaciano col movimento e non
 // c'è né "galoppo sospeso" né pattinamento. GAIT_K è tarato perché a piena
-// corsa (~25 u/s) il galoppo pompi ~2.4 falcate/sec (veloce, non al rallentatore).
+// corsa (~25 u/s) il galoppo pompi ~2.9 falcate/sec: ogni falcata ~8,6 u ≈ 2,6
+// lunghezze di cavallo, come un galoppo vero lanciato. (Era 0.145 = 2,4 falcate/s,
+// 3,2 lunghezze a falcata: le zampe sembravano scivolare — Simone 11/11.)
 // Fermo (canapo, o caduto) → posa DRITTA con le 4 zampe piantate.
-const GAIT_K = 0.145;
+const GAIT_K = 0.175;
 function updateHorseGlb(dt) {
   if (!HORSE_GLB.registrati.length) return;
   const step = Math.max(dt, 1 / 120);
