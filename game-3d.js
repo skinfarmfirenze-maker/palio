@@ -9960,6 +9960,29 @@ function fillTrattaPanelRow(p) {
   row.classList.add("flash");
 }
 
+// PROVA DIRETTA, al canape: le 9 alle loro poste, la rincorsa al suo posto.
+// Dopo PROVA_VIA_DOPO secondi la rincorsa entra e la mossa è VALIDA (via entro 10 s).
+const PROVA_VIA_DOPO = 6.5;
+function provaSchieraTutti(order) {
+  order.forEach((h) => {
+    h.called = true; h.entering = false; h.enterPhase = undefined; h.returningToTondino = false;
+    h.mossaProgress = MOSSA_MURO_CANAPO;
+    h.mossaLane = h.slotLane ?? h.postLane ?? h.mossaLane;
+    h.progress = h.mossaProgress; h.lane = h.mossaLane; h.mossaTurn = 0;
+    try { placeHorse(h, 0); } catch (e) { /* niente */ }
+  });
+  state.callIndex = order.length;
+  state.callPause = 0; state.sinceCall = 0; state.mossiereAnnounced = true;
+  const rin = state.horses.find((h) => h.isRincorsa);
+  if (rin) {
+    rin.revealed = true; rin.revealTimer = 0;
+    rin.progress = rin.mossaProgress = rin.prevProgress = RINCORSA_START_PROGRESS;
+    if (!isHuman(rin)) { rin.lane = rin.mossaLane = RINCORSA_LANE; rin.aiLaneR = RINCORSA_LANE; }
+    rin.wantsToEnter = false; rin.rincorsaSpeed = 0; rin.mossaSubState = "runup";
+    try { placeHorse(rin, 0); } catch (e) { /* niente */ }
+  }
+  state.provaT = 0;   // da qui contano i 10 secondi
+}
 // PROVA DIRETTA: a ogni Contrada un BONO diverso (dal roster dell'epoca attiva,
 // con le sue statistiche) e un fantino, senza Tratta né scelta del fantino.
 function preparaProvaDiretta() {
@@ -10676,7 +10699,7 @@ function fiancaRincorsaPartita() {
   state.horses.forEach((h) => {
     if (h.isRincorsa || isHuman(h) || !h.called || h.entering) return;
     const [perf, ant, forza] = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)];
-    if ((state.falseStartCount || 0) < 2 && Math.random() < forza * 0.5 && fiancaForzaCanape(h)) return;
+    if (!state.provaDiretta && (state.falseStartCount || 0) < 2 && Math.random() < forza * 0.5 && fiancaForzaCanape(h)) return;
     const r = Math.random();
     h.fiancaAI = r < perf ? "perfetta" : (r < perf + ant ? "anticipo" : null);
     h.fiancaPremeTra = h.fiancaAI === "perfetta" ? 1.0 + Math.random() * 0.3
@@ -11400,6 +11423,11 @@ function updateMossa(dt, time) {
   }
   state.forcedCanapeCd = Math.max(0, (state.forcedCanapeCd || 0) - dt);   // cooldown "forza il canape"
   fiancaControlla(dt);   // scattini, canape forzato, F delle AI
+  if (state.provaDiretta && state.provaT != null) {
+    state.provaT += dt;
+    const rin = state.horses.find((h) => h.isRincorsa);
+    if (rin && !isHuman(rin) && state.provaT >= PROVA_VIA_DOPO && !state.falseStartRunning) rin.wantsToEnter = true;
+  }
   // FALSO AVVIO in corso: galoppo breve → mortaretto → ritorno al tondino. Blocca
   // ogni altra logica di mossa finché la sequenza dei 4s non è finita.
   // (la mossa falsa non passa piu' di qui: gira in modalita' corsa, vedi il dispatch)
@@ -11417,6 +11445,9 @@ function updateMossa(dt, time) {
   // precedente è ENTRATO ai canapi. Ogni chiamato parte dalla zona della
   // rincorsa (dietro) ed entra fino alla sua posta.
   const order = state.callOrder;
+  // PROVA DIRETTA (Simone 11/11): tutti GIÀ al canape, niente chiamata né
+  // ingresso; la rincorsa già dietro il verrocchino. Vale anche dopo una mossa falsa.
+  if (state.provaDiretta && order && order.length && state.callIndex < order.length) provaSchieraTutti(order);
   if (order && order.length) {
     const someoneEntering = order.some((h) => h.entering);
     state.sinceCall = (state.sinceCall || 0) + dt;   // tempo trascorso dall'ultima chiamata
@@ -12373,7 +12404,7 @@ function updateMossa(dt, time) {
     // La rincorsa ha VARCATO. Vale SOLO se le 9 sono allineate al canapo (nessuna
     // proprio dietro). Se ha varcato durante l'"Aspetta" / con una rimasta indietro
     // → MOSSA FALSA. Girata ma sulla linea = valida. Dopo 3 false si dà comunque buona.
-    if (isMossaAligned() || (state.falseStartCount || 0) >= 3 || (state.forcedStartWindow || 0) > 0) {
+    if (isMossaAligned() || (state.falseStartCount || 0) >= 3 || (state.forcedStartWindow || 0) > 0 || state.provaDiretta) {
       releaseRace();
     } else {
       triggerMossaFalsa();
