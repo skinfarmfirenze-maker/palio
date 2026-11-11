@@ -9194,10 +9194,10 @@ function tierSpeedMult(horse) { return TIER_SPEED[horse.horseTier] || 1; }
 // Alla rimozione del gate il dato reale era 333 vittorie su 7.857 palii = 4,24%.
 function playerThirdLapHandicap(horse) {
   if (!horse.player) return 1;
-  // Handicap giocatore SEMPRE: −0,02 di velocità (oltre al deficit-stamina già impostato).
+  // Handicap giocatore SEMPRE: −0,01 di velocità (era −0,02; Simone 12/11), oltre al deficit-stamina.
   // (Tolti il 12/11 su richiesta di Simone gli extra dell'ULTIMO GIRO: per fascia —
   // bono −0,03, bombolone −0,02 — e per andatura — 4 → −0,02, 5 → −0,03.)
-  const h = 0.02;
+  const h = 0.01;
   return 1 - h;
 }
 
