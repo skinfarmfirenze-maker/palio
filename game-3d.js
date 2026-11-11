@@ -3933,6 +3933,7 @@ function placeHorse(horse, time) {
     horse.group.position.z += -(CV.dx || 0) * sH + (CV.dz || 0) * cH;
     horse.group.position.y += CV.dy || 0;
   }
+  if (horse.balzoT > 0) horse.balzoT = Math.max(0, horse.balzoT - gdt);   // scattino pronunciato al via
   // SALTO di chi scavalca un cavallo a terra.
   if (horse.saltoT > 0) {
     horse.saltoT = Math.max(0, horse.saltoT - gdt);
@@ -4718,6 +4719,10 @@ function normalizeAlbo(a) {
 // Istrice bombolone, bomboloni solo a chi ha una rivale, AI più cattive col
 // giocatore (molestatore), velocità extra nascosta per gli accordi. Le vecchie
 // chiavi del localStorage si cancellano all'avvio (vedi pulisciChiaviSilenziose).
+// AI PIÙ CATTIVE COL GIOCATORE (regola del palio, Simone 11/11, sempre attiva): le
+// rivali lo nerbano e gli vanno addosso, e fino a 3 Contrade in più lo parano; in
+// gara, accanto a lui, raffiche di 3-4 nerbate (soprattutto la rivale).
+function aggroVsPlayerActive() { return true; }
 function pulisciChiaviSilenziose() {
   ["palio.brucoFallBase", "palio.istriceBombBase", "palio.bombRivalBase"].forEach((k) => {
     try { localStorage.removeItem(k); } catch (e) { /* niente */ }
@@ -5420,11 +5425,11 @@ function getStaminaRateForHorse(horse, demandSpeed) {
   // Un umano guida meglio dell'AI e la corsa gli riesce troppo facile. Piccolo
   // handicap DICHIARATO (non un vantaggio nascosto: le regole restano simmetriche,
   // questa è una zavorra voluta): SOLO al 2° giro, se tieni andatura 4 o 5, la
-  // stamina cala del 5% in più. Al 3° giro NON si applica. Solo il giocatore,
+  // stamina cala del 3% in più. Al 3° giro NON si applica. Solo il giocatore,
   // solo consumo (baseRate>0). Indice giro: 0=primo, 1=secondo, 2=terzo.
   if (isHuman(horse) && baseRate > 0 && demandSpeed >= 4 && state.mode === "race"
       && Math.floor(Math.max(0, horse.progress) / track.length) === 1) {
-    baseRate *= 1.05;
+    baseRate *= 1.03;   // era 1.05 (Simone 11/11: 3%)
   }
 
   const leaderPressure =
@@ -9257,6 +9262,25 @@ function lastBoostMult(horse) {
   return lerp(1, LAST_BOOST_CEIL, t);
 }
 
+// SPINTA DEGLI ACCORDI (regola del palio, Simone 11/11): chi stringe più accordi
+// (con Contrade e con fantini) corre un filo più forte: +0,6% per accordo, fino a +3%.
+// Sempre sotto un gradino di fascia, così il cavallo resta più decisivo degli accordi.
+const ACCORDI_SPEED_K = 0.006;
+const ACCORDI_SPEED_CAP = 0.03;
+function accordiCount(cmp, id) {
+  if (!cmp || !id) return 0;
+  let n = 0;
+  (cmp.accordi || []).forEach((a) => { if (a.helper === id || a.beneficiary === id || a.sponsor === id) n += 1; });
+  const cor = cmp.corrupted || {};
+  Object.keys(cor).forEach((hid) => { if (cor[hid] === id) n += 1; });   // fantini corrotti pagati da lei
+  return n;
+}
+function accordiSpeedMult(horse) {
+  const cmp = state.campaign;
+  if (!cmp || !cmp.active || !horse || horse.isRincorsa) return 1;
+  return 1 + Math.min(ACCORDI_SPEED_CAP, ACCORDI_SPEED_K * accordiCount(cmp, horse.id));
+}
+
 function beginSceltaFantino() {
   state.mode = "scelta";
   const player = getPlayer();
@@ -10328,6 +10352,25 @@ function startMossa(fromTratta = false) {
       me.soldBurst = 0;
       me.soldNext = 12 + Math.random() * 18;     // prima raffica dopo 12-30s di tensione
     }
+    // ── AI PIÙ CATTIVE col GIOCATORE che corre (regola del palio, sempre).
+    if (playing && playerId && aggroVsPlayerActive()) {
+      // 1) La/le rivale/i del giocatore lo NERBANO e gli vengono ADDOSSO (vendetta
+      //    diretta, oltre il cap dei 2 alleati).
+      state.horses.forEach((h) => {
+        if (h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
+        if (rivalIntensity(playerId, h.id) > 0 && !h.vendettaPending && h.vendettaState !== "fatto") {
+          h.vendettaPending = true; h.vendettaTargetId = playerId; h.allyTargetId = playerId; h.allyHelp = true;
+        }
+      });
+      // 2) MOLTE PIÙ contrade PARANO il giocatore per non farlo vincere: fino a 3 in
+      //    più, fra quelle SENZA incarico, gli vanno DAVANTI a bloccarlo.
+      let extraPara = 0;
+      state.horses.forEach((h) => {
+        if (extraPara >= 3 || h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
+        if (h.paraInRace || h.allyTargetId || h.allyBeneficiaryId) return;   // già con un incarico
+        h.paraInRace = playerId; h.allyTargetId = playerId; h.allyHelp = true; extraPara += 1;
+      });
+    }
   }
 
   // ── Estrazione/chiamata ai canapi: TUTTE le 9 Contrade (GIOCATORE COMPRESO)
@@ -10352,7 +10395,8 @@ function startMossa(fromTratta = false) {
   const rTF = Math.random();
   state.tuttiFuoriMax = rTF < 0.4 ? 1 : (rTF < 0.75 ? 2 : 3);
   state.forcedStartWindow = 0;                     // finestra forzata dei 5 minuti
-  state.rincorsaFiancaAt = null; state.fiancaPremutoA = null; state.forzaCanape = null;   // FIANCA: da capo
+  state.rincorsaFiancaAt = null; state.forzaCanape = null;   // FIANCA: da capo
+  state.horses.forEach((h) => { h.fPremuto = null; h.balzoT = 0; });
   state.chaosTimer = 0;
   state.recallCount = 0;                            // richiami singoli (2° → tutti fuori)
   state.recallCd = 0;
@@ -10419,25 +10463,30 @@ function startMossa(fromTratta = false) {
 // aggiudica la mossa pagando (4s), −6% per la rivale bloccata (3s). Il timer viene
 // scalato in updateRace; il moltiplicatore entra nelle righe di velocità.
 // ══════════════════════════════════════════════════════════════════════════════
-// FIANCA (tasto F) — regole di Simone 9/11 (seconda versione).
-// Il tempo conta DAL MOMENTO IN CUI LA RINCORSA FIANCA (state.rincorsaFiancaAt):
-//  · F premuto PRIMA che la rincorsa fianchi        → hai FORZATO IL CANAPE
-//    (come andare a 5: mossa falsa)
-//  · F premuto e il via non arriva entro 1,5 s       → hai forzato il canape
-//  · F fra 1,5 s e 0,5 s prima del via               → +5% per 2 s
-//  · F fra 0,5 s prima e 0,3 s dopo il via           → +6% per 2,5 s
+// FIANCA (tasto F) — regole di Simone 11/11 (terza versione).
+// Il riferimento è l'istante in cui la RINCORSA È AL PARI DEL VERROCCHINO, cioè il
+// via (la rincorsa che passa il canapo posteriore è proprio il via):
+// La pressione è una PREVISIONE: lo scattino avviene UNA volta sola, ESATTAMENTE
+// 2 s dopo la pressione (Simone 11/11):
+//  · se in quel momento il via c'è già stato (F negli ultimi 2 s prima)
+//    → previsione giusta: scattino FORTE in avanti e +8% per 2,5 s
+//  · se il via non c'è ancora (F più di 2 s prima) → scattino al momento sbagliato:
+//    hai FORZATO IL CANAPE, mossa falsa
+//  · F dopo il via, entro 1,2 s                      → +5% per 2 s (subito)
 //  · mai, o più tardi                                → parte normale
 // POSIZIONE: lo scatto spinge avanti; chi è messo troppo dietro, con un cavallo
 // subito davanti, gli scatta ADDOSSO: niente guadagno, lo urta e si scompone.
 // Alla RINCORSA il tasto fa fiancare: andatura al massimo, si lancia.
 // Le AI premono secondo la MOSSA del fantino (FIANCA_AI).
 // ══════════════════════════════════════════════════════════════════════════════
-const FIANCA_FORZA = 1.5, FIANCA_BUONA_PRIMA = 0.5, FIANCA_BUONA_DOPO = 0.3;
+const FIANCA_FORZA = 2.0, FIANCA_BUONA_DOPO = 1.2;
 const FIANCA_EFFETTO = {
-  perfetta: { mult: 1.06, durata: 2.5, msg: "Fiancata perfetta!" },
-  anticipo: { mult: 1.05, durata: 2.0, msg: "Fiancata in anticipo" },
+  perfetta: { mult: 1.08, durata: 2.5, msg: "Fiancata!" },          // negli ultimi 2 s prima del verrocchino
+  anticipo: { mult: 1.05, durata: 2.0, msg: "Fiancata in ritardo" }, // entro 1,2 s dopo
 };
-// mossa del fantino → [perfetta, anticipo, forza il canape] (il resto parte normale)
+// Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
+const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
+// mossa del fantino → [buona (+8%), dopo (+5%), forza il canape] (il resto parte normale)
 const FIANCA_AI = {
   1: [0.10, 0.25, 0.03], 2: [0.20, 0.30, 0.02], 3: [0.35, 0.30, 0.01], 4: [0.50, 0.25, 0.005], 5: [0.65, 0.20, 0],
 };
@@ -10462,6 +10511,7 @@ function applicaFianca(h, tipo) {
     return;
   }
   h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
+  if (tipo === "perfetta") h.balzoT = BALZO_DURATA;   // scattino pronunciato al via (Simone: opzione B)
   if (tipo === "perfetta") {
     h.launchDelayTimer = 0; h.launching = false;   // nessun ritardo di reazione
     if (isHuman(h)) {
@@ -10482,14 +10532,15 @@ const SCATTINO_DURATA = 0.5, SCATTINO_AMPIEZZA = 0.9;   // s, unità in avanti a
 const FORZA_CANAPE_RITARDO = 0.35;                      // s: prima si vede lo scattino, poi la mossa falsa
 function scattino(h) { if (h) h.scattoT = SCATTINO_DURATA; }
 function scattinoVista(h) {
-  if (state.mode !== "mossa" || !(h.scattoT > 0)) return 0;
-  return SCATTINO_AMPIEZZA * Math.sin(Math.PI * (1 - h.scattoT / SCATTINO_DURATA));
+  let v = 0;
+  if (state.mode === "mossa" && h.scattoT > 0) v += SCATTINO_AMPIEZZA * Math.sin(Math.PI * (1 - h.scattoT / SCATTINO_DURATA));
+  if (h.balzoT > 0) v += BALZO_AMPIEZZA * Math.sin(Math.PI * (1 - h.balzoT / BALZO_DURATA));
+  return v;
 }
 function fiancaForzaCanape(h) {
   if (state.mode !== "mossa" || state.falseStartRunning || state.forzaCanape) return false;
   if ((state.mossaFalsaCooldown || 0) > 0 || (state.forcedCanapeCd || 0) > 0) return false;
   state.forcedCanapeCd = 6;
-  state.fiancaPremutoA = null;
   scattino(h);
   state.forzaCanape = { h, t: FORZA_CANAPE_RITARDO };   // la mossa falsa parte dopo lo scattino
   return true;
@@ -10505,17 +10556,14 @@ function premiFianca() {
       showMessage("Fianca!", 0.9, "good");
       return;
     }
-    if (!p.called || p.entering || state.fiancaPremutoA != null) return;
+    if (!p.called || p.entering || p.fPremuto != null) return;
     if (giocatoreHaLaMossa()) return;   // la mossa è tua: parti a 5, non si forza
-    // Prima che la rincorsa fianchi: canape forzato.
-    if (state.rincorsaFiancaAt == null) { if (!fiancaForzaCanape(p)) scattino(p); return; }
-    scattino(p);
-    state.fiancaPremutoA = now;    // se il via non arriva entro 1,5 s → forzato (vedi fiancaControlla)
+    p.fPremuto = state.tGioco || 0;    // lo scattino arriva fra 2 s (fiancaTick)
     return;
   }
-  if (state.mode === "race" && !p.fiancaTipo && !p.isRincorsa && state.viaA != null
-      && now - state.viaA <= FIANCA_BUONA_DOPO) {
-    applicaFianca(p, "perfetta");
+  if (state.mode === "race" && p.fPremuto == null && !p.fiancaTipo && !p.isRincorsa && state.viaA != null
+      && (state.tGioco || 0) - state.viaA <= FIANCA_BUONA_DOPO) {
+    applicaFianca(p, "anticipo");   // entro 1,2 s dopo il verrocchino: +5%
   }
 }
 // A ogni frame della mossa: F premuto e via che non arriva → canape forzato.
@@ -10532,19 +10580,29 @@ function fiancaControlla(dt) {
     }
     return;
   }
-  // Le AI premono F dopo la fiancata della rincorsa (vedi fiancaRincorsaPartita).
+  // Le AI premono F dopo che la rincorsa si è lanciata (vedi fiancaRincorsaPartita).
   state.horses.forEach((h) => {
-    if (h.fiancaPremeTra > 0) { h.fiancaPremeTra -= dt; if (h.fiancaPremeTra <= 0) scattino(h); }
+    if (h.fiancaPremeTra > 0) { h.fiancaPremeTra -= dt; if (h.fiancaPremeTra <= 0 && h.fPremuto == null) h.fPremuto = state.tGioco || 0; }
   });
-  if (state.fiancaPremutoA == null) return;
-  const p = getPlayer();
-  if (performance.now() / 1000 - state.fiancaPremutoA > FIANCA_FORZA) {
-    if (!p || !fiancaForzaCanape(p)) state.fiancaPremutoA = null;   // freni attivi: pressione persa
-  }
 }
-// Quando la rincorsa fianca: le AI che «scappano» prima forzano il canape.
-// Ogni AI decide ORA come fiancherà e QUANDO preme F (così lo scattino si vede):
-// in anticipo subito, perfetta poco prima che la rincorsa arrivi (~1,5 s).
+// 2 s dopo ogni pressione: UN solo scattino. Via già dato → forte +8%; via non ancora
+// dato → canape forzato (mossa falsa). Vale per il giocatore e per le AI.
+function fiancaTick() {
+  if (!state.horses || !state.horses.length) return;
+  const t = state.tGioco || 0;
+  state.horses.forEach((h) => {
+    if (h.fPremuto == null || t - h.fPremuto < FIANCA_FORZA) return;
+    h.fPremuto = null;
+    if (state.mode === "mossa" && !state.falseStartRunning) {
+      if (!fiancaForzaCanape(h)) scattino(h);   // se i freni della falsa sono attivi: solo lo scattino
+    } else if (state.mode === "race" && !state.falseStartRunning && !h.fiancaTipo) {
+      applicaFianca(h, "perfetta");             // previsione giusta: scatta forte
+    }
+  });
+}
+// Quando la rincorsa si lancia: ogni AI decide ORA come fiancherà. Chi prende la
+// fiancata buona preme F poco dopo (la rincorsa arriva al verrocchino in ~1,5 s,
+// quindi dentro i 2 s); chi la prende «dopo» la ottiene al via (+5%).
 function fiancaRincorsaPartita() {
   state.horses.forEach((h) => {
     if (h.isRincorsa || isHuman(h) || !h.called || h.entering) return;
@@ -10552,33 +10610,26 @@ function fiancaRincorsaPartita() {
     if (!state.provaDiretta && (state.falseStartCount || 0) < 2 && Math.random() < forza * 0.5 && fiancaForzaCanape(h)) return;
     const r = Math.random();
     h.fiancaAI = r < perf ? "perfetta" : (r < perf + ant ? "anticipo" : null);
-    h.fiancaPremeTra = h.fiancaAI === "perfetta" ? 1.0 + Math.random() * 0.3
-      : (h.fiancaAI === "anticipo" ? 0.15 + Math.random() * 0.35 : 0);
+    h.fiancaPremeTra = h.fiancaAI === "perfetta" ? 0.3 + Math.random() * 0.8 : 0;
   });
 }
 // Al VIA: la fiancata del giocatore (premuta prima) e quelle delle AI.
 function fiancaAlVia() {
-  const now = performance.now() / 1000;
-  state.viaA = now;
+  state.viaA = state.tGioco || 0;
   state.horses.forEach((h) => { h.fiancaTipo = null; h.fiancaMult = 1; h.fiancaTimer = 0; });
   state.horses.forEach((h) => {
     if (h.isRincorsa) return;
-    if (isHuman(h)) {
-      const d = state.fiancaPremutoA != null ? now - state.fiancaPremutoA : Infinity;
-      if (d >= 0 && d <= FIANCA_BUONA_PRIMA) applicaFianca(h, "perfetta");
-      else if (d > FIANCA_BUONA_PRIMA && d <= FIANCA_FORZA) applicaFianca(h, "anticipo");
-      return;
-    }
+    if (isHuman(h)) return;   // il giocatore: lo decide fiancaTick (2 s dopo la sua pressione)
     let tipo = h.fiancaAI;
     if (tipo === undefined) {   // via senza fiancata vista (partenza forzata): si tira ora
       const [perf, ant] = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)];
       const r = Math.random();
       tipo = r < perf ? "perfetta" : (r < perf + ant ? "anticipo" : null);
     }
-    if (tipo) applicaFianca(h, tipo);
+    if (tipo === "perfetta" && h.fPremuto == null && !(h.fiancaPremeTra > 0)) h.fPremuto = (state.tGioco || 0) - 1;   // partenza forzata: arriva fra 1 s
+    else if (tipo === "anticipo") applicaFianca(h, "anticipo");
   });
-  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; });
-  state.fiancaPremutoA = null;
+  state.horses.forEach((h) => { h.fiancaAI = undefined; if (h.fiancaPremeTra > 0) { h.fPremuto = state.tGioco || 0; h.fiancaPremeTra = 0; } });
   state.rincorsaFiancaAt = null;
   state.forzaCanape = null;   // via buono arrivato prima della mossa falsa: niente falsa
 }
@@ -11009,8 +11060,8 @@ function triggerMossaFalsa(motivo) {
   if (state.falseStartRunning || state.mode !== "mossa") return;   // una alla volta
   state.falseStartCount = (state.falseStartCount || 0) + 1;
   state.falseStartRunning = true;
-  state.rincorsaFiancaAt = null; state.fiancaPremutoA = null; state.forzaCanape = null;   // FIANCA: si riparte da capo
-  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; h.scattoT = 0; });
+  state.rincorsaFiancaAt = null; state.forzaCanape = null;   // FIANCA: si riparte da capo
+  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; h.scattoT = 0; h.fPremuto = null; h.balzoT = 0; });
   state.falseStartTimer = 0;
   state.falseStartMortarettoDone = false;
   state.falsaMotivo = motivo || motivoMossaFalsa();
@@ -13485,7 +13536,7 @@ function updatePlayer(dt, time) {
   const prevLane = player.lane;
   // La strada percorsa diventa progress secondo la corsia in cui ti trovi: cosi'
   // il cavallo si muove alla velocita' che hai scelto anche attaccato ai colonnini.
-  player.progress += travel * alongTrack * progressPerStrada(sample, player.lane) * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
+  player.progress += travel * alongTrack * progressPerStrada(sample, player.lane) * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -13580,7 +13631,22 @@ function updateAiHorse(horse, dt, time) {
   // all'AGGRESSIVITÀ del fantino) frusta un cavallo accanto per rallentarlo —
   // molto più spesso se è un RIVALE. Stessa arma/regole del giocatore.
   if (state.mode === "race" && puoNerbare(horse) && (horse.nerbate ?? 0) > 0 && (horse.nerbataCd || 0) <= 0) {
-    {
+    // ── MOLESTATORE (regola del palio, sempre): quando è ACCANTO al GIOCATORE parte una
+    // RAFFICA di 3-4 nerbate di fila (una a ogni ricarica), soprattutto la RIVALE.
+    horse.harassCd = Math.max(0, (horse.harassCd || 0) - dt);
+    const plAccanto = player && !player.finishTime && horse !== player && !player.scosso && !player.caduto
+      && Math.abs((player.progress || 0) - (horse.progress || 0)) < 3.2
+      && Math.abs((player.lane || 0) - (horse.lane || 0)) < 3.4;
+    if (plAccanto && aggroVsPlayerActive() && (horse.harassLeft || 0) <= 0 && (horse.harassCd || 0) <= 0 && !horse.friendlyToPlayer) {
+      const vsRiv = rivalIntensity(horse.id, player.id) > 0 || rivalIntensity(player.id, horse.id) > 0;
+      if (Math.random() < dt * (vsRiv ? 0.55 : 0.12)) horse.harassLeft = 3 + (Math.random() < 0.5 ? 1 : 0);   // 3-4 colpi
+    }
+    if ((horse.harassLeft || 0) > 0 && plAccanto) {
+      horse.harassLeft -= 1;
+      if (horse.harassLeft <= 0) horse.harassCd = 12;   // pausa prima di un'altra raffica
+      tiraNerbata(horse, Math.sign((player.lane || 0) - (horse.lane || 0)) || 1, "race", player);
+    } else {
+      if ((horse.harassLeft || 0) > 0 && !plAccanto) horse.harassLeft = 0;   // giocatore sfilato: raffica finita
       const dx = vicinoDiLato(horse, 1, "race");
       const sx = vicinoDiLato(horse, -1, "race");
       if (dx || sx) {
@@ -14017,7 +14083,7 @@ function updateAiHorse(horse, dt, time) {
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
   const progPrimaLibero = horse.progress;
-  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if (liberoAlVia && horse.raceTurn) {
     // Di sbieco: avanti lungo la pista quanto ha fatto, di lato quanto vuole il muso.
     const muso = clamp(horse.raceTurn, -0.6, 0.6);
@@ -16935,6 +17001,8 @@ function teleAvvia() {
 
 function update(dt, time) {
   state.nervClock = (state.nervClock || 0) + dt;   // orologio unico del nervosismo
+  state.tGioco = (state.tGioco || 0) + dt;          // orologio di gioco (la F si misura su questo)
+  fiancaTick();
   if (state.horses && state.horses.length) tickNerbate(dt);   // ricarica/cooldown nerbate
   updateHorseGlb(dt);   // PRIMA dei rami: il galoppo GLB anima anche nel replay
   pollGamepad();
@@ -18863,4 +18931,5 @@ function programmaAndatura(h) {
   if (NARROW_READY && ((c >= SM_IN && c <= SM_OUT) || (c >= CAS_IN && c <= CAS_OUT))) return 3;
   return giro === 1 ? 3 : 4;   // fuori dalle curve: giro 1 a 4, giro 2 a 3, giro 3 a 4
 }
+
 
