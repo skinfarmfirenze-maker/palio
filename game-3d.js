@@ -10512,12 +10512,12 @@ const FIANCA_EFFETTO = {
   // medio nel mezzo, chi tardi fra gli ultimi 3»; prima l'andatura 4 contava più della
   // partenza). Oltre al moltiplicatore, ogni classe ha la sua RAMPA: da dove parte la
   // velocità (rampa0) e in quanti secondi arriva piena (rampaT).
-  perfetta: { mult: 1.15, durata: 3.5, rampa0: 0.6, rampaT: 2.0, msg: "Hai fiancato avanti a tutti!" },   // negli ultimi 2 s prima del verrocchino
-  anticipo: { mult: 1.08, durata: 3.0, rampa0: 0.5, rampaT: 2.5, msg: "Hai fiancato in tempo!" },         // entro 1,2 s dopo
+  perfetta: { mult: 1.08, durata: 3.0, rampa0: 0.45, rampaT: 2.5,   /* più morbida (Simone 11/11): era 1.15 · 3.5 · 0.6 · 2.0 */ msg: "Hai fiancato avanti a tutti!" },   // negli ultimi 2 s prima del verrocchino
+  anticipo: { mult: 1.05, durata: 2.5, rampa0: 0.4, rampaT: 3.0,    /* era 1.08 · 3.0 · 0.5 · 2.5 */ msg: "Hai fiancato in tempo!" },         // entro 1,2 s dopo
 };
 // Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
 const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
-const PARTENZA_TARDI = { rampaT: 6.0, ritardo: 0.5 };   // senza fiancata: da fermo, mezzo secondo dopo, piena in 6 s
+const PARTENZA_TARDI = { rampaT: 4.0, ritardo: 0.15, rampa0: 0.25 };   // senza fiancata: parte SUBITO, piano (25%), piena in 4 s (Simone 11/11: «deve comunque partire anche se pianino»)
 const DISTRATTO_P = { 1: 0.40, 2: 0.25, 3: 0.12, 4: 0.05, 5: 0.02 };   // mossa del fantino → probabilità di restare fermo al via 0,8-1,8 s
 // mossa del fantino → [buona (+8%), dopo (+5%), forza il canape] (il resto parte normale)
 const FIANCA_AI = {
@@ -10713,6 +10713,7 @@ function fiancaAlVia() {
   state.horses.forEach((h) => {
     if (h.isRincorsa || h.fiancaTipo) return;
     h.rampaVel = 1 / PARTENZA_TARDI.rampaT;
+    h.launchRamp = Math.max(h.launchRamp || 0, PARTENZA_TARDI.rampa0);   // pianino, ma parte
     if (!isHuman(h)) { h.launchDelayTimer = (h.launchDelayTimer || 0) + PARTENZA_TARDI.ritardo; h.launching = true; }
   });
   state.rincorsaFiancaAt = null;
@@ -10779,7 +10780,7 @@ state.horses.forEach((horse) => {
       + 0.15 * Math.max(0, (horse.nervousnessCurrent || 0) - 0.6)
       + (Math.abs(horse.mossaTurn || 0) > 0.6 ? 0.15 : 0), 0, 0.7);
     horse.distratto = !horse.isRincorsa && !isHuman(horse) && Math.random() < pDistratto;
-    horse.launchDelay = (horse.distratto ? 0.8 + Math.random() * 1.0 : (1 - horse.reactivity) * LAUNCH_MAX_DELAY)
+    horse.launchDelay = (horse.distratto ? 0.3 + Math.random() * 0.4 : (1 - horse.reactivity) * LAUNCH_MAX_DELAY)   // distratto: un attimo, non 0,8-1,8 s (Simone 11/11)
       + (horse.corruptDelay || 0);   // rivale corrotta = +2,5s
     horse.launchDelayTimer = horse.isRincorsa ? 0 : horse.launchDelay;
     horse.launching = horse.launchDelayTimer > 0;
