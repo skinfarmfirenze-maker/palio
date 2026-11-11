@@ -205,7 +205,7 @@ let TONDINO_OUT = -TONDINO_LANE_MAX;            // limite esterno (ripiego)
 const TONDINO_MARGINE = 1.6;                    // dai bordi della pista
 const TONDINO_MARGINE_RINCORSA = 1.2;           // dal verrocchino: il corridoio della rincorsa resta libero
 const TONDINO_SPIN = -1;                        // verso di rotazione (−1 = antiorario dall'alto)
-const TONDINO_OMEGA = 0.2;                      // rad/s: ~1,7 u/s sull'anello = PASSO vero (Simone 11/11; a 0.5 era ~4,2 u/s, trotto)
+const TONDINO_OMEGA = 0.24;                     // rad/s: ~2,0 u/s sull'anello, sempre al PASSO (Simone 11/11: «un 20% più veloce», era 0.2 ≈ 1,7 u/s; a 0.5 era ~4,2 u/s, trotto)
 // Corsia fissa della rincorsa: la più esterna (lato verrocchino).
 // Ricalcolate dopo precomputeTrack() per tenere conto della svasatura ai canapi
 // (vedi rincorsaLane/verrocchinoLane): qui c'è solo il valore di ripiego.
