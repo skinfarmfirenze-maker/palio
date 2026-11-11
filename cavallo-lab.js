@@ -789,3 +789,122 @@ function _aggiornaZampe(mesh, dt, cavallo) {
   Z.attivo = true; Z.dy = dy * (1 - gal); Z.colloYaw = Z.cy * (1 - gal); Z.colloPitch = Z.cp * (1 - gal);
   return true;
 }
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// 8. CADUTA DEL CAVALLO — inciampo, rotolata, scivolata, a terra, rialzata
+// ════════════════════════════════════════════════════════════════════════════
+// Simone 11/11: «sviluppa la dinamica delle cadute a San Martino… i cavalli cadono
+// 1/3 cadute, i fantini 3/3». La logica (chi cade, quando, quanto resta giù, dove
+// scivola) è del gioco: horse.caduto, cadutoTimer, cadutoDir, cadutoSlide. Qui
+// solo COME si vede, con le zampe del rig di §7:
+//  1. INCIAMPO  — il davanti cede: carpi piegati, ginocchia verso il tufo, muso giù;
+//  2. ROTOLA    — va giù sul fianco, accelerando come un corpo che cade;
+//  3. A TERRA   — piccolo rimbalzo all'urto, zampe che scalciano (smorzate, ogni
+//                 tanto riprova), la testa si alza;
+//  4. RIALZATA  — negli ultimi CADUTA.rialzata secondi di cadutoTimer: dal fianco
+//                 al petto con le zampe raccolte, poi su il davanti (seduto come
+//                 un cane), poi il dietro. Quando il gioco lo rimette in corsa è già
+//                 in piedi.
+// Lato: cadutoDir > 0 → coricato sul fianco verso la corsia + (interno),
+//       cadutoDir < 0 → verso la corsia − (esterno, i materassi).
+// Uscita: h.cadVista = { roll, pitch, dy } per placeHorse (rotation.z, rotation.x,
+// position.y) al posto del vecchio cadutoRoll rigido.
+export const CADUTA = {
+  inciampo: 0.30,     // s
+  rotola: 0.45,       // s
+  rialzata: 1.5,      // s, presi dalla fine di cadutoTimer
+  roll: 1.35,         // rad: sul fianco (il corpo tocca il tufo)
+  pGiu: 0.24,         // rad: muso giù all'inciampo (ginocchia a terra, dietro fermo)
+  dyGiu: -0.29,       // u: abbassamento all'inciampo
+  pSu: 0.42,          // rad: muso su da seduto (davanti dritto, dietro a terra)
+  dySeduto: -0.29,    // u
+  dyPetto: -0.78,     // u: sul petto, pancia a terra
+  scalcia: 1.8,       // Hz
+};
+const _c01 = (x) => Math.max(0, Math.min(1, x));
+const _ese = (x) => { x = _c01(x); return x * x * (3 - 2 * x); };
+const _lrp = (a, b, t) => a + (b - a) * t;
+function _mix(A, B, t) { const o = {}; for (const k in A) o[k] = A[k] + ((B[k] ?? A[k]) - A[k]) * t; return o; }
+function _cede(G, a) { return G.ant ? { ...a, U: a.U + 0.25, C: a.C - 1.5, Pas: a.Pas - 0.6, Zo: a.Zo - 0.6 } : a; }
+function _distesa(G, a, ph, amp) {
+  const s = Math.sin(ph), c = Math.max(0, Math.cos(ph));
+  return G.ant
+    ? { ...a, U: a.U + 0.35 + 0.35 * amp * s, C: a.C - 0.25 - 0.45 * amp * c, Pas: a.Pas - 0.3, Zo: a.Zo - 0.3 }
+    : { ...a, U: a.U - 0.15 + 0.3 * amp * s, C: a.C + 0.15 + 0.4 * amp * c, Pas: a.Pas - 0.3, Zo: a.Zo - 0.4 };
+}
+const _RACC = { ant: { U: -2.79, C: 0.14, Pas: -2.09, Zo: -2.36 }, post: { U: -0.61, C: -3.0, Pas: -2.62, Zo: -2.79 } };
+function _raccolta(G, a) { return { ...a, ...(G.ant ? _RACC.ant : _RACC.post) }; }
+const _FASE_ZAMPA = { AS: 0, AD: 1.7, PS: 3.4, PD: 5.1 };
+
+export function aggiornaCaduta(mesh, dt, cavallo) {
+  try { return _aggiornaCaduta(mesh, dt, cavallo); }
+  catch (e) {
+    console.warn("[caduta] animazione spenta su questo cavallo:", e);
+    if (cavallo) { cavallo.cadVista = null; cavallo.cad = null; }
+    return false;
+  }
+}
+function _aggiornaCaduta(mesh, dt, h) {
+  const Z = _preparaZampe(mesh);
+  if (!Z || !h) return false;
+  if (!h.caduto) {
+    // Finita: il gioco riporta a zero il suo cadutoRoll in ~1 s; finché lo fa, a vista
+    // resta dritto (il cavallo è già in piedi), poi si torna a placeHorse normale.
+    if (h.cad) { h.cad = null; Z.px = null; }
+    h.cadVista = h.cadutoRoll ? { roll: 0, pitch: 0, dy: 0 } : null;
+    return false;
+  }
+  if (!(dt > 0)) return true;
+  if (!h.cad) h.cad = { t: 0, lato: (h.cadutoDir || 1) > 0 ? 1 : -1 };
+  const c = h.cad, K = CADUTA, lato = c.lato;
+  c.t += dt;
+  const stati = {};
+  let roll = 0, pitch = 0, dy = 0, collo = 0;
+  const resto = h.cadutoTimer ?? 0;
+  const tA = c.t - K.inciampo - K.rotola;
+  for (const n of ZAMPE_ORDINE) {
+    const G = ZAMPE_DATI.gambe[n], f = _appoggio(G, G.zN, 0);
+    const amp = tA > 0 ? 0.25 + 0.75 * Math.exp(-tA * 1.2) + 0.6 * Math.pow(Math.max(0, Math.sin(tA * 2.2)), 6) : 1;
+    const dist = _distesa(G, f, 2 * Math.PI * K.scalcia * Math.max(0, tA) + _FASE_ZAMPA[n], amp);
+    if (resto < K.rialzata) {
+      const r = 1 - Math.max(0, resto) / K.rialzata;
+      const r1 = _ese(r / 0.35), r2 = _ese((r - 0.35) / 0.3), r3 = _ese((r - 0.65) / 0.35);
+      const rac = _raccolta(G, f);
+      let a = _mix(dist, rac, r1);
+      a = _mix(a, f, G.ant ? r2 : r3);
+      stati[n] = a;
+    } else if (c.t < K.inciampo) {
+      stati[n] = _mix(f, _cede(G, f), _ese(c.t / K.inciampo));
+    } else if (c.t < K.inciampo + K.rotola) {
+      stati[n] = _mix(_cede(G, f), dist, _ese((c.t - K.inciampo) / K.rotola));
+    } else stati[n] = dist;
+  }
+  if (resto < K.rialzata) {
+    // RIALZATA: fianco → petto (r1), davanti su (r2), dietro su (r3)
+    const r = 1 - Math.max(0, resto) / K.rialzata;
+    const r1 = _ese(r / 0.35), r2 = _ese((r - 0.35) / 0.3), r3 = _ese((r - 0.65) / 0.35);
+    roll = lato * _lrp(K.roll, 0.12, r1) * (1 - r3);
+    pitch = -K.pSu * r2 * (1 - r3);
+    dy = _lrp(_lrp(0, K.dyPetto, r1), K.dySeduto, r2) * (1 - r3);
+    collo = -0.25 * (1 - r2);
+  } else if (c.t < K.inciampo) {
+    const k = _ese(c.t / K.inciampo);
+    pitch = K.pGiu * k; dy = K.dyGiu * k; roll = lato * 0.2 * k; collo = 0.15 * k;
+  } else if (c.t < K.inciampo + K.rotola) {
+    const k = (c.t - K.inciampo) / K.rotola, e = _ese(k);
+    roll = lato * _lrp(0.2, K.roll, k * k);                 // accelera come un corpo che cade
+    pitch = K.pGiu * (1 - e); dy = K.dyGiu * (1 - e); collo = 0.15 * (1 - e);
+  } else {
+    roll = lato * (K.roll - 0.06 * Math.exp(-tA * 5) * Math.cos(tA * 18));   // rimbalzo all'urto
+    collo = -0.25 * _ese(tA / 0.8);                                            // la testa si alza
+  }
+  const pos = Z.geo.attributes.position, infl = mesh.morphTargetInfluences;
+  _posaZampe(Z.riposo, stati, 0, pos.array);
+  if (collo) _posaCollo(pos.array, 0, collo);
+  if (infl) infl.fill(0);
+  pos.needsUpdate = true;
+  Z.attivo = true; Z.dy = 0; Z.colloYaw = 0; Z.colloPitch = collo; Z.cy = Z.cyv = Z.cp = Z.cpv = 0;
+  h.cadVista = { roll, pitch, dy };
+  return true;
+}

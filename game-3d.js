@@ -7,7 +7,7 @@ import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examp
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
 import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
-import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe } from "./cavallo-lab.js";
+import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe, aggiornaCaduta } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";
 // NERBATA visiva (chat Grafica): carica, colpo, ritorno. Il colpito reagisce quando ARRIVA la frusta.
 const NERBATA_ANIM = 0.5;          // durata del gesto (prima 0.32, posa fissa)
@@ -3504,7 +3504,12 @@ function updateHorseGlb(dt) {
     if (!r.horse.group || !r.horse.group.parent) { HORSE_GLB.registrati.splice(i, 1); continue; }
     const infl = r.morphMesh && r.morphMesh.morphTargetInfluences;
     // CADUTO a terra: fermo davvero (zampe piantate, niente movimento).
-    if (r.horse.caduto) { if (r.morphMesh) ripristinaZampe(r.morphMesh); if (infl) infl.fill(0); continue; }
+    // CADUTA (cavallo-lab §8): il cavallo a terra lo anima il rig — inciampo, fianco,
+    // zampe che scalciano, rialzata. Se il rig non c'è, posa base rigida come prima.
+    if (r.horse.caduto || r.horse.cadVista) {
+      if (r.morphMesh && aggiornaCaduta(r.morphMesh, dt, r.horse)) continue;
+      if (r.horse.caduto) { if (r.morphMesh) ripristinaZampe(r.morphMesh); if (infl) infl.fill(0); continue; }
+    }
     const gsGrezza = Math.abs((r.horse.progress || 0) - (r.horse.prevProgress ?? r.horse.progress)) / step;
     const allaMossa = state.mode === "mossa";
     // Fuori dalla mossa la reazione a spinte e urti si spegne da sola.
@@ -3895,18 +3900,21 @@ function placeHorse(horse, time) {
   );
   // CAVALLO CADUTO: coricato sul fianco. Sovrascrive il roll normale (clampato a
   // ±0.16) finché cadutoRoll non torna a zero con la rialzata.
-  if (horse.cadutoRoll) horse.group.rotation.z = horse.cadutoRoll;
+  const CV = horse.cadVista;   // caduta animata (cavallo-lab §8): sostituisce il coricamento rigido
+  if (CV) horse.group.rotation.z = CV.roll;
+  else if (horse.cadutoRoll) horse.group.rotation.z = horse.cadutoRoll;
   // REAZIONE a spinte e urti (cavallo-lab §6), solo visiva. Ordine YXZ: il
   // beccheggio gira attorno all'asse traverso del cavallo, non a quello del mondo.
   const RZ = horse.reaz;
   horse.group.rotation.order = "YXZ";
-  if (RZ && !horse.cadutoRoll) {
+  if (RZ && !horse.cadutoRoll && !CV) {
     horse.group.rotation.y += RZ.y;
     horse.group.rotation.z += RZ.r;
     horse.group.rotation.x = RZ.p;
     if (RZ.p < 0) horse.group.position.y += 1.6 * Math.sin(-RZ.p);   // si alza davanti facendo perno dietro
   } else horse.group.rotation.x = 0;
-  if (!horse.cadutoRoll) reazioneNerbataCorpo(horse, gdt, sample);
+  if (CV) { horse.group.rotation.x = CV.pitch; horse.group.position.y += CV.dy; }   // muso giù / su, perni sugli appoggi
+  if (!horse.cadutoRoll && !CV) reazioneNerbataCorpo(horse, gdt, sample);
   horse.lastCurve = sample.curve;
   horse.collisionFlash = Math.max(0, horse.collisionFlash - 0.045);
 
@@ -14131,6 +14139,9 @@ function updateAiHorse(horse, dt, time) {
   const iSignIn = -Math.sign(sample.normal.dot(campoOutward(sample.point)) || 1);
   const versoDentro = iSignIn > 0 ? horse.targetLane > horse.lane : horse.targetLane < horse.lane;
   if (versoDentro) laneFollow = Math.max(laneFollow, 5.5);
+  // Un cavallo A TERRA non si guida: resta dove la scivolata l'ha lasciato (prima
+  // l'AI lo trascinava verso la sua linea mentre era coricato — chat Fantini 11/11).
+  if (horse.caduto) horse.targetLane = horse.lane;
   horse.lane += (horse.targetLane - horse.lane) * clamp(dt * laneFollow, 0, 1);
   horse.lane = clamp(horse.lane, -aiOuterLim, aiInnerLim);
   // ── NIENTE TETTO DI CURVA PER LE AI ───────────────────────────────────────
@@ -14230,7 +14241,7 @@ function updateRace(dt, time) {
       horse.cadutoSlide = Math.max(0, (horse.cadutoSlide ?? 0) - dt * 8);
       if (horse.cadutoSlide > 0) {
         horse.progress += horse.cadutoSlide * dt;
-        const limScivolo = outerLimitAt(horse.progress);
+        const limScivolo = outerLimitAt(horse.progress) - 0.7;   // coricato è largo: si ferma col corpo davanti ai materassi
         horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * 0.55, -limScivolo, innerLimitAt(horse.progress));
         horse.targetLane = horse.lane;
       }
@@ -14828,14 +14839,16 @@ function startJockeyFall(horse, rider, ctx) {
     const L = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));   // sinistra del cavallo
     let sideSign = 0;
     const other = ctx && ctx.other;
-    if (other && other.group) {                                     // via dal cavallo che ti ha colpito
+    if (horse.cadutaLato === "fuori" || horse.cadutaLato === "dentro") {
+      sideSign = horse.cadutaLato === "fuori" ? 1 : -1;             // L = sinistra = corsia − = esterno (materassi)
+    } else if (other && other.group) {                              // via dal cavallo che ti ha colpito
       const op = new THREE.Vector3(); other.group.getWorldPosition(op);
       sideSign = Math.sign(new THREE.Vector3().subVectors(pos, op).dot(L));
     } else if (Math.abs(horse.laneVelocity || 0) > 2.5) {           // nel verso dello scivolamento
-      sideSign = Math.sign(horse.laneVelocity);
+      sideSign = -Math.sign(horse.laneVelocity);                     // corsia − = sinistra (L): prima era al contrario
     } else {
       const sc = (sampleAt(horse.progress).signedCurve) || 0;       // verso l'esterno curva
-      sideSign = Math.abs(sc) > 0.02 ? Math.sign(sc) : (Math.random() < 0.5 ? 1 : -1);  // casuale se non chiaro
+      sideSign = Math.abs(sc) > 0.02 ? -Math.sign(sc) : (Math.random() < 0.5 ? 1 : -1);  // esterno = corsia − = L (prima al contrario)
     }
     if (!sideSign) sideSign = Math.random() < 0.5 ? 1 : -1;
     const side = L.clone().multiplyScalar(sideSign);
@@ -14860,6 +14873,7 @@ function startJockeyFall(horse, rider, ctx) {
       obj: fallen, pos, vel, quat, angVel, restQuat,
       F: F.clone(), L: L.clone(), sideSign,
       age: 0, grounded: false, impactDone: false, restY, u,
+      pos0: pos.clone(), bordo: { prog0: horse.progress || 0, lane0: horse.lane || 0 },   // per i materassi
     });
   } catch (e) { /* niente */ }
 }
@@ -14906,6 +14920,7 @@ function updateFallenRiders(dt) {
       f.pos.y = f.restY;
       f.quat.slerp(f.restQuat, clamp(step * 6, 0, 1));    // si adagia sul fianco
     }
+    fantinoControBordo(f);   // materassi di San Martino / steccato alto del Casato
     f.obj.position.copy(f.pos);
     f.obj.quaternion.copy(f.quat);
     // ── DISSOLVENZA finale poi rimozione (niente sparizione improvvisa) ─────────
@@ -14920,6 +14935,32 @@ function updateFallenRiders(dt) {
       if (k >= 1) { scene.remove(f.obj); arr.splice(i, 1); }
     }
     } catch (e) { try { scene.remove(f.obj); } catch (e2) { /* niente */ } arr.splice(i, 1); }
+  }
+}
+// MATERASSI E STECCATO ALTO (chat Fantini e cavalli, 11/11): il fantino sbalzato verso
+// l'esterno a San Martino (o al Casato) prima li attraversava. Ora ci sbatte: perde la
+// velocità verso l'esterno (rimbalzo minimo), lo slancio in avanti si smorza, scivola
+// giù lungo la faccia e resta lì davanti. Corsia stimata dallo spostamento verso la
+// SINISTRA del cavallo (sinistra = corsia −, l'esterno), avanzamento da quello in avanti.
+const _vBordo = new THREE.Vector3();
+function fantinoControBordo(f) {
+  if (!f.bordo || !f.pos0 || !NARROW_READY) return;
+  const d = _vBordo.subVectors(f.pos, f.pos0);
+  const prog = f.bordo.prog0 + d.dot(f.F);
+  if (!controMaterassiOSteccatoAlto(prog)) return;
+  const lane = f.bordo.lane0 - d.dot(f.L);
+  const faccia = -(outerLimitAt(prog) - 0.3);            // la faccia, meno mezzo corpo
+  if (lane >= faccia) return;
+  f.pos.addScaledVector(f.L, lane - faccia);            // rientra sulla faccia
+  const vL = f.vel.dot(f.L);
+  if (vL > 0) f.vel.addScaledVector(f.L, -vL * 1.2);    // rimbalzo 0,2 verso la pista
+  f.vel.x *= 0.6; f.vel.z *= 0.6;                       // attrito contro l'imbottitura
+  if (!f.grounded) f.vel.y = Math.min(f.vel.y, 0);      // scivola giù lungo la faccia
+  if (!f.controBordo) {
+    f.controBordo = true;
+    f.angVel.roll *= -0.5; f.angVel.pitch *= 0.6; f.angVel.yaw *= 0.5;
+    state.cameraShake = Math.max(state.cameraShake || 0, 0.3);
+    try { dustPuffAt(f.pos.x, f.pos.z, 6); playColpoPalchi(0.55); } catch (e) { /* niente */ }
   }
 }
 function clearFallenRiders() {
@@ -18938,6 +18979,7 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
 
 
 
