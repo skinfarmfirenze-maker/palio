@@ -9195,19 +9195,9 @@ function tierSpeedMult(horse) { return TIER_SPEED[horse.horseTier] || 1; }
 function playerThirdLapHandicap(horse) {
   if (!horse.player) return 1;
   // Handicap giocatore SEMPRE: −0,02 di velocità (oltre al deficit-stamina già impostato).
-  let h = 0.02;
-  // Ultimo giro: extra per fascia — bono −0,03, bombolone −0,02 (in aggiunta).
-  if ((horse.progress || 0) >= track.length * (FINISH_LAPS - 1)) {
-    if (horse.horseTier === "bono") h += 0.03;
-    else if (horse.horseTier === "bombolone") h += 0.02;
-    // Handicap per ANDATURA all'ultimo giro: velocità 4 → −0,02 · velocità 5 → −0,03.
-    // Alleggerito (era −0,05 e −0,08): puniva proprio il gesto di provare a vincere,
-    // e la volata finale — il modo naturale di giocarsi il palio — era la scelta
-    // più penalizzata di tutte.
-    const sp = Math.round(horse.speedSetting || 0);
-    if (sp >= 5) h += 0.03;
-    else if (sp === 4) h += 0.02;
-  }
+  // (Tolti il 12/11 su richiesta di Simone gli extra dell'ULTIMO GIRO: per fascia —
+  // bono −0,03, bombolone −0,02 — e per andatura — 4 → −0,02, 5 → −0,03.)
+  const h = 0.02;
   return 1 - h;
 }
 
