@@ -14422,7 +14422,7 @@ function updateRaceAnnouncements(dt) {
 
   if (ann.prevRank === 2 && playerRank === 1) {
     showMessage("🏆 IN TESTA!", 1.2, "good");
-  } else if (ann.prevRank === 1 && playerRank === 2) {
+  } else if (ann.prevRank === 1 && playerRank === 2 && (player.progress || 0) >= 100) {   // mai nei primi 100 m (Simone 11/11)
     showMessage("Superato! Recupera!", 1.0, "danger");
   }
   ann.prevRank = playerRank;
