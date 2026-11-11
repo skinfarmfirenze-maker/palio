@@ -10466,12 +10466,12 @@ function startMossa(fromTratta = false) {
 // FIANCA (tasto F) — regole di Simone 11/11 (terza versione).
 // Il riferimento è l'istante in cui la RINCORSA È AL PARI DEL VERROCCHINO, cioè il
 // via (la rincorsa che passa il canapo posteriore è proprio il via):
-// La pressione è una PREVISIONE: lo scattino avviene UNA volta sola, ESATTAMENTE
-// 2 s dopo la pressione (Simone 11/11):
-//  · se in quel momento il via c'è già stato (F negli ultimi 2 s prima)
-//    → previsione giusta: scattino FORTE in avanti e +8% per 2,5 s
-//  · se il via non c'è ancora (F più di 2 s prima) → scattino al momento sbagliato:
-//    hai FORZATO IL CANAPE, mossa falsa
+// La pressione è una PREVISIONE, e lo scatto avviene UNA volta sola:
+//  · se il via arriva entro 2 s dalla pressione → previsione giusta: lo SCATTO avviene
+//    AL VIA, insieme alla partenza (Simone 11/11: «vero scatto alla mossa, non dopo»),
+//    +8% per 2,5 s
+//  · se passano 2 s e il via non c'è ancora → scatto al momento sbagliato: hai
+//    FORZATO IL CANAPE, mossa falsa
 //  · F dopo il via, entro 1,2 s                      → +5% per 2 s (subito)
 //  · mai, o più tardi                                → parte normale
 // POSIZIONE: lo scatto spinge avanti; chi è messo troppo dietro, con un cavallo
@@ -10637,19 +10637,23 @@ function fiancaAlVia() {
   state.viaA = state.tGioco || 0;
   state.msgPartenzaFatto = false;
   state.horses.forEach((h) => { h.fiancaTipo = null; h.fiancaMult = 1; h.fiancaTimer = 0; });
+  // LO SCATTO È AL VIA (Simone 11/11: «un vero scatto alla mossa, non dopo»): chi ha
+  // una pressione di F in sospeso (fatta negli ultimi 2 s) scatta ADESSO, insieme al
+  // via, col +8%. Il controllo dei 2 s in fiancaTick resta solo per il canape forzato.
   state.horses.forEach((h) => {
     if (h.isRincorsa) return;
-    if (isHuman(h)) return;   // il giocatore: lo decide fiancaTick (2 s dopo la sua pressione)
+    if (h.fPremuto != null) { h.fPremuto = null; applicaFianca(h, "perfetta"); return; }
+    if (isHuman(h)) return;   // il giocatore senza pressione: niente (può ancora premere entro 1,2 s: +5%)
     let tipo = h.fiancaAI;
     if (tipo === undefined) {   // via senza fiancata vista (partenza forzata): si tira ora
       const [perf, ant] = FIANCA_AI[clamp(Math.round(h.jkMossa || 3), 1, 5)];
       const r = Math.random();
       tipo = r < perf ? "perfetta" : (r < perf + ant ? "anticipo" : null);
     }
-    if (tipo === "perfetta" && h.fPremuto == null && !(h.fiancaPremeTra > 0)) h.fPremuto = (state.tGioco || 0) - 1;   // partenza forzata: arriva fra 1 s
+    if (tipo === "perfetta") applicaFianca(h, "perfetta");   // AI che l'aveva prevista (premuta o in arrivo)
     else if (tipo === "anticipo") applicaFianca(h, "anticipo");
   });
-  state.horses.forEach((h) => { h.fiancaAI = undefined; if (h.fiancaPremeTra > 0) { h.fPremuto = state.tGioco || 0; h.fiancaPremeTra = 0; } });
+  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; });
   state.rincorsaFiancaAt = null;
   state.forzaCanape = null;   // via buono arrivato prima della mossa falsa: niente falsa
 }
@@ -19012,5 +19016,6 @@ function programmaAndatura(h) {
   if (NARROW_READY && ((c >= SM_IN && c <= SM_OUT) || (c >= CAS_IN && c <= CAS_OUT))) return 3;
   return giro === 1 ? 3 : 4;   // fuori dalle curve: giro 1 a 4, giro 2 a 3, giro 3 a 4
 }
+
 
 
