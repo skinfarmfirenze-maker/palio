@@ -13983,21 +13983,28 @@ function updateAiHorse(horse, dt, time) {
   // viene TIRATA verso quella che teneva lui in questo punto di pista. Non la
   // sostituisce: si mescola a quello che l'AI ha già deciso (marcature, sorpassi,
   // linea di curva), così resta viva ma corre come corre una persona.
+  // ── PRIMO GIRO FINO A SAN MARTINO: OGNUNO DOVE STA ANDANDO (Simone 11/11) ──
+  // Dal via all'inizio della curva di San Martino del primo giro nessuna corsia da
+  // inseguire: né la linea disegnata, né sorpassi, né ingresso largo. Restano lo
+  // steccato, il colonnino, il gomito a gomito e gli urti. Il progress non e' in
+  // modulo: sotto SM_IN si e' per forza al primo giro.
+  const liberoAlVia = state.mode === "race" && NARROW_READY && (horse.progress || 0) < SM_IN;
+  const ripresaSM = NARROW_READY ? clamp(((horse.progress || 0) - SM_IN) / 10, 0, 1) : 1;   // dopo SM_IN la linea entra in 10 unità
   {
     const umana = laneDaTraccia(horse);
-    if (umana != null && state.mode === "race") {
+    if (umana != null && state.mode === "race" && !liberoAlVia) {
       // ALLA PARTENZA la traccia entra piano: nei primi 2s non conta, poi cresce
       // fino a pieno a 8s. Prima tirava subito tutte le Contrade sulla corsia che
       // l'umano teneva li' all'ultimo giro, e appena partite si schiacciavano
       // tutte da un lato.
       const avvio = clamp(((state.raceClock || 0) - 2) / 6, 0, 1);
-      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95) * avvio);
+      horse.targetLane = lerp(horse.targetLane, umana, clamp(horse.tracciaPeso || 0, 0, 0.95) * avvio * ripresaSM);
       // TETTO DI SCOSTAMENTO. Le decisioni prese qui sopra (sorpasso, marcatura,
       // parata) restano, ma non possono portare l'AI lontano dalla linea che
       // l'umano teneva in questo punto: si sposta per passare o per chiudere, poi
       // rientra. Senza questo tetto, una singola manovra la mandava larga e la
       // traccia non si vedeva più.
-      const scosto = TRACCIA_SCOSTO + (1 - avvio) * 2 * AI_LANE_LIMIT;   // in partenza il tetto non stringe
+      const scosto = TRACCIA_SCOSTO + (1 - avvio * ripresaSM) * 2 * AI_LANE_LIMIT;   // in partenza (e all'imbocco di SM) il tetto non stringe
       horse.targetLane = clamp(horse.targetLane, umana - scosto, umana + scosto);
     }
   }
@@ -14016,6 +14023,7 @@ function updateAiHorse(horse, dt, time) {
   const aiInnerLim = innerLimitAt(horse.progress);
   let aiInnerAvanti = aiInnerLim;
   for (let k = 2; k <= AI_STRETTOIA_AVANTI; k += 2) aiInnerAvanti = Math.min(aiInnerAvanti, innerLimitAt(horse.progress + k));
+  if (liberoAlVia) horse.targetLane = horse.lane;   // nessun bersaglio: tiene la corsia che ha
   // ── GOMITO A GOMITO ───────────────────────────────────────────────────────
   // Fra due Contrade affiancate non c'era NIENTE che le tenesse separate: il
   // codice dei sorpassi guarda solo chi sta DAVANTI, quindi due che puntavano
@@ -14110,7 +14118,13 @@ function updateAiHorse(horse, dt, time) {
   const curvePenalty = 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
+  const progPrimaLibero = horse.progress;
   horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  if (liberoAlVia && horse.raceTurn) {
+    // Di sbieco: avanti lungo la pista quanto ha fatto, di lato quanto vuole il muso.
+    const muso = clamp(horse.raceTurn, -0.6, 0.6);
+    horse.lane = clamp(horse.lane + Math.tan(muso) * Math.max(0, horse.progress - progPrimaLibero), -aiOuterLim, aiInnerLim);
+  }
   if ((horse.speedLevel > 5.55 || horse.staminaLimited) && Math.random() < dt * 0.52) {
     emitDust(horse);
   }
