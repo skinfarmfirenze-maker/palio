@@ -14601,6 +14601,13 @@ function copioneTick() {
       const h = gruppo.shift();
       pianificaCaduta(h, curva, { lato });
       if (h.cadPiano) h.cadPiano.copione = k;
+      // Lato imposto dal copione sui MATERASSI (palio 11): tutto il tratto dei materassi,
+      // e il punto scala con l'ordine (il più esterno cade per primo, gli altri dopo).
+      if (h.cadPiano && curva === "sm" && lato === "fuori" && state.copioneLato && state.copioneLato[k] === "fuori") {
+        const m = trattoMaterassi(), P = h.cadPiano;
+        P.da = m.da; P.a = m.a - 1;
+        P.punto = m.da + (m.a - 1 - m.da) * Math.min(0.92, (i + 0.5) / Math.max(1, quante));
+      }
     }
   });
 }
@@ -14631,7 +14638,9 @@ function vaLargoTick() {
     // gruppo le chiude): solo dopo cadono dove sono.
     const obbligata = P.silenzioso || P.copione;
     const fine = obbligata ? P.a + 10 : P.a;
-    const fuoriTempo = cum > fine && cum < fine + 30;
+    // fine della finestra sul progress ASSOLUTO, fissata la prima volta che si guarda il piano
+    if (P.fineAbs == null) P.fineAbs = (h.progress || 0) + positiveMod(fine - cum, L);
+    const fuoriTempo = obbligata ? (h.progress || 0) > P.fineAbs : (cum > fine && cum < fine + 30);
     if (fuoriTempo && !obbligata) { h.cadPiano = null; return; }
     if ((cum >= P.punto && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
       h.cadPiano = null;
