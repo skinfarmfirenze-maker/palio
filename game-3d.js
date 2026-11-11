@@ -4793,7 +4793,7 @@ function nextPlayerPost(n) {
 // Registra UN palio corso nel totale GLOBALE (tutti i dispositivi). Chiamato una
 // volta all'inizio di ogni palio. Aggiorna subito il locale, poi il server.
 function recordPalioRun() {
-  if (state.soloAllenamento) return;   // i palii da solo (traiettoria) non contano
+  if (state.soloAllenamento || state.provaDiretta) return;   // i palii da solo e le prove non contano
   let a; try { a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}; } catch (e) { a = {}; }
   a = normalizeAlbo(a);
   a.totalePalii += 1;
@@ -4901,7 +4901,7 @@ async function fetchGlobalAlbo(force) {
   } catch (e) { return null; }   // niente rete/API: si resta sul fallback locale
 }
 function recordVictoryToAlbo(winner) {
-  if (!winner || state.soloAllenamento) return;   // da solo non si vince niente
+  if (!winner || state.soloAllenamento || state.provaDiretta) return;   // da solo / in prova non si vince niente
   // 1) Aggiornamento LOCALE immediato (feedback subito + fallback offline).
   let a; try { a = JSON.parse(localStorage.getItem(VICTORY_ALBO_KEY)) || {}; } catch (e) { a = {}; }
   a = normalizeAlbo(a);
@@ -6442,7 +6442,7 @@ function openModeChooser() {
           teleEvento("attesa", "veloce");
           return;
         }
-        state.soloAllenamento = false;
+        state.soloAllenamento = false; state.provaDiretta = false;
         state.teleGioco = "veloce";
         segnaPaliataVeloce();
         resetCampaign();          // azzera l'eventuale campagna (mette quickBudgets a null)
@@ -6461,7 +6461,7 @@ function openModeChooser() {
           teleEvento("attesa", "campagna");
           return;
         }
-        state.soloAllenamento = false;
+        state.soloAllenamento = false; state.provaDiretta = false;
         state.teleGioco = "campagna";
         const saved = loadCampaignSave();
         const start = () => { segnaCampagna(); closeCampaignOverlay(); beginCampaignSetup(); };
@@ -6478,24 +6478,23 @@ function openModeChooser() {
         closeCampaignOverlay(); resumeCampaign();
       }));
     }
-    // ── TRAIETTORIA DA SOLO (solo su /creator): 5 palii senza avversari, poi le
-    // Contrade seguono la tua linea media con leggere variazioni.
+    // ── PROVA DIRETTA (solo su /creator, Simone 11/11): al posto del «corri da
+    // solo». Un palio subito, senza estrazione/Tratta/fantini/accordi: 10 Contrade
+    // tutte con un BONO, e il giocatore alla TERZA posta fra i canapi. Per provare.
     if (suCreator()) {
-      const fatti = caricaTracceSolo().length;
-      const pronta = fatti >= TRACCE_SOLO_N;
-      const sub = pronta
-        ? `Fatti ${TRACCE_SOLO_N}/${TRACCE_SOLO_N}: le Contrade seguono la tua linea. Correndo ancora, il palio più vecchio esce dalla media.`
-        : `Palio ${fatti + 1} di ${TRACCE_SOLO_N} senza avversari. Dopo il 5° le Contrade seguono la tua linea.`;
-      const c = col("Traiettoria: corri da solo", sub, "#6b4e2e", () => {
-        state.soloAllenamento = true;
-        state.teleGioco = "solo";
+      const c = col("Prova diretta", "Subito ai canapi: 10 cavalli boni, tu alla terza posta. Non conta per albo e statistiche.", "#6b4e2e", () => {
+        state.soloAllenamento = false;
+        state.provaDiretta = true;
+        state.teleGioco = "prova";
         resetCampaign();
         closeCampaignOverlay(); openSelectScreen();
       });
+      // Le traiettorie «da solo» già registrate restano: si possono ancora azzerare.
+      const fatti = caricaTracceSolo().length;
       if (fatti > 0) {
         const z = document.createElement("button"); z.className = "cmp-btn";
         z.style.cssText = "margin-top:8px;font-size:12px;padding:6px 12px;background:#444";
-        z.textContent = `Azzera traiettoria (${fatti}/${TRACCE_SOLO_N})`;
+        z.textContent = `Azzera traiettoria da solo (${fatti}/${TRACCE_SOLO_N})`;
         z.addEventListener("click", () => {
           if (confirm("Cancellare i palii da solo registrati? Le Contrade torneranno alla loro linea.")) {
             azzeraTracceSolo(); closeCampaignOverlay(); openModeChooser();
@@ -9959,6 +9958,30 @@ function fillTrattaPanelRow(p) {
   row.classList.add("flash");
 }
 
+// PROVA DIRETTA: a ogni Contrada un BONO diverso (dal roster dell'epoca attiva,
+// con le sue statistiche) e un fantino, senza Tratta né scelta del fantino.
+function preparaProvaDiretta() {
+  // Prima i boni dell'epoca attiva; se non bastano per 10 (oggi sono 7), si
+  // aggiungono quelli dell'altra epoca: niente cavalli doppi.
+  const boni = shuffleInPlace(TRATTA_HORSE_NAMES.filter((n) => (HORSE_ROSTER[n] || {}).tier === "bono"));
+  if (boni.length < state.horses.length) {
+    shuffleInPlace(Object.keys(ROSTER_CAVALLI).filter((n) => ROSTER_CAVALLI[n].tier === "bono" && !boni.includes(n)))
+      .forEach((n) => boni.push(n));
+  }
+  state.horses.forEach((h, i) => {
+    const nome = boni[i % Math.max(1, boni.length)];
+    const r = HORSE_ROSTER[nome] || ROSTER_CAVALLI[nome] || { tier: "bono", stamina: 85 };
+    h.horseName = nome || ("Barbero " + (i + 1));
+    h.horseTier = "bono";
+    h.staminaMax = r.stamina || 85; h.stamina = h.staminaMax;
+    h.nervousnessBase = undefined;
+    h.turnsStat = r.turns || 3; h.potenza = r.potenza || 3; h.calma = r.calma || 3;
+    h.scossoStamina = r.scossoStamina || 0; h.terzoGiroStamina = r.terzoGiroStamina || 0;
+    try { applyMantoFisso(h); } catch (e) { /* niente */ }
+  });
+  try { setupQuickEconomy(); } catch (e) { /* niente */ }
+  campaignAutoHireAll();
+}
 function startMossa(fromTratta = false) {
   ensureAudio();
   if (state.audio.ctx && state.audio.ctx.state === "suspended") {
@@ -9968,6 +9991,7 @@ function startMossa(fromTratta = false) {
   // Se veniamo dalla TRATTA gli entranti (e l'abbinamento cavallo↔Contrada) sono
   // già stati creati e sorteggiati: NON ricrearli. Altrimenti crea i 10 in gara.
   if (!fromTratta) createEntrants();
+  if (!fromTratta && state.provaDiretta) preparaProvaDiretta();
   // Alla mossa i fantini SONO in sella (dopo la tratta erano nascosti).
   clearFallenRiders();   // via eventuali fantini caduti del palio precedente
   tiraMinACavallo();     // quanti fantini restano in sella: si tira a ogni palio
@@ -10048,7 +10072,7 @@ function startMossa(fromTratta = false) {
   // rincorsa inclusa). La posta del giocatore è pescata dal sacchetto; le altre
   // restano casuali. In "assisti" (autopilot) NON si tocca: tutto casuale.
   const playerIdx = state.horses.findIndex((h) => h.player && !h.autopilot);
-  if (playerIdx >= 0) {
+  if (playerIdx >= 0 && !state.provaDiretta) {   // in prova non si consuma il sacchetto
     const target = nextPlayerPost(state.horses.length);
     const holder = postOrder.indexOf(target);
     if (holder >= 0 && holder !== playerIdx) {
@@ -10056,6 +10080,11 @@ function startMossa(fromTratta = false) {
       postOrder[playerIdx] = target;
       postOrder[holder] = mia;
     }
+  }
+  // PROVA DIRETTA: il giocatore alla TERZA posta fra i canapi (posta 2 contando da 0).
+  if (state.provaDiretta) {
+    const iP = state.horses.findIndex((h) => h.player), k = postOrder.indexOf(2);
+    if (iP >= 0 && k >= 0) [postOrder[iP], postOrder[k]] = [postOrder[k], postOrder[iP]];
   }
   let playerPost = 0;
   let playerRincorsa = false;
@@ -16507,11 +16536,11 @@ function bindEvents() {
   // agosto / straordinario) → ESTRAZIONE delle Contrade (bandiere al Palazzo)
   // → TRATTA (sorteggio dei cavalli) → mossa/tondino.
   ui.startMossaButton.addEventListener("click", () => {
-    if (state.soloAllenamento) { startMossa(); return; }                   // traiettoria da solo: niente estrazione/Tratta
+    if (state.soloAllenamento || state.provaDiretta) { startMossa(); return; }   // da solo / prova diretta: niente estrazione/Tratta
     if (state.campaign && state.campaign.setup) campaignConfirmContrada();  // → diventa Capitano
     else openPalioChooser();                                               // paliata veloce
   });
-  ui.replayButton.addEventListener("click", openPalioChooser);
+  ui.replayButton.addEventListener("click", () => { if (state.provaDiretta) startMossa(); else openPalioChooser(); });   // in prova: un'altra prova
   // "Riparti dalla Mossa": rigioca SUBITO con gli stessi cavalli/accoppiate
   // della Tratta appena corsa, senza rifare estrazione e sorteggio.
   const restartMossaButton = document.createElement("button");
@@ -16691,7 +16720,7 @@ function teleLite(r) {
 }
 const TELE_CODA_MAX = 40;
 function teleAttiva() {
-  if (state.soloAllenamento) return false;   // i palii da solo non sporcano le statistiche
+  if (state.soloAllenamento || state.provaDiretta) return false;   // da solo e prove non sporcano le statistiche
   try { if (localStorage.getItem("palio.teleProva") === "1") return true; } catch (e) { /* niente */ }
   const host = location.hostname;
   if (host === "localhost" || host === "127.0.0.1" || host === "") return false;
@@ -18858,6 +18887,7 @@ function animaNerbata(h, jockey, dt) {
     jockey.rotation.y *= Math.max(0, 1 - dt * 8);
   }
 }
+
 
 
 
