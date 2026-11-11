@@ -847,14 +847,14 @@ export function buildFantino(contrada, opts = {}) {
     return 0.020 * dove * Math.sin(ang * 3 + t * 7 + seedPieghe)
          + 0.010 * dove * Math.sin(ang * 7 - t * 12 + seedPieghe * 1.7);
   };
-  add(loftLimb({ path: bustoPath, profile: bustoProfile, steps: 32, radial: 28, align: DIETRO, capEnd: false, rilievo: piegheBusto }), matGiubbetto);
+  add(loftLimb({ path: bustoPath, profile: bustoProfile, steps: 32, radial: 28, align: DIETRO, capEnd: false, rilievo: piegheBusto }), matGiubbetto).name = "f-busto";
 
   // ── COLLO + TESTA ──────────────────────────────────────────────────────────
   add(loftLimb({
     path: [V3(0, 2.186, 0.176), V3(0, 2.232, 0.204), V3(0, 2.278, 0.230)],
     profile: (t) => ({ rx: (0.052 - 0.005 * t) * T, ry: (0.055 - 0.005 * t) * T, sq: 2 }),
     colorFn: () => skin, steps: 6, radial: 14,
-  }), matPelle);
+  }), matPelle).name = "f-collo";
 
   // Testa col volto DIPINTO: occhi, sopracciglia e bocca stanno sulla texture
   // (dettaglio vero), naso e orecchie restano scolpiti (profilo vero).
@@ -864,6 +864,7 @@ export function buildFantino(contrada, opts = {}) {
   const testa = new THREE.Mesh(geoTesta, matVolto);
   testa.position.set(0, 2.362, 0.245);
   testa.castShadow = true;
+  testa.name = "f-testa";   // i nomi "f-…" servono alla caduta (armaFantinoCaduto): i cloni li conservano
   rider.add(testa);
   // NASO scolpito: dorso che scende dalla fronte, punta e ali delle narici.
   const naso = new THREE.Group();
@@ -879,13 +880,14 @@ export function buildFantino(contrada, opts = {}) {
     ala.position.set(d * 0.0105 * T, 2.349, 0.336);
     naso.add(ala);
   });
+  naso.name = "f-testa-naso";
   rider.add(naso);
   // Mento: appena accennato, il grosso del profilo lo fa già la mandibola dipinta.
   const mento = new THREE.Mesh(blobGeo({ rx: 0.026 * T, ry: 0.013 * T, rz: 0.011 * T, colorFn: () => skin.clone().multiplyScalar(0.88) }), matPelle);
-  mento.position.set(0, 2.289, 0.312); rider.add(mento);
+  mento.position.set(0, 2.289, 0.312); mento.name = "f-testa-mento"; rider.add(mento);
   [-1, 1].forEach((s) => {
     const orecchio = new THREE.Mesh(blobGeo({ rx: 0.010 * T, ry: 0.026 * T, rz: 0.018 * T, colorFn: () => skin }), matPelle);
-    orecchio.position.set(s * 0.084 * T, 2.354, 0.235); rider.add(orecchio);
+    orecchio.position.set(s * 0.084 * T, 2.354, 0.235); orecchio.name = "f-testa-orecchio"; rider.add(orecchio);
   });
 
   // ── ZUCCHINO a spicchi ─────────────────────────────────────────────────────
@@ -897,6 +899,7 @@ export function buildFantino(contrada, opts = {}) {
   zucchino.position.set(0, 2.404, 0.235);
   zucchino.rotation.x = -0.16;   // beccheggio all'indietro: la calotta copre la nuca, la fronte resta libera
   zucchino.castShadow = true;
+  zucchino.name = "f-testa-zucchino";
   rider.add(zucchino);
 
   // ── BRACCIA ────────────────────────────────────────────────────────────────
@@ -906,6 +909,7 @@ export function buildFantino(contrada, opts = {}) {
   function costruisciBraccio(sign) {
     const arm = new THREE.Group();
     arm.position.set(sign * 0.112 * S, 2.178, 0.152);
+    arm.name = sign < 0 ? "f-braccio-sx" : "f-braccio-dx";
     const path = [
       V3(sign * -0.055, -0.024, -0.008),     // dentro il giubbetto: l'innesto non si vede
       V3(sign * 0.006, -0.058 * A, 0.010),
@@ -1025,6 +1029,7 @@ export function buildFantino(contrada, opts = {}) {
     };
     const gamba = new THREE.Mesh(loftLimb({ path, profile, steps: 26, radial: 18, align: fuori, capDepth: 0.12, rilievo: piegheGamba }), sign < 0 ? matPantaloneSx : matPantaloneDx);
     gamba.castShadow = true;
+    gamba.name = sign < 0 ? "f-gamba-sx" : "f-gamba-dx";
     rider.add(gamba);
 
     // SCARPA bassa scura: al Palio si corre in scarpe da ginnastica, non stivali.
@@ -1035,6 +1040,7 @@ export function buildFantino(contrada, opts = {}) {
     scarpa.position.set(sign * 0.272, 1.446, 0.098);   // piede in fuori, appoggiato sulla pancia
     scarpa.rotation.x = -0.30;
     scarpa.castShadow = true;
+    scarpa.name = sign < 0 ? "f-scarpa-sx" : "f-scarpa-dx";
     rider.add(scarpa);
   });
 
@@ -1058,6 +1064,7 @@ export function buildFantino(contrada, opts = {}) {
   }), matSedere);
   bacino.position.set(0, 1.780, -0.098);   // arretrato: davanti lo coprono le cosce, dietro fa la curva del fondoschiena
   bacino.castShadow = true;
+  bacino.name = "f-bacino";
   rider.add(bacino);
 
   // Lo STEMMA sul dorso non è più un piano flottante: è dipinto DENTRO la
@@ -1069,6 +1076,7 @@ export function buildFantino(contrada, opts = {}) {
   // toccare nulla. È ancorata al punto di SEDUTA: il bacino resta esattamente dove
   // appoggia sul dorso e il corpo si accorcia verso il basso, invece di sprofondare.
   const inner = new THREE.Group();
+  inner.name = "f-corpo";
   while (rider.children.length) inner.add(rider.children[0]);
   inner.scale.setScalar(TAGLIA);
   inner.position.y = SEDUTA_Y * (1 - TAGLIA);
@@ -1078,3 +1086,209 @@ export function buildFantino(contrada, opts = {}) {
   rider.userData.taglia = TAGLIA;
   return rider;
 }
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// CADUTA DEL FANTINO — corpo rigido che rotola, con braccia, gambe e testa vive
+// ════════════════════════════════════════════════════════════════════════════
+// Simone 11/11: «migliora ancora fantino e cavallo che cadono e anche il modo in cui
+// batte». Prima il fantino caduto era il clone RIGIDO nella posa da sella: volava come
+// una statua, girava su un punto un metro e mezzo sotto il corpo e a terra si adagiava
+// a comando. Ora:
+//  · CORPO RIGIDO attorno al baricentro, con gravità, inerzia di un corpo accovacciato,
+//    e CONTATTI su tredici punti (testa, spalle, schiena, bacino, ginocchia, piedi):
+//    sul tufo urto con attrito → il fantino ROTOLA e striscia da sé, finché si ferma;
+//    contro i materassi / lo steccato alto (piano verticale dato dal gioco) rimbalza
+//    piano e scivola giù;
+//  · ARTI VIVI: anche (gamba + scarpa), spalle (braccia), collo (testa) su molle:
+//    in volo si sbraccia e scalcia; prima di toccare si para (mani avanti, mento giù);
+//    all'urto gli arti scattano; a terra sono molli e si allargano; fermo, resta così.
+// Il gioco crea il clone (startJockeyFall), lo arma con armaFantinoCaduto e a ogni frame
+// chiama passoFantinoCaduto(f, dt, mondo): mondo.suolo(x, z) → quota del tufo,
+// mondo.muro(x, z) → null o { nx, nz, pen } (normale verso la pista, quanto è dentro).
+// Restituisce { urto, muro } (0..1) per polvere, colpo e scossa. Nomi "f-…": buildFantino.
+export const CADUTA_FANTINO = {
+  g: 10.9,                 // u/s²
+  attrito: 0.65,           // tufo
+  rimbalzo: 0.12,
+  muroAttrito: 0.45,       // materassi / steccato
+  muroRimbalzo: 0.3,
+  smorzaRotolo: 1.2,       // 1/s: a terra il rotolare si spegne
+  dorme: { v: 0.2, w: 0.4, t: 0.6 },
+  ariaF: 3.0, ariaZ: 0.35, // molle degli arti in volo (Hz, smorzamento)
+  terraF: 1.3, terraZ: 0.5,
+};
+// Punti d'urto nel riferimento del corpo (prima della taglia) e baricentro.
+const _PUNTI_FANTINO = [
+  [0, 2.43, 0.24], [0, 2.30, 0.31], [-0.17, 2.17, 0.12], [0.17, 2.17, 0.12], [0, 2.07, -0.12],
+  [0, 1.96, 0.25], [-0.12, 1.80, -0.18], [0.12, 1.80, -0.18], [0, 1.72, 0.03],
+  [-0.25, 1.67, 0.13], [0.25, 1.67, 0.13], [-0.27, 1.45, 0.10], [0.27, 1.45, 0.10],
+];
+const _C_FANTINO = [0, 1.98, 0.04];
+
+export function armaFantinoCaduto(obj) {
+  try {
+    const corpo = obj.getObjectByName("f-corpo");
+    if (!corpo) return null;
+    obj.updateMatrixWorld(true);
+    const rig = { corpo, arti: [] };
+    for (const [lato, s] of [["sx", -1], ["dx", 1]]) {
+      const gamba = corpo.getObjectByName("f-gamba-" + lato), scarpa = corpo.getObjectByName("f-scarpa-" + lato);
+      if (!gamba) continue;
+      const anca = new THREE.Group();
+      anca.name = "f-anca-" + lato;
+      anca.position.set(s * 0.12, 1.79, -0.04);
+      corpo.add(anca); anca.updateMatrixWorld(true);
+      anca.attach(gamba); if (scarpa) anca.attach(scarpa);
+      rig.arti.push({ o: anca, tipo: "gamba", s, x0: 0, z0: 0, x: 0, vx: 0, z: 0, vz: 0, fase: Math.random() * 6.28 });
+    }
+    for (const [lato, s] of [["sx", -1], ["dx", 1]]) {
+      const b = corpo.getObjectByName("f-braccio-" + lato);
+      if (!b) continue;
+      rig.arti.push({ o: b, tipo: "braccio", s, x0: b.rotation.x, z0: b.rotation.z, x: 0, vx: 0, z: 0, vz: 0, fase: Math.random() * 6.28 });
+    }
+    const capo = new THREE.Group();
+    capo.name = "f-capo"; capo.position.set(0, 2.21, 0.19);
+    corpo.add(capo); capo.updateMatrixWorld(true);
+    corpo.children.filter((c) => c.name && c.name.startsWith("f-testa")).forEach((c) => capo.attach(c));
+    rig.arti.push({ o: capo, tipo: "testa", s: 0, x0: 0, z0: 0, x: 0, vx: 0, z: 0, vz: 0, fase: 0 });
+    // in coordinate dell'oggetto (taglia e spostamento del corpo applicati)
+    const P = (p) => [corpo.position.x + corpo.scale.x * p[0], corpo.position.y + corpo.scale.y * p[1], corpo.position.z + corpo.scale.z * p[2]];
+    rig.punti = _PUNTI_FANTINO.map(P);
+    rig.c = P(_C_FANTINO);
+    return rig;
+  } catch (e) { return null; }
+}
+
+const _q = new THREE.Quaternion(), _m3 = new THREE.Matrix3(), _r = new THREE.Vector3(), _n = new THREE.Vector3(),
+      _t = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _vp = new THREE.Vector3();
+// I⁻¹ nel mondo: R · diag · Rᵀ
+function _iinv(F) {
+  _m3.setFromMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(F.q));
+  const R = _m3.elements, d = F.Ib, o = F.Iw;
+  for (let i = 0; i < 3; i += 1) for (let j = 0; j < 3; j += 1) {
+    let s = 0;
+    for (let k = 0; k < 3; k += 1) s += R[i + 3 * k] * d[k] * R[j + 3 * k];
+    o[i + 3 * j] = s;
+  }
+}
+function _mulI(F, v, out) { const I = F.Iw; out.set(I[0] * v.x + I[3] * v.y + I[6] * v.z, I[1] * v.x + I[4] * v.y + I[7] * v.z, I[2] * v.x + I[5] * v.y + I[8] * v.z); return out; }
+// Urto di un punto (r dal baricentro) contro un piano di normale n, con restituzione e attrito.
+function _urto(F, r, n, e, mu) {
+  _vp.copy(F.w).cross(r).add(F.v);
+  const vn = _vp.dot(n);
+  if (vn >= 0) return 0;
+  _a.copy(r).cross(n); _mulI(F, _a, _b); _b.cross(r);
+  const jn = -(1 + e) * vn / (1 + _b.dot(n));
+  F.v.addScaledVector(n, jn);
+  _a.copy(r).cross(n).multiplyScalar(jn); _mulI(F, _a, _b); F.w.add(_b);
+  // attrito di Coulomb
+  _vp.copy(F.w).cross(r).add(F.v);
+  _t.copy(_vp).addScaledVector(n, -_vp.dot(n));
+  const vt = _t.length();
+  if (vt > 1e-4) {
+    _t.multiplyScalar(1 / vt);
+    _a.copy(r).cross(_t); _mulI(F, _a, _b); _b.cross(r);
+    const jt = Math.max(-vt / (1 + _b.dot(_t)), -mu * jn);
+    F.v.addScaledVector(_t, jt);
+    _a.copy(r).cross(_t).multiplyScalar(jt); _mulI(F, _a, _b); F.w.add(_b);
+  }
+  return -vn;
+}
+const _UP = new THREE.Vector3(0, 1, 0);
+
+export function passoFantinoCaduto(f, dt, mondo) {
+  const K = CADUTA_FANTINO, rig = f.rig, o = f.obj;
+  if (!rig || !o || !(dt > 0)) return null;
+  let F = f.fis;
+  if (!F) {
+    const scl = o.scale.x || 1;
+    const cO = new THREE.Vector3().fromArray(rig.c);
+    const c = cO.clone().multiplyScalar(scl).applyQuaternion(o.quaternion).add(o.position);
+    const w = new THREE.Vector3();
+    if (f.angVel && f.F && f.L) w.addScaledVector(f.F, f.angVel.roll || 0).addScaledVector(f.L, f.angVel.pitch || 0).addScaledVector(_UP, f.angVel.yaw || 0);
+    const rLoc = rig.punti.map((p) => new THREE.Vector3().fromArray(p).sub(cO).multiplyScalar(scl));
+    // inerzia di un corpo accovacciato (massa 1): scatola dalle estensioni dei punti
+    const ext = [0, 1, 2].map((k) => { let lo = Infinity, hi = -Infinity; rLoc.forEach((r) => { const v = r.getComponent(k); lo = Math.min(lo, v); hi = Math.max(hi, v); }); return Math.max(0.2 * scl, hi - lo); });
+    const Ix = (ext[1] ** 2 + ext[2] ** 2) / 12, Iy = (ext[0] ** 2 + ext[2] ** 2) / 12, Iz = (ext[0] ** 2 + ext[1] ** 2) / 12;
+    F = f.fis = { c, v: (f.vel ? f.vel.clone() : new THREE.Vector3()), q: o.quaternion.clone(), w, rLoc, cO, scl,
+                  Ib: [1 / Ix, 1 / Iy, 1 / Iz], Iw: new Array(9).fill(0), tContatto: -1, tFermo: 0, dorme: false, t: 0, toccato: false };
+  }
+  const n = Math.max(1, Math.ceil(dt / (1 / 180))), h = dt / n;
+  let urto = 0, muro = 0, contatto = false;
+  const r = _r;
+  for (let s = 0; s < n && !F.dorme; s += 1) {
+    F.t += h;
+    F.v.y -= K.g * h;
+    F.c.addScaledVector(F.v, h);
+    // integra l'orientamento
+    _q.set(F.w.x * h * 0.5, F.w.y * h * 0.5, F.w.z * h * 0.5, 0).multiply(F.q);
+    F.q.x += _q.x; F.q.y += _q.y; F.q.z += _q.z; F.q.w += _q.w; F.q.normalize();
+    _iinv(F);
+    for (let it = 0; it < 2; it += 1) {
+      for (const rl of F.rLoc) {
+        r.copy(rl).applyQuaternion(F.q);
+        const px = F.c.x + r.x, py = F.c.y + r.y, pz = F.c.z + r.z;
+        const suolo = mondo && mondo.suolo ? mondo.suolo(px, pz) : 0;
+        const pen = suolo - py;
+        if (pen > 0) {
+          contatto = true;
+          F.c.y += pen * 0.6;
+          urto = Math.max(urto, _urto(F, r, _UP, K.rimbalzo, K.attrito));
+        }
+        const m = mondo && mondo.muro ? mondo.muro(px, pz) : null;
+        if (m && m.pen > 0) {
+          _n.set(m.nx, 0, m.nz);
+          F.c.addScaledVector(_n, m.pen * 0.6);
+          muro = Math.max(muro, _urto(F, r, _n, K.muroRimbalzo, K.muroAttrito));
+        }
+      }
+    }
+    F.w.multiplyScalar(Math.exp(-(contatto ? K.smorzaRotolo : 0.15) * h));
+    if (contatto) { F.tContatto = F.t; F.toccato = true; }
+  }
+  // fermo: dopo un po' a velocità bassissima si addormenta (niente tremolio a terra)
+  if (!F.dorme) {
+    if (contatto && F.v.length() < K.dorme.v && F.w.length() < K.dorme.w) F.tFermo += dt; else F.tFermo = 0;
+    if (F.tFermo > K.dorme.t) { F.dorme = true; F.v.set(0, 0, 0); F.w.set(0, 0, 0); }
+  }
+  // ── arti
+  const inAria = !F.toccato || F.t - F.tContatto > 0.15;
+  const sta = F.dorme || (!inAria && F.v.length() < 1.2);
+  const vicino = inAria && F.v.y < -1.5 && F.c.y - (mondo && mondo.suolo ? mondo.suolo(F.c.x, F.c.z) : 0) < 0.9;
+  const fq = inAria ? K.ariaF : K.terraF, zz = inAria ? K.ariaZ : K.terraZ, wq = 2 * Math.PI * fq, om = 2 * Math.PI * 2.1;
+  const kick = Math.max(urto, muro);
+  for (const A of rig.arti) {
+    let tx = 0, tz = 0;
+    const ph = om * F.t + A.fase;
+    if (A.tipo === "braccio") {
+      if (vicino) { tx = -1.25; tz = A.s * 0.35; }                                   // mani avanti: si para
+      else if (inAria) { tx = -1.9 + 0.9 * Math.sin(ph); tz = A.s * (0.7 + 0.4 * Math.sin(0.7 * ph)); }
+      else { tx = -0.9; tz = A.s * 1.25; }                                           // a terra, braccia larghe
+    } else if (A.tipo === "gamba") {
+      if (vicino) { tx = -0.55; tz = A.s * 0.2; }                                    // ginocchia su
+      else if (inAria) { tx = 0.1 + 0.7 * Math.sin(ph + 1.3); tz = A.s * (0.3 + 0.25 * Math.sin(0.8 * ph)); }
+      else { tx = 0.55; tz = A.s * 0.45; }                                           // gambe che si allungano
+    } else {
+      tx = vicino ? 0.45 : (inAria ? 0.15 * Math.sin(ph) : (sta ? -0.15 : 0.1));
+    }
+    if (kick > 0.4) { A.vx += (Math.random() - 0.5) * 7 * Math.min(1, kick / 4); A.vz += (Math.random() - 0.5) * 5 * Math.min(1, kick / 4); }
+    const n2 = Math.max(1, Math.ceil(dt / 0.01)), h2 = dt / n2;
+    for (let i = 0; i < n2; i += 1) {
+      A.vx += (-wq * wq * (A.x - tx) - 2 * zz * wq * A.vx) * h2; A.x += A.vx * h2;
+      A.vz += (-wq * wq * (A.z - tz) - 2 * zz * wq * A.vz) * h2; A.z += A.vz * h2;
+    }
+    A.o.rotation.x = A.x0 + A.x;
+    if (A.tipo !== "testa") A.o.rotation.z = A.z0 + A.z;
+  }
+  // ── trasformazione dell'oggetto: il baricentro dove dice la fisica
+  o.quaternion.copy(F.q);
+  _a.copy(F.cO).multiplyScalar(F.scl).applyQuaternion(F.q);
+  o.position.copy(F.c).sub(_a);
+  if (f.pos) f.pos.copy(o.position);
+  if (f.quat) f.quat.copy(F.q);
+  if (f.vel) f.vel.copy(F.v);
+  f.grounded = F.toccato; f.impactDone = F.toccato;
+  return { urto: _c01f(urto / 5), muro: _c01f(muro / 4), dorme: F.dorme };
+}
+const _c01f = (x) => Math.max(0, Math.min(1, x));

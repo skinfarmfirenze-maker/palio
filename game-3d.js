@@ -5,7 +5,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/
 import * as SkeletonUtils from "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/utils/SkeletonUtils.js";
 // FANTINI NUOVI (modulo curato dalla chat "fantini"): buildFantino(contrada) costruisce
 // il rider procedurale "lofted". Stessa istanza THREE (import "three" via importmap).
-import { buildFantino, CONTRADE as CONTRADE_FANTINI } from "./fantino-lab.js";
+import { buildFantino, CONTRADE as CONTRADE_FANTINI, armaFantinoCaduto, passoFantinoCaduto } from "./fantino-lab.js";
 import { BANDIERE } from "./bandiere-data.js";   // bandiere incorporate: 1 richiesta invece di 17
 import { ancoraFronteViva, mantoDi, nascondiSpennacchiera, mostraSpennacchiera, aggiornaComparsa, aggiornaReazione, azzeraReazione, aggiornaZampe, ripristinaZampe, aggiornaCaduta } from "./cavallo-lab.js";
 import { costruisciPiazza, costruisciPalizzata, costruisciMaterassi, costruisciFollaCentro, PALCHI_FONDO } from "./piazza-lab.js";
@@ -14131,7 +14131,13 @@ function updateRace(dt, time) {
         horse.progress += horse.cadutoSlide * dt;
         const limScivolo = outerLimitAt(horse.progress) - 0.7;   // coricato è largo: si ferma col corpo davanti ai materassi
         const diLato = horse.cadutaLato === "dentro" ? 0.12 : 0.55;   // al colonnino resta lì vicino, ai materassi ci scivola contro
-        horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * diLato, -limScivolo, innerLimitAt(horse.progress));
+        const laneLibera = horse.lane - horse.cadutoSlide * dt * diLato;
+        horse.lane = clamp(laneLibera, -limScivolo, innerLimitAt(horse.progress));
+        // BATTE sui materassi (cavallo-lab §8): la prima volta che la scivolata ci arriva contro
+        if (laneLibera < -limScivolo && !horse.cadMuroFatto && horse.cadutoSlide > 1.5) {
+          horse.cadMuroFatto = true;
+          horse.cadMuro = clamp(horse.cadutoSlide / 9, 0.3, 1);
+        }
         horse.targetLane = horse.lane;
       }
       horse.cadutoMult = 0;
@@ -14603,6 +14609,7 @@ function triggerHorseFall(horse) {
   if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella (non col copione)
   triggerFall(horse);                          // il fantino è già per terra (no-op se scosso)
   horse.caduto = true;
+  horse.cadMuroFatto = false;   // potrà battere sui materassi (cavallo-lab §8)
   horse.cadutaNum = (horse.cadutaNum || 0) + 1;   // per il «un tiro per incontro» di chi gli arriva addosso
   horse.cadutoTimer = HORSE_DOWN_TIME + Math.random() * 1.6;
   // LATO (Simone 11/11, chat Fantini): sui materassi / steccato alto si cade verso
@@ -14771,6 +14778,7 @@ function startJockeyFall(horse, rider, ctx) {
       F: F.clone(), L: L.clone(), sideSign,
       age: 0, grounded: false, impactDone: false, restY, u,
       pos0: pos.clone(), bordo: { prog0: horse.progress || 0, lane0: horse.lane || 0 },   // per i materassi
+      rig: armaFantinoCaduto(fallen),   // fantino-lab: corpo che rotola, arti vivi (null = fisica di prima)
     });
   } catch (e) { /* niente */ }
 }
@@ -14786,7 +14794,18 @@ function updateFallenRiders(dt) {
     const f = arr[i];
     try {
     f.age += dt;
-    if (!f.grounded) {
+    if (f.rig) {
+      // CADUTA DEL FANTINO (fantino-lab): corpo rigido che rotola sul tufo e sbatte sui
+      // materassi, con braccia, gambe e testa vive. Polvere, colpo e scossa a ogni urto vero.
+      const ev = passoFantinoCaduto(f, dt, mondoFantinoCaduto(f));
+      const k = ev ? Math.max(ev.urto, ev.muro) : 0;
+      if (k > 0.25 && (!f.ultimoColpo || f.age - f.ultimoColpo > 0.25)) {
+        f.ultimoColpo = f.age;
+        const pc = f.fis ? f.fis.c : f.pos;
+        state.cameraShake = Math.max(state.cameraShake || 0, 0.12 + 0.25 * k);
+        try { dustPuffAt(pc.x, pc.z, 3 + Math.round(6 * k)); playColpoPalchi(0.3 + 0.35 * k); } catch (e) { /* niente */ }
+      }
+    } else if (!f.grounded) {
       // ── FASE IN ARIA: parabola fisica ──────────────────────────────────────
       f.vel.y -= FALL.GRAV * f.u * step;
       f.pos.addScaledVector(f.vel, step);
@@ -14817,7 +14836,7 @@ function updateFallenRiders(dt) {
       f.pos.y = f.restY;
       f.quat.slerp(f.restQuat, clamp(step * 6, 0, 1));    // si adagia sul fianco
     }
-    fantinoControBordo(f);   // materassi di San Martino / steccato alto del Casato
+    if (!f.rig) fantinoControBordo(f);   // materassi di San Martino / steccato alto del Casato (col rig li fa passoFantinoCaduto)
     f.obj.position.copy(f.pos);
     f.obj.quaternion.copy(f.quat);
     // ── DISSOLVENZA finale poi rimozione (niente sparizione improvvisa) ─────────
@@ -14859,6 +14878,29 @@ function fantinoControBordo(f) {
     state.cameraShake = Math.max(state.cameraShake || 0, 0.3);
     try { dustPuffAt(f.pos.x, f.pos.z, 6); playColpoPalchi(0.55); } catch (e) { /* niente */ }
   }
+}
+// Il mondo per il fantino caduto (fantino-lab): quota del tufo e, nei tratti dei
+// materassi e dello steccato alto, il piano della faccia (normale verso la pista).
+// Corsia e avanzamento stimati dallo spostamento dal punto di caduta (L = sinistra del
+// cavallo = corsia −, F = avanti).
+function mondoFantinoCaduto(f) {
+  if (f.mondo) return f.mondo;
+  const lungh = track.length || 1;
+  const proietta = (x, z) => {
+    const dx = x - f.pos0.x, dz = z - f.pos0.z;
+    return { prog: f.bordo.prog0 + dx * f.F.x + dz * f.F.z, lane: f.bordo.lane0 - (dx * f.L.x + dz * f.L.z) };
+  };
+  f.mondo = {
+    suolo: (x, z) => trackHeightAt(positiveMod(proietta(x, z).prog, lungh)),
+    muro: (x, z) => {
+      if (!NARROW_READY) return null;
+      const p = proietta(x, z);
+      if (!controMaterassiOSteccatoAlto(p.prog)) return null;
+      const pen = -outerLimitAt(p.prog) - p.lane;
+      return pen > 0 ? { nx: -f.L.x, nz: -f.L.z, pen } : null;
+    },
+  };
+  return f.mondo;
 }
 function clearFallenRiders() {
   (state.fallenRiders || []).forEach((f) => { try { scene.remove(f.obj); } catch (e) { /* niente */ } });

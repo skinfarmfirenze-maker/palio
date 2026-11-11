@@ -811,6 +811,8 @@ function _aggiornaZampe(mesh, dt, cavallo) {
 //               zampe che scalciano sempre meno;
 //  · RIALZATA — negli ultimi CADUTA.rialzata s di cadutoTimer: sul petto con le zampe
 //               raccolte, su il davanti, su il dietro, muso di nuovo nel verso della pista.
+// Contro i materassi: quando la scivolata ci arriva contro il gioco segna h.cadMuro (0..1)
+// e qui il corpo sobbalza, si stacca dal fianco, gira e fa il colpo di frusta.
 // Lato: cadutoDir > 0 → sul fianco verso la corsia + (interno), < 0 → verso la corsia −
 // (esterno, i materassi). Uscita per placeHorse: h.cadVista = { roll, pitch, yaw, dx, dy,
 // dz } — angoli (ordine YXZ) e spostamento del gruppo nel riferimento della pista, così
@@ -924,6 +926,19 @@ function _aggiornaCaduta(mesh, dt, h) {
   const c = h.cad, lato = c.lato, resto = h.cadutoTimer ?? 0;
   const n = Math.max(1, Math.ceil(dt / (1 / 120))), hs = dt / n;
   let impatto = 0;
+  if (h.cadMuro && resto >= K.rialzata) {
+    // BATTE contro i materassi strisciando (il gioco segna h.cadMuro, 0..1): sobbalza,
+    // il colpo lo stacca un poco dal fianco, il treno posteriore gira, colpo di frusta.
+    const k = h.cadMuro, giro = (Math.random() < 0.5 ? -1 : 1);
+    if (!c.contatto) {            // SI IMPANCIA: il petto si ferma contro i materassi, il dietro va avanti
+      c.wth += 2.2 * k; c.wph -= lato * 0.8 * k; c.wps += giro * 0.8 * k;
+    } else {                      // già sul fianco, ci striscia contro: piccolo sobbalzo, si stacca e gira
+      c.vy = Math.max(c.vy, 0.6 * k); c.wph -= lato * 1.2 * k; c.wps += giro * 1.2 * k;
+    }
+    c.wcollo += -5 * k;
+    impatto = 0.5 + 0.5 * k;
+  }
+  h.cadMuro = 0;
   if (resto >= K.rialzata) {
     for (let i = 0; i < n; i += 1) {
       c.t += hs;
