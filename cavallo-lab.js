@@ -919,7 +919,9 @@ export const CADUTA = {
   g: 10.9,            // u/s² (1 u ≈ 0,9 m)
   sostegno: 0.18,     // s: all'inizio il dietro regge ancora metà del peso
   tuffo: 5.5,         // rad/s²: il muso va giù (finché non tocca)
-  tuffoMax: 0.75,     // rad
+  tuffoMax: 0.45,     // rad (era 0,75: a muso in giù col dietro in aria, Simone 11/11)
+  tuffoGinocchia: 0.22, // rad: da qui, se le ginocchia toccano, è a terra (le zampe cedono)
+  tuffoT: 0.5,        // s: comunque entro questo tempo, se le zampe toccano, è a terra
   rollio0: 0.6,       // rad/s: comincia a piegarsi sul fianco già nel tuffo
   rollioA: 5.0,       // rad/s²: la gravità lo rovescia
   roll: 1.5,          // rad: tutto sul fianco, zampe quasi orizzontali sul tufo
@@ -1042,7 +1044,7 @@ function _aggiornaCaduta(mesh, dt, h) {
       // ── angoli
       if (!c.contatto) {
         if (c.th < K.tuffoMax) c.wth += K.tuffo * hs;
-        else c.wth *= Math.exp(-10 * hs);               // oltre il massimo il tuffo si ferma (il collo e il petto lo reggono)
+        else { c.th = K.tuffoMax; if (c.wth > 0) c.wth = 0; }   // al massimo il tuffo si ferma: il muso non va oltre
         c.wph += lato * K.rollioA * hs;
       } else {
         // il dietro ricade: beccheggio verso ~0 con una molla smorzata (2 Hz, z 0,55)
@@ -1129,11 +1131,25 @@ function _aggiornaCaduta(mesh, dt, h) {
       if (fl[v]) { if (_rv[1] < mZ) mZ = _rv[1]; } else if (_rv[1] < mC) mC = _rv[1];
     }
     const su = Math.max(0, -(yc + mC), -(yc + mZ + K.affonda));
-    if (su > 0) { yc += su; if (resto >= K.rialzata) { c.yc += su; if (c.vy < 0) c.vy = 0; } }
+    if (su > 0) {
+      yc += su;
+      if (resto >= K.rialzata) {
+        // Se a toccare il tufo per prime sono le ZAMPE (le ginocchia piegate nel tuffo), anche
+        // quello è arrivare a terra: le gambe cedono e il corpo va giù sul fianco. Prima il
+        // contatto contava solo sul corpo e, cadendo da un lato, le zampe lo reggevano in aria
+        // a muso in giù per tutta la caduta (Simone 11/11: «non lasciarmelo appeso in aria col
+        // muso in terra»). All'inizio gli zoccoli sono a terra perché il cavallo è in piedi:
+        // conta solo a tuffo cominciato (beccheggio ≥ CADUTA.tuffoGinocchia) o dopo CADUTA.tuffoT.
+        if (!c.contatto && (c.th >= K.tuffoGinocchia || c.t >= K.tuffoT)) { impatto = Math.max(impatto, _c01(-c.vy / 6 + 0.35)); c.contatto = true; c.tC = c.t; c.wcollo = -4.5; }
+        c.yc += su; if (c.vy < 0) c.vy = 0;
+      }
+    }
   }
   // ── uscita: rotazione attorno al BARICENTRO → spostamento del gruppo
+  //    (i conti sono nelle unità del gruppo: lo spostamento va scalato come il gruppo, 1,188)
   _ruota(ps, th, ph, cc[0], cc[1], cc[2], _rv);
-  h.cadVista = { roll: ph, pitch: th, yaw: ps, dx: cc[0] - _rv[0], dy: yc - _rv[1], dz: cc[2] - _rv[2] };
+  const sc = (h.group.scale && h.group.scale.y) || 1;
+  h.cadVista = { roll: ph, pitch: th, yaw: ps, dx: (cc[0] - _rv[0]) * sc, dy: (yc - _rv[1]) * sc, dz: (cc[2] - _rv[2]) * sc };
   if (impatto) h.cadImpatto = Math.max(h.cadImpatto || 0, impatto);
   return true;
 }
