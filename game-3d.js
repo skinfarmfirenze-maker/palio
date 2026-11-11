@@ -14616,7 +14616,12 @@ function finestraCaduta(curva, lato) {
 // verso quel lato e cade dentro la sua finestra. silenzioso = niente scritta.
 function pianificaCaduta(h, curva, opz = {}) {
   if (!h || h.scosso || h.caduto || h.cadPiano) return;
-  const lato = opz.lato || (Math.random() < (curva === "sm" ? 0.8 : 0.5) ? "fuori" : "dentro");
+  // Probabilità di SCEGLIERE il lato. A San Martino i piani «dentro» si annullano più
+  // spesso (il colonnino è più difficile da raggiungere): per avere cadute EFFETTIVE
+  // circa 80/20 si sceglie «dentro» il 45% delle volte (chat Grafica, 40 palii: con
+  // 20% scelto uscivano 93/7). Da ritarare sulle misure.
+  const P_FUORI = { sm: 0.55, cas: 0.5 };
+  const lato = opz.lato || (Math.random() < P_FUORI[curva] ? "fuori" : "dentro");
   const [da, a] = finestraCaduta(curva, lato);
   // Il PUNTO esatto è a caso nella finestra (prima cadevano tutti al primo metro).
   h.cadPiano = { curva, lato, da, a, punto: da + Math.random() * (a - da), silenzioso: !!opz.silenzioso };
