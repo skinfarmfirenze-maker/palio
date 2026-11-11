@@ -14627,7 +14627,7 @@ function fantiniACavallo() {
 function triggerHorseFall(horse) {
   if (!horse || horse.caduto) return;
   if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella (non col copione)
-  triggerFall(horse);                          // il fantino è già per terra (no-op se scosso)
+  triggerFall(horse, { conCavallo: true });   // il fantino vola oltre il collo (no-op se già scosso)
   horse.caduto = true;
   horse.cadMuroFatto = false;   // potrà battere sui materassi (cavallo-lab §8)
   horse.cadutaNum = (horse.cadutaNum || 0) + 1;   // per il «un tiro per incontro» di chi gli arriva addosso
@@ -14782,14 +14782,19 @@ function startJockeyFall(horse, rider, ctx) {
     let spd = (horse.progress - (horse.prevProgress ?? horse.progress)) * 60;
     spd = clamp(spd, 0, 22); if (spd < 3) spd = 10 * u;
     const rnd = (a) => a[0] + Math.random() * (a[1] - a[0]);
+    // CADE ANCHE IL CAVALLO (fantino-lab v4): il cavallo pianta il muso, il fantino
+    // vola OLTRE IL COLLO — tutto lo slancio in avanti, spinta in alto, poco di lato.
+    const conCavallo = !!(ctx && ctx.conCavallo);
     const vel = new THREE.Vector3()
-      .addScaledVector(F, spd * FALL.FWD_FRAC)
-      .addScaledVector(side, rnd(FALL.LAT) * u)
-      .addScaledVector(new THREE.Vector3(0, 1, 0), rnd(FALL.UP) * u);
+      .addScaledVector(F, spd * (conCavallo ? 0.95 : FALL.FWD_FRAC))
+      .addScaledVector(side, rnd(FALL.LAT) * u * (conCavallo ? 0.4 : 1))
+      .addScaledVector(new THREE.Vector3(0, 1, 0), conCavallo ? 2.6 + Math.random() * 0.8 : rnd(FALL.UP) * u);
 
     // 4) VELOCITÀ ANGOLARE multi-asse: rollio verso il lato, beccheggio avanti,
     //    piccola imbardata. Ampiezze tali da fare ≤ ~mezzo/uno giro prima dell'impatto.
-    const angVel = { roll: rnd(FALL.ROLL) * sideSign, pitch: rnd(FALL.PITCH), yaw: rnd(FALL.YAW) * (Math.random() < 0.5 ? 1 : -1) };
+    const angVel = conCavallo   // capriola in avanti (testa avanti e giù), poco rollio
+      ? { roll: rnd(FALL.ROLL) * sideSign * 0.35, pitch: 4.5 + Math.random() * 2.0, yaw: rnd(FALL.YAW) * 0.5 * (Math.random() < 0.5 ? 1 : -1) }
+      : { roll: rnd(FALL.ROLL) * sideSign, pitch: rnd(FALL.PITCH), yaw: rnd(FALL.YAW) * (Math.random() < 0.5 ? 1 : -1) };
     // posa finale a terra: coricato sul FIANCO della caduta (non piatto come una tavola)
     const restQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.15, yaw, sideSign * 1.28, "YXZ"));
 
@@ -14860,8 +14865,9 @@ function updateFallenRiders(dt) {
     f.obj.position.copy(f.pos);
     f.obj.quaternion.copy(f.quat);
     // ── DISSOLVENZA finale poi rimozione (niente sparizione improvvisa) ─────────
-    if (f.age >= FALL.REST_AGE) {
-      const k = clamp((f.age - FALL.REST_AGE) / FALL.FADE, 0, 1);
+    const restAge = f.restAge || FALL.REST_AGE;   // fantino-lab v4: dopo che si è rialzato
+    if (f.age >= restAge) {
+      const k = clamp((f.age - restAge) / FALL.FADE, 0, 1);
       f.obj.traverse((o) => {
         if (o.isMesh && o.material) {
           const mats = Array.isArray(o.material) ? o.material : [o.material];

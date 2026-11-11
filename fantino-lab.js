@@ -1102,7 +1102,14 @@ export function buildFantino(contrada, opts = {}) {
 //    piano e scivola giù;
 //  · ARTI VIVI: anche (gamba + scarpa), spalle (braccia), collo (testa) su molle:
 //    in volo si sbraccia e scalcia; prima di toccare si para (mani avanti, mento giù);
-//    all'urto gli arti scattano; a terra sono molli e si allargano; fermo, resta così.
+//    all'urto gli arti scattano; a terra sono molli e si allargano;
+//  · GINOCCHIA (v4): la gamba del modello è un pezzo solo, piegato da fantino in sella;
+//    nel clone caduto diventa coscia + stinco (vertici pesati lungo la gamba), così può
+//    distendersi;
+//  · SI RIALZA (v4): fermo da un po', si mette seduto, si alza in piedi e si allontana
+//    zoppicando verso il bordo da cui è caduto (si ferma davanti ai materassi), poi
+//    resta lì in piedi finché il gioco non lo dissolve (f.restAge, prima spariva sul
+//    posto ancora sdraiato).
 // Il gioco crea il clone (startJockeyFall), lo arma con armaFantinoCaduto e a ogni frame
 // chiama passoFantinoCaduto(f, dt, mondo): mondo.suolo(x, z) → quota del tufo,
 // mondo.muro(x, z) → null o { nx, nz, pen } (normale verso la pista, quanto è dentro).
@@ -1114,9 +1121,16 @@ export const CADUTA_FANTINO = {
   muroAttrito: 0.45,       // materassi / steccato
   muroRimbalzo: 0.3,
   smorzaRotolo: 1.2,       // 1/s: a terra il rotolare si spegne
-  dorme: { v: 0.2, w: 0.4, t: 0.6 },
+  dorme: { v: 0.3, w: 0.6, t: 0.6 },
   ariaF: 3.0, ariaZ: 0.35, // molle degli arti in volo (Hz, smorzamento)
   terraF: 1.3, terraZ: 0.5,
+  // v4: si rialza
+  attesa: 1.2,             // s fermo prima di rialzarsi
+  seduto: 0.9,             // s per mettersi seduto
+  inPiedi: 1.1,            // s per alzarsi
+  cammina: 2.6,            // s al massimo che zoppica verso il bordo
+  passo: 0.75,             // u/s
+  dissolve: 3.0,           // s in piedi prima che il gioco lo dissolva
 };
 // Punti d'urto nel riferimento del corpo (prima della taglia) e baricentro.
 const _PUNTI_FANTINO = [
@@ -1140,7 +1154,18 @@ export function armaFantinoCaduto(obj) {
       anca.position.set(s * 0.12, 1.79, -0.04);
       corpo.add(anca); anca.updateMatrixWorld(true);
       anca.attach(gamba); if (scarpa) anca.attach(scarpa);
-      rig.arti.push({ o: anca, tipo: "gamba", s, x0: 0, z0: 0, x: 0, vx: 0, z: 0, vz: 0, fase: Math.random() * 6.28 });
+      const A = { o: anca, tipo: "gamba", s, x0: 0, z0: 0, x: 0, vx: 0, z: 0, vz: 0, fase: Math.random() * 6.28, est: 0, vest: 0 };
+      // GINOCCHIO: geometria propria del clone, vertici pesati lungo la gamba (uv.y = t)
+      try {
+        gamba.geometry = gamba.geometry.clone();
+        const pa = gamba.geometry.attributes.position, uv = gamba.geometry.attributes.uv;
+        const H = new THREE.Vector3(s * 0.082, 1.795, -0.068), Kn = new THREE.Vector3(s * 0.243, 1.672, 0.128), Ca = new THREE.Vector3(s * 0.268, 1.478, 0.066);
+        const coscia = Kn.clone().sub(H).normalize(), stinco = Ca.clone().sub(Kn).normalize();
+        const asse = coscia.clone().cross(stinco).normalize();
+        A.gin = { base: new Float32Array(pa.array), t: Float32Array.from({ length: pa.count }, (_, i) => uv.getY(i)), K: Kn, asse,
+                  piega: coscia.angleTo(stinco), scarpa, scarpaPos: scarpa ? scarpa.position.clone() : null, scarpaQ: scarpa ? scarpa.quaternion.clone() : null, ultimo: 0 };
+      } catch (e) { A.gin = null; }
+      rig.arti.push(A);
     }
     for (const [lato, s] of [["sx", -1], ["dx", 1]]) {
       const b = corpo.getObjectByName("f-braccio-" + lato);
@@ -1196,6 +1221,31 @@ function _urto(F, r, n, e, mu) {
   return -vn;
 }
 const _UP = new THREE.Vector3(0, 1, 0);
+const _qk = new THREE.Quaternion(), _vk = new THREE.Vector3();
+const _TK = 0.581;   // ginocchio lungo la gamba (frazione di lunghezza del percorso)
+// Distende il ginocchio: est 0 = piegato da fantino in sella, 1 = gamba dritta.
+function _ginocchio(A, est) {
+  const G = A.gin;
+  if (!G || Math.abs(est - G.ultimo) < 0.004) return;
+  G.ultimo = est;
+  const geo = A.o.children.find((c) => c.isMesh && c.geometry && c.geometry.attributes.uv && c.name.startsWith("f-gamba"));
+  if (!geo) return;
+  const pa = geo.geometry.attributes.position, a = pa.array, b = G.base, K = G.K;
+  for (let i = 0; i < G.t.length; i += 1) {
+    const w = Math.min(1, Math.max(0, (G.t[i] - (_TK - 0.07)) / 0.14)), ww = w * w * (3 - 2 * w);
+    if (ww <= 0) { a[3 * i] = b[3 * i]; a[3 * i + 1] = b[3 * i + 1]; a[3 * i + 2] = b[3 * i + 2]; continue; }
+    _qk.setFromAxisAngle(G.asse, -G.piega * est * ww);
+    _vk.set(b[3 * i] - K.x, b[3 * i + 1] - K.y, b[3 * i + 2] - K.z).applyQuaternion(_qk);
+    a[3 * i] = K.x + _vk.x; a[3 * i + 1] = K.y + _vk.y; a[3 * i + 2] = K.z + _vk.z;
+  }
+  pa.needsUpdate = true;
+  geo.geometry.computeVertexNormals();
+  if (G.scarpa && G.scarpaPos) {
+    _qk.setFromAxisAngle(G.asse, -G.piega * est);
+    G.scarpa.position.copy(G.scarpaPos).sub(K).applyQuaternion(_qk).add(K);
+    G.scarpa.quaternion.copy(_qk).multiply(G.scarpaQ);
+  }
+}
 
 export function passoFantinoCaduto(f, dt, mondo) {
   const K = CADUTA_FANTINO, rig = f.rig, o = f.obj;
@@ -1252,16 +1302,80 @@ export function passoFantinoCaduto(f, dt, mondo) {
     if (contatto && F.v.length() < K.dorme.v && F.w.length() < K.dorme.w) F.tFermo += dt; else F.tFermo = 0;
     if (F.tFermo > K.dorme.t) { F.dorme = true; F.v.set(0, 0, 0); F.w.set(0, 0, 0); }
   }
+  // ── SI RIALZA (v4): fermo da K.attesa s → seduto → in piedi → zoppica verso il bordo
+  if (f.restAge == null) f.restAge = 14;
+  if (F.dorme && !F.rialza) {
+    F.tDorme = (F.tDorme || 0) + dt;
+    if (F.tDorme > K.attesa) {
+      const dir = new THREE.Vector3();
+      if (f.L) dir.copy(f.L).multiplyScalar(f.sideSign || 1); else dir.set(0, 0, 1).applyQuaternion(F.q);
+      dir.y = 0; if (dir.lengthSq() < 1e-6) dir.set(0, 0, 1); dir.normalize();
+      const corpo = rig.corpo, tg = corpo.scale.y;
+      const anca = corpo.position.y + tg * 1.79, gamba = tg * (0.499 * 0.97 + 0.035);
+      F.rialza = { t: 0, q0: F.q.clone(), c0: F.c.clone(), dir, yaw: Math.atan2(dir.x, dir.z),
+                   hPiedi: F.scl * (gamba + (rig.c[1] - anca)), hSeduto: F.scl * tg * 0.3, cammino: 0, fermo: false };
+    }
+  }
+  let modo = null, R = F.rialza;
+  if (R) {
+    R.t += dt;
+    const suolo = mondo && mondo.suolo ? mondo.suolo(F.c.x, F.c.z) : 0;
+    // in piedi il busto da fantino (inclinato di ~30° in avanti per stare in sella) va
+    // raddrizzato: tutto il corpo indietro di 0,5 rad, le anche compensano
+    const qPiedi = new THREE.Quaternion().setFromAxisAngle(_UP, R.yaw).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.5));
+    const qSeduto = qPiedi.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.18));
+    const t1 = K.seduto, t2 = t1 + K.inPiedi;
+    const es = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+    if (R.t < t1) {
+      const k = es(R.t / t1);
+      F.q.copy(R.q0).slerp(qSeduto, k);
+      F.c.y = R.c0.y + (suolo + R.hSeduto - R.c0.y) * k;
+      modo = "seduto";
+    } else if (R.t < t2) {
+      // prima porta i piedi sotto il corpo (accovacciato), poi spinge su: il corpo sale lento all'inizio
+      const k = es((R.t - t1) / K.inPiedi);
+      F.q.copy(qSeduto).slerp(qPiedi, k);
+      F.c.y = suolo + R.hSeduto + (R.hPiedi - R.hSeduto) * k * k;
+      modo = k < 0.45 ? "accovacciato" : "piedi";
+    } else {
+      F.q.copy(qPiedi);
+      const tc = R.t - t2;
+      if (!R.fermo && tc < K.cammina) {
+        const avanti = R.dir.clone().multiplyScalar(K.passo * dt * (0.75 + 0.25 * Math.sin(tc * 2 * Math.PI * 1.3)));   // zoppica: va a strappi
+        const prova = F.c.clone().add(R.dir.clone().multiplyScalar(0.35));
+        const m = mondo && mondo.muro ? mondo.muro(prova.x, prova.z) : null;
+        if (m && m.pen > 0) R.fermo = true; else F.c.add(avanti);
+        modo = R.fermo ? "piedi" : "cammina";
+      } else { R.fermo = true; modo = "piedi"; if (!R.tFine) { R.tFine = f.age; f.restAge = f.age + K.dissolve; } }
+      F.c.y = (mondo && mondo.suolo ? mondo.suolo(F.c.x, F.c.z) : 0) + R.hPiedi + (modo === "cammina" ? 0.03 * F.scl * Math.abs(Math.sin(tc * Math.PI * 2.6)) : 0);
+    }
+  }
   // ── arti
-  const inAria = !F.toccato || F.t - F.tContatto > 0.15;
+  const inAria = !R && (!F.toccato || F.t - F.tContatto > 0.15);
   const sta = F.dorme || (!inAria && F.v.length() < 1.2);
   const vicino = inAria && F.v.y < -1.5 && F.c.y - (mondo && mondo.suolo ? mondo.suolo(F.c.x, F.c.z) : 0) < 0.9;
-  const fq = inAria ? K.ariaF : K.terraF, zz = inAria ? K.ariaZ : K.terraZ, wq = 2 * Math.PI * fq, om = 2 * Math.PI * 2.1;
+  const fq = R ? 2.2 : (inAria ? K.ariaF : K.terraF), zz = R ? 0.8 : (inAria ? K.ariaZ : K.terraZ), wq = 2 * Math.PI * fq, om = 2 * Math.PI * 2.1;
   const kick = Math.max(urto, muro);
   for (const A of rig.arti) {
-    let tx = 0, tz = 0;
+    let tx = 0, tz = 0, te = 0;
     const ph = om * F.t + A.fase;
-    if (A.tipo === "braccio") {
+    if (modo) {
+      const tc = R.t - K.seduto - K.inPiedi, pc = Math.sin(2 * Math.PI * 1.3 * tc + (A.s > 0 ? 0 : Math.PI));
+      if (A.tipo === "gamba") {
+        if (modo === "seduto") { tx = -0.56; tz = -A.s * 0.45; te = 0.9; }
+        else if (modo === "accovacciato") { tx = 0.55; tz = -A.s * 0.5; te = 0.2; }   // piedi sotto, ginocchia piegate
+        else if (modo === "piedi") { tx = 1.51; tz = -A.s * 0.74; te = 0.95; }
+        else {                                                             // zoppica: la sinistra fa il passo corto
+          const amp = A.s < 0 ? 0.18 : 0.38;
+          tx = 1.51 - amp * pc; tz = -A.s * 0.74; te = 0.95 - 0.45 * Math.max(0, -pc) * (A.s < 0 ? 0.5 : 1);
+        }
+      } else if (A.tipo === "braccio") {
+        if (modo === "seduto") { tx = 0.5; tz = A.s * 0.3; }               // mani a terra dietro
+        else if (modo === "accovacciato") { tx = -0.6; tz = A.s * 0.2; }    // mani sulle ginocchia
+        else if (A.s < 0) { tx = -1.35; tz = 0.5; }                        // si tiene il braccio sinistro al petto
+        else { tx = 0.25 + (modo === "cammina" ? 0.35 * pc : 0); tz = A.s * 0.12; }
+      } else tx = modo === "seduto" || modo === "accovacciato" ? 0.25 : 0.15;   // testa china
+    } else if (A.tipo === "braccio") {
       if (vicino) { tx = -1.25; tz = A.s * 0.35; }                                   // mani avanti: si para
       else if (inAria) { tx = -1.9 + 0.9 * Math.sin(ph); tz = A.s * (0.7 + 0.4 * Math.sin(0.7 * ph)); }
       else { tx = -0.9; tz = A.s * 1.25; }                                           // a terra, braccia larghe
@@ -1280,11 +1394,27 @@ export function passoFantinoCaduto(f, dt, mondo) {
     }
     A.o.rotation.x = A.x0 + A.x;
     if (A.tipo !== "testa") A.o.rotation.z = A.z0 + A.z;
+    if (A.tipo === "gamba" && A.gin) {
+      const we = 2 * Math.PI * 2.0;
+      for (let i = 0; i < n2; i += 1) { A.vest += (-we * we * (A.est - te) - 2 * 0.7 * we * A.vest) * h2; A.est += A.vest * h2; }
+      _ginocchio(A, Math.max(0, Math.min(1, A.est)));
+    }
   }
   // ── trasformazione dell'oggetto: il baricentro dove dice la fisica
   o.quaternion.copy(F.q);
   _a.copy(F.cO).multiplyScalar(F.scl).applyQuaternion(F.q);
   o.position.copy(F.c).sub(_a);
+  // in piedi: i piedi appoggiano davvero sul tufo (si misura dove sono le scarpe)
+  if (R && (modo === "piedi" || modo === "cammina")) {
+    o.updateMatrixWorld(true);
+    let basso = Infinity;
+    for (const A of rig.arti) if (A.gin && A.gin.scarpa) { A.gin.scarpa.getWorldPosition(_b); basso = Math.min(basso, _b.y); }
+    if (basso < Infinity) {
+      const suolo = mondo && mondo.suolo ? mondo.suolo(F.c.x, F.c.z) : 0;
+      const dy = suolo + 0.03 * F.scl - basso;
+      o.position.y += dy; F.c.y += dy;
+    }
+  }
   if (f.pos) f.pos.copy(o.position);
   if (f.quat) f.quat.copy(F.q);
   if (f.vel) f.vel.copy(F.v);
