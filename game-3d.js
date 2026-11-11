@@ -13303,7 +13303,9 @@ function resolveMossaCrowd(dt) {
         if (rk > 0) {
           const sfav = sfavoritaTra(A, B);
           const fav = sfav === A ? B : A;
-          tiraNerbata(sfav, Math.sign(fav.lane - sfav.lane) || 1, "mossa");   // la sfavorita: sempre
+          // la sfavorita AI: sempre. Il GIOCATORE no: nerba solo col suo tasto
+          // (Simone 11/11: «sono la Chiocciola e il mio fantino nerba la Tartuca da solo»).
+          if (!isHuman(sfav)) tiraNerbata(sfav, Math.sign(fav.lane - sfav.lane) || 1, "mossa");
           if (!isHuman(fav) && Math.random() < dt * (0.5 + (fav.aggression || 0.5) * 1.2)) {
             tiraNerbata(fav, Math.sign(sfav.lane - fav.lane) || 1, "mossa");   // il favorito AI: si difende
           }
