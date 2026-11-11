@@ -827,12 +827,21 @@ const _bmp = (t, a, b) => { if (t <= a || t >= b) return 0; const x = (t - a) / 
 function _scatto(Z, h, dt) {
   if (!h) return null;
   // ── trigger
-  const via = h.launchRamp != null && h.launchRamp < 0.08 && !h.launching;
-  if (h.launchRamp != null && h.launchRamp > 0.5) h._scattoVia = false;
+  // IL VIA: il gioco conta i via di ogni cavallo (h.viaN, preparaPartenza; anche la
+  // mossa falsa). Prima lo si capiva dalla rampa quasi a zero, ma dalle partenze in
+  // tre classi la rampa parte già da 0,25–0,45 e lo scatto non partiva più. Senza
+  // viaN (gioco vecchio) resta il vecchio criterio. Chi aspetta (distratto, ritardo)
+  // scatta quando parte davvero (!launching).
+  let via;
+  if (h.viaN != null) via = h.viaN !== h._viaVisto && !h.launching;
+  else {
+    via = h.launchRamp != null && h.launchRamp < 0.08 && !h.launching && !h._scattoVia;
+    if (h.launchRamp != null && h.launchRamp > 0.5) h._scattoVia = false;
+  }
   let nuovo = null;
   if ((h.scattoT || 0) > 0.42 && !(h._sc && h._sc.tipo === "canape" && h._sc.t < 0.6)) nuovo = "canape";
-  else if (via && !h._scattoVia) {
-    h._scattoVia = true;
+  else if (via) {
+    h._scattoVia = true; h._viaVisto = h.viaN;
     nuovo = h.fiancaTipo === "perfetta" ? "perfetta" : h.fiancaTipo === "anticipo" ? "anticipo" : (h._eraDistratto ? "sorpreso" : "normale");
   } else if (h.fiancaTipo === "anticipo" && h._sc && h._sc.tipo !== "anticipo" && h._sc.tipo !== "perfetta" && h._sc.t > 0.2 && !h._anticipoVisto) {
     nuovo = "anticipo"; h._anticipoVisto = true;

@@ -10788,6 +10788,7 @@ state.horses.forEach((horse) => {
     // la velocità piena GRADUALMENTE in 4 secondi (launchRamp 0→1 lineare).
     horse.launchRamp = 0;
     horse.rampaVel = 1 / 4;   // la classe di partenza la decide fiancaAlVia
+    horse.viaN = (horse.viaN || 0) + 1;   // cavallo-lab §9: c'è stato un via (anche della mossa falsa)
     // Corsia di partenza: ogni cavallo va dritto dalla propria posizione di mossa
     // per qualche secondo prima di cercare la traiettoria ideale.
     horse.startLane = horse.lane;
