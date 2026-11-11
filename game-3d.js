@@ -9197,7 +9197,9 @@ function playerThirdLapHandicap(horse) {
   // Handicap giocatore SEMPRE: −0,01 di velocità (era −0,02; Simone 12/11), oltre al deficit-stamina.
   // (Tolti il 12/11 su richiesta di Simone gli extra dell'ULTIMO GIRO: per fascia —
   // bono −0,03, bombolone −0,02 — e per andatura — 4 → −0,02, 5 → −0,03.)
-  const h = 0.01;
+  // Al TERZO giro l'handicap sale a −0,02 (Simone 12/11), non sommato: −1% nei primi due, −2% nel terzo.
+  const terzoGiro = (horse.progress || 0) >= track.length * (FINISH_LAPS - 1);
+  const h = terzoGiro ? 0.02 : 0.01;
   return 1 - h;
 }
 
