@@ -3525,7 +3525,7 @@ function updateHorseGlb(dt) {
     // ZAMPE AL PASSO (cavallo-lab §7): sotto ~6 u/s le zampe le mette il rig
     // (fermo dritto, passo, trotto, sfumatura verso il galoppo). Se lo fa, i pesi
     // del galoppo sono già usati e azzerati: la scala qui sotto non serve.
-    const zampe = r.morphMesh ? aggiornaZampe(r.morphMesh, dt) : false;
+    const zampe = r.morphMesh ? aggiornaZampe(r.morphMesh, dt, r.horse) : false;
     // AMPIEZZA: fra i canapi le zampe si alzano POCO (0.32 = passo accennato, non
     // galoppo in aria); in corsa arriva al 100%. Scalo i pesi dopo il mixer, così
     // il cavallo si muove ma resta coi piedi a terra al canapo.
@@ -12314,7 +12314,7 @@ function updateMossa(dt, time) {
   // Reazione visiva a spinte e urti (cavallo-lab §6): dopo la calca, prima di placeHorse.
   state.horses.forEach((h) => {
     aggiornaReazione(h, dt,
-      (h.called && !h.entering && !h.isRincorsa) ? { dLat: h._dLat || 0, dProg: h._dProg || 0, coppia: h._coppia || 0 } : null);
+      (h.called && !h.entering && !h.isRincorsa) ? { dLat: h._dLat || 0, dProg: h._dProg || 0, coppia: h._coppia || 0, muso: h._muso || null } : null);
     // TETTO al ritardo di vista: un cavallo incastrato viene respinto dalla calca
     // un po' a ogni fotogramma e il suo obiettivo lo riporta avanti; la respinta
     // entrava nel «debito», il recupero no → il debito cresceva senza fine e il
@@ -13126,7 +13126,7 @@ function resolveMossaCrowd(dt) {
   // (l'ingombro non è più fisso: lo calcola mossaFootprint in base alla rotazione)
   // REAZIONE (cavallo-lab §6): quanto la calca sposta ogni cavallo in questo frame e
   // dove lo colpisce. Solo misura: non cambia niente della calca.
-  horses.forEach((h) => { h._laneCalca = h.lane; h._progCalca = h.progress; h._coppia = 0; });
+  horses.forEach((h) => { h._laneCalca = h.lane; h._progCalca = h.progress; h._coppia = 0; h._muso = null; });
 
   // 1. MURO DEL CANAPO: limite RIGIDO, non una spinta. Prima era una repulsione
   //    proporzionale applicata ogni frame con buffer 1.3, mentre la posta punta a
@@ -13207,6 +13207,10 @@ function resolveMossaCrowd(dt) {
         const premeFront = isHuman(front) ? (controlsLateral() || controlsTurn() || 0) : (front.shoveDir || 0);
         const backSpinge = premeBack && Math.sign(premeBack) === Math.sign(front.lane - back.lane);
         const frontSpinge = premeFront && Math.sign(premeFront) === Math.sign(back.lane - front.lane);
+        // MUSO ADDOSSO (cavallo-lab §6/§7): chi spinge di proposito porta il muso
+        // sul vicino, come per dargli noia (Simone 11/11). Solo a vista.
+        if (backSpinge) back._muso = front;
+        if (frontSpinge) front._muso = back;
         // Il GIOCATORE che spinge con DUE comandi nello stesso verso (Q/P di lato +
         // A/L girandosi contro: es. P+L) spinge PIÙ FORTE che con uno solo (Simone
         // 9/11): ×SPINTA_DOPPIA invece di ×3.
