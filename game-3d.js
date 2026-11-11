@@ -6479,15 +6479,17 @@ function openModeChooser() {
       }));
     }
     // ── PROVA DIRETTA (solo su /creator, Simone 11/11): al posto del «corri da
-    // solo». Un palio subito, senza estrazione/Tratta/fantini/accordi: 10 Contrade
-    // tutte con un BONO, e il giocatore alla TERZA posta fra i canapi. Per provare.
+    // solo». DRITTI ALLA MOSSA: niente scelta della Contrada (si corre con l'ultima
+    // scelta), né estrazione/Tratta/fantini/accordi. 10 Contrade con boni (e
+    // bomboloni se i boni non bastano), il giocatore alla TERZA posta fra i canapi.
     if (suCreator()) {
-      const c = col("Prova diretta", "Subito ai canapi: 10 cavalli boni, tu alla terza posta. Non conta per albo e statistiche.", "#6b4e2e", () => {
+      const c = col("Prova diretta", "Subito ai canapi: boni (e bomboloni), tu alla terza posta. Non conta per albo e statistiche.", "#6b4e2e", () => {
         state.soloAllenamento = false;
         state.provaDiretta = true;
         state.teleGioco = "prova";
         resetCampaign();
-        closeCampaignOverlay(); openSelectScreen();
+        if (!state.selectedContrada) state.selectedContrada = CONTRADE[0];
+        closeCampaignOverlay(); startMossa();   // dritti alla mossa
       });
       // Le traiettorie «da solo» già registrate restano: si possono ancora azzerare.
       const fatti = caricaTracceSolo().length;
@@ -9961,18 +9963,18 @@ function fillTrattaPanelRow(p) {
 // PROVA DIRETTA: a ogni Contrada un BONO diverso (dal roster dell'epoca attiva,
 // con le sue statistiche) e un fantino, senza Tratta né scelta del fantino.
 function preparaProvaDiretta() {
-  // Prima i boni dell'epoca attiva; se non bastano per 10 (oggi sono 7), si
-  // aggiungono quelli dell'altra epoca: niente cavalli doppi.
+  // Prima i boni dell'epoca attiva; se non bastano per 10 (oggi sono 7) si
+  // completa coi BOMBOLONI (Simone 11/11). Niente cavalli doppi.
   const boni = shuffleInPlace(TRATTA_HORSE_NAMES.filter((n) => (HORSE_ROSTER[n] || {}).tier === "bono"));
   if (boni.length < state.horses.length) {
-    shuffleInPlace(Object.keys(ROSTER_CAVALLI).filter((n) => ROSTER_CAVALLI[n].tier === "bono" && !boni.includes(n)))
+    shuffleInPlace(TRATTA_HORSE_NAMES.filter((n) => (HORSE_ROSTER[n] || {}).tier === "bombolone"))
       .forEach((n) => boni.push(n));
   }
   state.horses.forEach((h, i) => {
     const nome = boni[i % Math.max(1, boni.length)];
     const r = HORSE_ROSTER[nome] || ROSTER_CAVALLI[nome] || { tier: "bono", stamina: 85 };
     h.horseName = nome || ("Barbero " + (i + 1));
-    h.horseTier = "bono";
+    h.horseTier = r.tier || "bono";
     h.staminaMax = r.stamina || 85; h.stamina = h.staminaMax;
     h.nervousnessBase = undefined;
     h.turnsStat = r.turns || 3; h.potenza = r.potenza || 3; h.calma = r.calma || 3;
