@@ -4774,22 +4774,19 @@ function recordPalioRun() {
   // ── SOVVENZIONI ALLE CONTRADE (valgono in OGNI modalità, paliate veloci
   // comprese — earnBudgetAll scrive direttamente sul tesoro persistente):
   //  · ogni 2 palii giocati → +50 a tutte;
-  //  · ogni 20 palii giocati → +800 a tutte (elargizione grande).
+  //  · ogni 20 palii giocati → +800 a tutte (elargizione grande);
+  //  · OGNI palio → +500 a tutte (Simone 11/11).
+  // Un solo messaggio con la somma, così non si coprono a vicenda.
   try {
+    let tot = PALIO_DENARI_OGNI_PALIO;
     let n2 = (parseInt(localStorage.getItem("palio.bonus2") || "0", 10) || 0) + 1;
-    if (n2 >= 2) {
-      n2 = 0;
-      earnBudgetAll(50);
-      if (typeof showMessage === "function") showMessage("Sovvenzione: +50 denari a tutte le contrade", 2.2, "good");
-    }
+    if (n2 >= 2) { n2 = 0; tot += 50; }
     localStorage.setItem("palio.bonus2", String(n2));
     let n = (parseInt(localStorage.getItem("palio.bonus20") || "0", 10) || 0) + 1;
-    if (n >= 20) {
-      n = 0;
-      earnBudgetAll(800);
-      if (typeof showMessage === "function") showMessage("Elargizione della città: +800 denari a tutte le contrade", 2.8, "good");
-    }
+    if (n >= 20) { n = 0; tot += 800; }
     localStorage.setItem("palio.bonus20", String(n));
+    earnBudgetAll(tot);
+    if (typeof showMessage === "function") showMessage(`Sovvenzione: +${tot} denari a tutte le contrade`, 2.4, "good");
   } catch (e) { /* niente */ }
   // Il +1 ai palii dell'Albo GLOBALE non parte piu' da qui: viaggia con le righe
   // dei dati corse (teleRiga → teleSalva sul server), a gruppi di 3 palii. Prima
@@ -6581,6 +6578,8 @@ function budgetStoreKey() {
   try { const a = JSON.parse(localStorage.getItem(ACCOUNT_KEY)); mail = (a && a.email) || ""; } catch (e) { mail = ""; }
   return "palio.budgets.v1" + (mail ? ":" + mail.trim().toLowerCase() : ":ospite");
 }
+const PALIO_DENARI_OGNI_PALIO = 500;    // a tutte le Contrade, a ogni palio (Simone 11/11)
+const REGALO_DENARI_UNA_TANTUM = 5000;  // una volta sola, ai tesori già esistenti (Simone 11/11)
 function loadPersistentBudgets() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(budgetStoreKey())) || {}; } catch (e) { saved = {}; }
@@ -6594,6 +6593,19 @@ function loadPersistentBudgets() {
     const v = Number(saved[c.id]);
     budgets[c.id] = Number.isFinite(v) ? Math.max(0, Math.round(v)) : budgetIniziale();
   });
+  // REGALO UNA TANTUM (Simone 11/11): +5000 a tutte le Contrade dei tesori GIÀ esistenti,
+  // una volta sola per account (segno salvato accanto al tesoro). Chi inizia dopo parte
+  // dal capitale normale.
+  try {
+    const segno = budgetStoreKey() + ":regalo5000";
+    if (!localStorage.getItem(segno)) {
+      if (Object.keys(saved).length) {
+        CONTRADE.forEach((c) => { budgets[c.id] += REGALO_DENARI_UNA_TANTUM; });
+        localStorage.setItem(budgetStoreKey(), JSON.stringify(budgets));
+      }
+      localStorage.setItem(segno, "1");
+    }
+  } catch (e) { /* storage disabilitato: niente regalo, niente danni */ }
   return budgets;
 }
 function savePersistentBudgets(budgets) {

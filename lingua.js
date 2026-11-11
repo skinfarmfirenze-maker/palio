@@ -291,6 +291,7 @@ export const MODELLI = [
   [/^MAXI CADUTA in curva: (.+) e (.+) a terra!$/, "MASSIVE FALL on the bend: $1 and $2 are down!"],
   // pannelli della campagna
   [/^Contrada (.+) · Budget (\d+) denari$/, "Contrada $1 · Budget $2 denari"],
+  [/^Sovvenzione: \+(\d+) denari a tutte le contrade$/, "Subsidy: +$1 denari to every Contrada"],
   [/^Capitano (.+) · Contrada (.+)$/, "Capitano $1 · Contrada $2"],
   [/^Accordo · (\d+)$/, "Deal · $1"],
   [/^Proponi · (\d+)$/, "Offer · $1"],
