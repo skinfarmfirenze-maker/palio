@@ -4713,96 +4713,17 @@ function normalizeAlbo(a) {
   a.totalePalii = Number(a.totalePalii) || 0;   // totale palii corsi da tutti (globale)
   return a;
 }
-// ── FRENI PROVVISORI GLOBALI (condivisi fra TUTTI i giocatori) ───────────────
-// Ogni freno resta attivo finché il CONTATORE GLOBALE dei palii corsi (totalePalii,
-// condiviso via server) non raggiunge la soglia di fine. Baseline = ~200 palii
-// globali al momento dell'attivazione, + la durata richiesta. Non è per-dispositivo:
-// tutti i giocatori vedono lo stesso stato perché leggono lo stesso contatore.
-const FRENI_END = {
-  tartucaOcaTorre: 240,   // 200 + 40: Tartuca/Oca/Torre solo brenne o boni  (scaduto)
-  giraffa: 260,           // 200 + 60: Giraffa solo boni  (scaduto)
-  tempestaFall: 210,      // 200 + 10: Tempesta cade a San Martino  (scaduto)
-  gridoNervoso: 250,      // 200 + 50: il cavallo di Grido +50% nervoso  (scaduto)
-  boniQuattro: 700,       // Tartuca/Lupa/Bruco/Selva solo boni, fino al palio 700
-  istriceBomboloni: 700,  // Istrice solo bomboloni, fino al palio 700
-  torreBrenna: 700,       // Torre solo brenne, fino al palio 700
-  brioStamina: 704,       // se corre Brio, +10 stamina al 3° giro
-  gridoFall: 700,         // Grido cade (a San Martino), fino al palio 700
-  tartucaFall: 630,       // Tartuca guidata da AI cade a San Martino, fino al palio 630
-  giraffaFall: 880,       // Giraffa guidata da AI cade al Casato, fino al palio 880
-  istriceStamina: 720,    // Istrice guidata da AI: +10 stamina al 3° giro, fino al palio 720
-  dragoSelvaFall: 1396,   // Drago e Selva guidate da AI: i cavalli cadono (San Martino), fino al palio 1396
-  istriceNoFall: 1696,    // Istrice guidata da AI NON cade (immune), fino al palio 1696
-  // ── SOLO I FANTINI CADONO ──────────────────────────────────────────────
-  // Per MILLE palii da adesso il cavallo non va mai a terra: cade il fantino e
-  // il cavallo prosegue scosso. Il contatore globale era a 9374 quando la regola
-  // e' stata messa, quindi si spegne da sola al palio 10374 e le cadute tornano
-  // com'erano — cavalli a terra e maxi-cadute comprese. Nessuno deve fare niente.
-  soloFantiniCadono: 0,   // SPENTO (Simone 11/11): ora cadono anche i cavalli, 1 caduta su 3
-  // ── PANTERA E AQUILA DA BOMBOLONE ──────────────────────────────────
-  // Per i PROSSIMI 5 palii Pantera e Aquila, quando escono nel lotto,
-  // corrono da bomboloni. Il contatore globale era a 9734 quando la regola
-  // e' stata messa, quindi si spegne da sola al palio 9739. ATTENZIONE: il
-  // contatore e' GLOBALE, conta i palii di tutti — non solo i tuoi.
-  panteraAquilaBomboloni: 9739,
-};
-function palliGlobali() {
-  try { return Number((loadVictoryAlbo() || {}).totalePalii) || 0; } catch (e) { return 0; }
+// REGOLE SILENZIOSE TOLTE (Simone 11/11, «elimina tutte le regole silenziose»):
+// freni a contatore globale (FRENI_END/frenoAttivo/frenoRange), Bruco che cade,
+// Istrice bombolone, bomboloni solo a chi ha una rivale, AI più cattive col
+// giocatore (molestatore), velocità extra nascosta per gli accordi. Le vecchie
+// chiavi del localStorage si cancellano all'avvio (vedi pulisciChiaviSilenziose).
+function pulisciChiaviSilenziose() {
+  ["palio.brucoFallBase", "palio.istriceBombBase", "palio.bombRivalBase"].forEach((k) => {
+    try { localStorage.removeItem(k); } catch (e) { /* niente */ }
+  });
 }
-// FRENO SILENZIOSO su Bruco (AI): attivo per i PROSSIMI 1000 palii da quando parte
-// questo codice. Baseline catturata al primo avvio (sul contatore globale dei palii).
-function brucoFallActive() {
-  const cur = palliGlobali();
-  let base;
-  try { base = parseInt(localStorage.getItem("palio.brucoFallBase") || "", 10); } catch (e) { base = NaN; }
-  if (!Number.isFinite(base)) {
-    base = cur;
-    try { localStorage.setItem("palio.brucoFallBase", String(base)); } catch (e) { /* niente */ }
-  }
-  return cur >= base && cur < base + 1000;
-}
-// AI più CATTIVE verso il GIOCATORE che corre — le rivali lo nerbano/gli vengono
-// addosso e MOLTE PIÙ contrade lo parano per non farlo vincere. Attivo FINO al
-// palio 9000 (contatore globale); cur>0 così offline (contatore ignoto) non frena.
-function aggroVsPlayerActive() {
-  const cur = palliGlobali();
-  return cur > 0 && cur < 9000;
-}
-// FINESTRA 40 palii: all'ISTRICE tocca un BOMBOLONE alla Tratta (richiesta utente).
-function istriceBomboloneActive() {
-  const cur = palliGlobali();
-  let base;
-  try { base = parseInt(localStorage.getItem("palio.istriceBombBase") || "", 10); } catch (e) { base = NaN; }
-  if (!Number.isFinite(base)) {
-    base = cur;
-    try { localStorage.setItem("palio.istriceBombBase", String(base)); } catch (e) { /* niente */ }
-  }
-  return cur >= base && cur < base + 40;
-}
-// FINESTRA 1800 palii: i BOMBOLONI escono solo alle Contrade che hanno una rivale
-// (Bruco, Drago, Giraffa, Selva non ne hanno → niente bombolone in questa finestra).
-function bomboloneRivalsOnlyActive() {
-  const cur = palliGlobali();
-  let base;
-  try { base = parseInt(localStorage.getItem("palio.bombRivalBase") || "", 10); } catch (e) { base = NaN; }
-  if (!Number.isFinite(base)) {
-    base = cur;
-    try { localStorage.setItem("palio.bombRivalBase", String(base)); } catch (e) { /* niente */ }
-  }
-  return cur >= base && cur < base + 1800;
-}
-function frenoAttivo(key) {
-  const end = FRENI_END[key];
-  if (end == null) return false;
-  const cur = palliGlobali();
-  return cur > 0 && cur < end;   // cur>0: se il conteggio globale non è noto, non frenare
-}
-// Freno a FINESTRA globale [start, end): attivo solo mentre il contatore globale
-// dei palii sta nell'intervallo. Usato per gli handicap "prima X, poi Y".
-function frenoRange(start, end) {
-  const cur = palliGlobali();
-  return cur > 0 && cur >= start && cur < end;
-}
+pulisciChiaviSilenziose();
 
 // SHUFFLE BAG delle poste del giocatore: garantisce che in ogni blocco di 20 palii
 // gli capitino TUTTE le n posizioni al canapo (ogni posizione ×2), in ordine casuale.
@@ -8599,44 +8520,6 @@ function confirmSceltaCavalli() {
 // fila col Palazzo alle spalle.
 const TRATTA_ROW_LANE = -(TRACK_HALF_WIDTH - 3.4);  // fila sul lato del Palazzo
 
-// FRENI PROVVISORI sulle fasce: forza certe Contrade (se in gara e col freno attivo)
-// a ricevere solo certe fasce, scambiando i cavalli già assegnati con quelli di
-// un'altra Contrada, senza violare gli altri vincoli.
-function enforceTierFreni(assign) {
-  const constraints = {};
-  if (frenoAttivo("tartucaOcaTorre")) ["tartuca", "oca", "torre"].forEach((id) => { constraints[id] = ["brenna", "bono"]; });
-  if (frenoAttivo("giraffa")) constraints.giraffa = ["bono"];
-  if (frenoAttivo("boniQuattro")) ["tartuca", "lupa", "bruco", "selva"].forEach((id) => { constraints[id] = ["bono"]; });
-  if (frenoAttivo("istriceBomboloni")) constraints.istrice = ["bombolone"];
-  if (frenoAttivo("torreBrenna")) constraints.torre = ["brenna"];
-  // Chiocciola + Giraffa: prima SOLO BRENNE (504→524), poi SOLO BONI (524→700).
-  if (frenoRange(504, 524)) ["chiocciola", "giraffa"].forEach((id) => { constraints[id] = ["brenna"]; });
-  else if (frenoRange(524, 700)) ["chiocciola", "giraffa"].forEach((id) => { constraints[id] = ["bono"]; });
-  if (!Object.keys(constraints).length) return;
-  // Si legge SEMPRE l'abbinamento ATTUALE (assign.get), non una fotografia
-  // presa all'inizio: con la fotografia, dopo il primo scambio i successivi
-  // usavano cavalli gia' passati di mano e lo STESSO cavallo finiva a due
-  // Contrade (visto: "Galleggiante" due volte fra i dieci).
-  const entranti = [...assign.keys()];
-  for (const entrant of entranti) {
-    const drawn = assign.get(entrant);
-    const allowed = constraints[entrant.id];
-    if (!allowed || allowed.indexOf(drawn.tier) >= 0) continue;   // già ok
-    for (const other of entranti) {
-      const otherDrawn = assign.get(other);
-      if (other === entrant) continue;
-      if (allowed.indexOf(otherDrawn.tier) < 0) continue;         // il suo cavallo deve andarmi bene
-      const otherAllowed = constraints[other.id];
-      if (otherAllowed && otherAllowed.indexOf(drawn.tier) < 0) continue;   // il mio non deve violarlo
-      assign.set(entrant, otherDrawn);
-      assign.set(other, drawn);
-      break;
-    }
-  }
-}
-
-// Avvio della TRATTA: crea gli entranti, sorteggia gli abbinamenti, poi la
-// cerimonia 3D in Piazza (fila dei cavalli, due urne, bambino che estrae).
 function beginTratta() {
   ensureAudio();
   if (state.audio.ctx && state.audio.ctx.state === "suspended") state.audio.ctx.resume();
@@ -8677,15 +8560,9 @@ function beginTratta() {
     const regina = shuffleInPlace(running.slice()).sort((a, b) => (alboC[b.id] || 0) - (alboC[a.id] || 0))[0];
     if (regina && brennaPool.length) assign.set(regina, brennaPool.shift());
   }
-  // FINESTRA 40 palii: all'ISTRICE va un BOMBOLONE vero, preso dal pool estratto.
-  if (istriceBomboloneActive()) {
-    const istr = running.find((h) => h.id === "istrice");
-    if (istr && !assign.has(istr) && bombPool.length) assign.set(istr, bombPool.shift());
-  }
   // Tutte le altre (e la regina negli altri 3 palii su 4): pescano a caso.
   const leftovers = shuffleInPlace([...restPool, ...brennaPool, ...bombPool]);
   running.forEach((entrant) => { if (!assign.has(entrant)) assign.set(entrant, leftovers.shift()); });
-  enforceTierFreni(assign);   // freni provvisori: Tartuca/Oca/Torre (no bomboloni), Giraffa (solo boni)
   // Abbinamento fatto; l'ORDINE di estrazione (rivelazione) è casuale.
   const pairings = shuffleInPlace(state.horses.slice()).map((entrant) => {
     const drawn = assign.get(entrant);
@@ -8693,24 +8570,8 @@ function beginTratta() {
     entrant.horseName = drawn.horseName;
     applyMantoFisso(entrant);             // manto fisso per certi barberi (bianco/nero/grigio)
     entrant.horseTier = drawn.tier;       // fascia (brenna/bono/bombolone)
-    // FINESTRA 1800 palii: bombolone SOLO a chi ha una rivale → le altre lo corrono da bono.
-    if (bomboloneRivalsOnlyActive() && entrant.horseTier === "bombolone" && !topRivalId(entrant.id)) {
-      entrant.horseTier = "bono";
-    }
     entrant.staminaMax = drawn.stamina;   // la qualità del cavallo sorteggiato conta in gara
     entrant.stamina = drawn.stamina;
-    // FINESTRA 40 palii: l'ISTRICE corre comunque da bombolone (se il pool era vuoto,
-    // promuove il cavallo pescato e gli dà fiato da cavallone). Solo su entrant.
-    if (entrant.id === "istrice" && istriceBomboloneActive()) {
-      entrant.horseTier = "bombolone";
-      if (entrant.staminaMax < 92) { entrant.staminaMax = 92 + Math.floor(Math.random() * 9); entrant.stamina = entrant.staminaMax; }
-    }
-    // FINESTRA 5 palii: Pantera e Aquila corrono da bomboloni (col fiato che
-    // serve, se il cavallo pescato ne aveva poco).
-    if ((entrant.id === "pantera" || entrant.id === "aquila") && frenoAttivo("panteraAquilaBomboloni")) {
-      entrant.horseTier = "bombolone";
-      if (entrant.staminaMax < 92) { entrant.staminaMax = 92 + Math.floor(Math.random() * 9); entrant.stamina = entrant.staminaMax; }
-    }
     // Statistiche FISSE del barbero (dal roster).
     entrant.nervousnessBase = undefined;  // ricattura la base sotto (dalla calma)
     entrant.turnsStat = drawn.turns || 3;             // 1 = si gira subito · 5 = regge
@@ -9394,28 +9255,6 @@ function lastBoostMult(horse) {
   if (gap <= LEADER_GAP_SOFT) return 1;
   const t = clamp((gap - LEADER_GAP_SOFT) / (LEADER_GAP_MAX - LEADER_GAP_SOFT), 0, 1);
   return lerp(1, LAST_BOOST_CEIL, t);
-}
-
-// TIP NASCOSTA (silenziosa, tutti i palii): ogni contrada ha un mini-acceleratore
-// proporzionale al NUMERO DI ACCORDI stretti (con contrade e con fantini). Lineare:
-// 5 accordi = spinta 5× di chi ne ha 1. Non segnalato ai giocatori.
-// K=0.6% per accordo, TETTO +3%: sempre SOTTO un gradino di fascia (bono→bombolone
-// +4%, brenna→bono +5.3%), così la fascia resta più decisiva degli accordi. Il tetto
-// scatta a 5 accordi → 1→5 resta lineare (5 accordi = 5× di 1), poi si stabilizza.
-const ACCORDI_SPEED_K = 0.006;
-const ACCORDI_SPEED_CAP = 0.03;
-function accordiCount(cmp, id) {
-  if (!cmp || !id) return 0;
-  let n = 0;
-  (cmp.accordi || []).forEach((a) => { if (a.helper === id || a.beneficiary === id || a.sponsor === id) n += 1; });
-  const cor = cmp.corrupted || {};
-  Object.keys(cor).forEach((hid) => { if (cor[hid] === id) n += 1; });   // fantini corrotti pagati da lei
-  return n;
-}
-function accordiSpeedMult(horse) {
-  const cmp = state.campaign;
-  if (!cmp || !cmp.active || !horse || horse.isRincorsa) return 1;
-  return 1 + Math.min(ACCORDI_SPEED_CAP, ACCORDI_SPEED_K * accordiCount(cmp, horse.id));
 }
 
 function beginSceltaFantino() {
@@ -10210,10 +10049,6 @@ function startMossa(fromTratta = false) {
     // RECUPERO, non sul punto di partenza.
     // Da qui in poi il valore non è più ancorato: sale con le botte e scende da solo.
     if (horse.nervousnessBase === undefined) horse.nervousnessBase = NERV_BASE_BY_CALMA[horse.calma] ?? 0.50;
-    // FRENO PROVVISORIO: nei prossimi 50 palii il cavallo di GRIDO è +50% nervoso.
-    if (horse.jockey && horse.jockey.nick === "Grido" && frenoAttivo("gridoNervoso")) {
-      horse.nervousnessBase = clamp(horse.nervousnessBase * 1.5, 0, 1);
-    }
     horse.nervousness = horse.nervousnessBase;
     horse.nervousnessCurrent = horse.nervousness;
     horse.rincorsaSpeed = 0;
@@ -10492,25 +10327,6 @@ function startMossa(fromTratta = false) {
       me.soldSpin = false;                       // forzatura a girarsi: la accende la raffica
       me.soldBurst = 0;
       me.soldNext = 12 + Math.random() * 18;     // prima raffica dopo 12-30s di tensione
-    }
-    // ── FINESTRA AGGRO (prossimi 100 palii): AI più cattive verso il GIOCATORE che corre.
-    if (playing && playerId && aggroVsPlayerActive()) {
-      // 1) La/le rivale/i del giocatore lo NERBANO e gli vengono ADDOSSO (vendetta
-      //    diretta, oltre il cap dei 2 alleati).
-      state.horses.forEach((h) => {
-        if (h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
-        if (rivalIntensity(playerId, h.id) > 0 && !h.vendettaPending && h.vendettaState !== "fatto") {
-          h.vendettaPending = true; h.vendettaTargetId = playerId; h.allyTargetId = playerId; h.allyHelp = true;
-        }
-      });
-      // 2) MOLTE PIÙ contrade PARANO il giocatore per non farlo vincere: fino a 3 in
-      //    più, fra quelle SENZA incarico, gli vanno DAVANTI a bloccarlo.
-      let extraPara = 0;
-      state.horses.forEach((h) => {
-        if (extraPara >= 3 || h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
-        if (h.paraInRace || h.allyTargetId || h.allyBeneficiaryId) return;   // già con un incarico
-        h.paraInRace = playerId; h.allyTargetId = playerId; h.allyHelp = true; extraPara += 1;
-      });
     }
   }
 
@@ -10954,10 +10770,6 @@ function releaseRace() {
   avviaCopioneCadute();               // le cadute di questo palio, dal ciclo di 10
   state.smLarghe = null;
   state.horses.forEach((h) => { h.cadPiano = null; h.curvaCadutaPrima = null; h.cadutaLato = null; });
-  state.tempestaFellDone = false;   // guardia per la caduta provvisoria di Tempesta a San Martino
-  state.gridoFellDone = false;      // idem per Grido
-  state.tartucaFellDone = false;    // idem per la Tartuca (AI, San Martino)
-  state.giraffaFellDone = false;    // idem per la Giraffa (AI, Casato)
 
 
   state.cameraShake = 0.05;
@@ -13673,7 +13485,7 @@ function updatePlayer(dt, time) {
   const prevLane = player.lane;
   // La strada percorsa diventa progress secondo la corsia in cui ti trovi: cosi'
   // il cavallo si muove alla velocita' che hai scelto anche attaccato ai colonnini.
-  player.progress += travel * alongTrack * progressPerStrada(sample, player.lane) * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * accordiSpeedMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
+  player.progress += travel * alongTrack * progressPerStrada(sample, player.lane) * jkTerzoMult(player) * tierSpeedMult(player) * (player.balanceMult || 1) * (player.scosso ? SCOSSO_MULT : 1) * (player.cadutoMult ?? 1) * nerbSlowMult(player) * leaderBrakeMult(player) * lastBoostMult(player) * playerThirdLapHandicap(player) * playerPositionHandicap(player) * mossaSpeedMod(player) * playerFirstLapMult(player) * ultime3Mult(player);
   player.lane += travel * acrossTrack;
   player.laneVelocity = (player.lane - prevLane) / Math.max(dt, 0.001);
 
@@ -13768,22 +13580,7 @@ function updateAiHorse(horse, dt, time) {
   // all'AGGRESSIVITÀ del fantino) frusta un cavallo accanto per rallentarlo —
   // molto più spesso se è un RIVALE. Stessa arma/regole del giocatore.
   if (state.mode === "race" && puoNerbare(horse) && (horse.nerbate ?? 0) > 0 && (horse.nerbataCd || 0) <= 0) {
-    // ── MOLESTATORE (fino a palio 9000): quando è ACCANTO al GIOCATORE parte una
-    // RAFFICA di 3-4 nerbate di fila (una a ogni ricarica), soprattutto la RIVALE.
-    horse.harassCd = Math.max(0, (horse.harassCd || 0) - dt);
-    const plAccanto = player && !player.finishTime && horse !== player && !player.scosso && !player.caduto
-      && Math.abs((player.progress || 0) - (horse.progress || 0)) < 3.2
-      && Math.abs((player.lane || 0) - (horse.lane || 0)) < 3.4;
-    if (plAccanto && aggroVsPlayerActive() && (horse.harassLeft || 0) <= 0 && (horse.harassCd || 0) <= 0 && !horse.friendlyToPlayer) {
-      const vsRiv = rivalIntensity(horse.id, player.id) > 0 || rivalIntensity(player.id, horse.id) > 0;
-      if (Math.random() < dt * (vsRiv ? 0.55 : 0.12)) horse.harassLeft = 3 + (Math.random() < 0.5 ? 1 : 0);   // 3-4 colpi
-    }
-    if ((horse.harassLeft || 0) > 0 && plAccanto) {
-      horse.harassLeft -= 1;
-      if (horse.harassLeft <= 0) horse.harassCd = 12;   // pausa prima di un'altra raffica
-      tiraNerbata(horse, Math.sign((player.lane || 0) - (horse.lane || 0)) || 1, "race", player);
-    } else {
-      if ((horse.harassLeft || 0) > 0 && !plAccanto) horse.harassLeft = 0;   // giocatore sfilato: raffica finita
+    {
       const dx = vicinoDiLato(horse, 1, "race");
       const sx = vicinoDiLato(horse, -1, "race");
       if (dx || sx) {
@@ -14220,7 +14017,7 @@ function updateAiHorse(horse, dt, time) {
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt / 4 * (horse.sprint || 1));
   const progPrimaLibero = horse.progress;
-  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
+  horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
   if (liberoAlVia && horse.raceTurn) {
     // Di sbieco: avanti lungo la pista quanto ha fatto, di lato quanto vuole il muso.
     const muso = clamp(horse.raceTurn, -0.6, 0.6);
@@ -14284,10 +14081,7 @@ function updateRace(dt, time) {
     }
     // TERZO GIRO: bonus/malus di stamina UNA VOLTA all'ingresso nell'ultimo giro
     // (es. Violenta da Clodia +2). Rincara il fiato per l'ultima tornata.
-    // FRENO provvisorio: se corre Brio, +10 di stamina al 3° giro (silenzioso).
-    let tgBonus = horse.terzoGiroStamina || 0;
-    if (horse.jockey && horse.jockey.nick === "Brio" && frenoAttivo("brioStamina")) tgBonus += 10;
-    if (horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceStamina")) tgBonus += 10;   // Istrice AI
+    const tgBonus = horse.terzoGiroStamina || 0;
     if (tgBonus && !horse.terzoGiroDone
         && (horse.progress || 0) >= track.length * (FINISH_LAPS - 1)) {
       horse.terzoGiroDone = true;
@@ -14401,13 +14195,6 @@ function updateRace(dt, time) {
   }
 
   vaLargoTick();
-  // FRENO SILENZIOSO su BRUCO (AI): va dritto a San Martino e CADE. Per ~1000 palii,
-  // nessun avviso a schermo. Solo se Bruco non è il giocatore e non è già a terra.
-  if (brucoFallActive() && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    const bru = state.horses.find((h) => h.id === "bruco" && !isHuman(h) && !h.isRincorsa
-      && !h.scosso && !h.caduto && h.progress > SM_IN - 35 && h.progress < SM_OUT + 2);
-    if (bru) pianificaCaduta(bru, "sm", { silenzioso: true });   // cade dove si cade a San Martino (Simone 11/11)
-  }
   // INCIDENTE DI SAN MARTINO (Simone 9/11, al posto delle cadute a caso): al
   // PRIMO San Martino le DUE AI di testa vanno LARGHE all'esterno, gli altri
   // passano dietro; le due si IMPANCIANO sui materassi (fantino sempre, cavallo
@@ -14421,64 +14208,6 @@ function updateRace(dt, time) {
       due.forEach((h) => { h.cadPiano = null; pianificaCaduta(h, "sm", { lato: "fuori" }); });
       state.sanMartinoIncidentDone = true;
     }
-  }
-
-  // FRENO PROVVISORIO: nei prossimi 10 palii il fantino TEMPESTA cade a San Martino
-  // (se è in gara). Una volta per palio (guardia tempestaFellDone).
-  if (frenoAttivo("tempestaFall") && !state.tempestaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    const t = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
-      && h.jockey && h.jockey.nick === "Tempesta"
-      && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
-    if (t) {
-      state.tempestaFellDone = true;
-      // Nessun messaggio dedicato: dev'essere indistinguibile da una caduta normale
-      // (triggerHorseFall mostra già gli effetti di una caduta qualsiasi).
-      pianificaCaduta(t, "sm", { silenzioso: true });   // dove si cade a San Martino
-      state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
-    }
-  }
-  // FRENO PROVVISORIO: nei prossimi 70 palii anche GRIDO cade a San Martino (silenzioso).
-  if (frenoAttivo("gridoFall") && !state.gridoFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    const g = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
-      && h.jockey && h.jockey.nick === "Grido"
-      && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
-    if (g) {
-      state.gridoFellDone = true;
-      pianificaCaduta(g, "sm", { silenzioso: true });
-      state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
-    }
-  }
-  // FRENO: la TARTUCA, quando è guidata da un'AI (non il giocatore), cade battendo a
-  // San Martino ogni palio, fino al palio 630 (silenzioso).
-  if (frenoAttivo("tartucaFall") && !state.tartucaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    const tt = state.horses.find((h) => h.id === "tartuca" && !h.isRincorsa && !h.scosso && !h.caduto
-      && !isHuman(h) && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
-    if (tt) {
-      state.tartucaFellDone = true;
-      pianificaCaduta(tt, "sm", { silenzioso: true });
-      state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
-    }
-  }
-  // FRENO: la GIRAFFA, quando è guidata da un'AI, cade battendo al CASATO ogni palio,
-  // fino al palio 880 (silenzioso).
-  if (frenoAttivo("giraffaFall") && !state.giraffaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    const gf = state.horses.find((h) => h.id === "giraffa" && !h.isRincorsa && !h.scosso && !h.caduto
-      && !isHuman(h) && h.progress > CAS_IN - 35 && h.progress < CAS_OUT + 4);
-    if (gf) {
-      state.giraffaFellDone = true;
-      pianificaCaduta(gf, "cas", { silenzioso: true });   // dove si cade al Casato
-      state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
-    }
-  }
-  // FRENO: DRAGO e SELVA, quando guidate da un'AI, cadono a San Martino, fino al palio
-  // 1396 (silenzioso). Niente guardia: triggerHorseFall le rende caduto → non rientrano.
-  if (frenoAttivo("dragoSelvaFall") && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
-    state.horses.forEach((h) => {
-      if ((h.id === "drago" || h.id === "selva") && !h.isRincorsa && !h.scosso && !h.caduto && !isHuman(h)
-          && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4 && !h.cadPiano) {
-        pianificaCaduta(h, "sm", { silenzioso: true });
-      }
-    });
   }
 
   // MORTARETTO ANTICIPATO: i 3 scoppi (fine.m4a) devono esplodere quando la contrada
@@ -14805,13 +14534,8 @@ function fantiniACavallo() {
 
 function triggerHorseFall(horse) {
   if (!horse || horse.caduto) return;
-  if (!state.cadutaForzata && horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
   if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella (non col copione)
   triggerFall(horse);                          // il fantino è già per terra (no-op se scosso)
-  // Finche' dura il freno cade SOLO il fantino: il cavallo resta in piedi e
-  // continua scosso. Tutto il resto (chi cade, quando, per quale urto) non
-  // cambia — cambia solo che il cavallo non finisce sul tufo.
-  if (frenoAttivo("soloFantiniCadono")) return;
   horse.caduto = true;
   horse.cadutaNum = (horse.cadutaNum || 0) + 1;   // per il «un tiro per incontro» di chi gli arriva addosso
   horse.cadutoTimer = HORSE_DOWN_TIME + Math.random() * 1.6;
@@ -14838,9 +14562,7 @@ function triggerHorseFall(horse) {
 function maxiCaduta(a, b) {
   triggerHorseFall(a);
   triggerHorseFall(b);
-  showMessage(frenoAttivo("soloFantiniCadono")
-    ? `Ammucchiata in curva: ${a.name} e ${b.name} perdono il fantino!`
-    : `MAXI CADUTA in curva: ${a.name} e ${b.name} a terra!`, 3.0, "danger");
+  showMessage(`MAXI CADUTA in curva: ${a.name} e ${b.name} a terra!`, 3.0, "danger");
   state.cameraShake = Math.max(state.cameraShake || 0, 0.7);
   const extLane = Math.min(a.lane, b.lane);            // il bordo esterno della coppia
   const prog = (a.progress + b.progress) / 2;
@@ -14855,7 +14577,6 @@ function maxiCaduta(a, b) {
 }
 function triggerFall(horse, ctx) {
   if (!horse || horse.scosso) return;
-  if (!state.cadutaForzata && horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
   if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO) return;   // tieni almeno MIN_A_CAVALLO fantini in sella (non col copione)
   horse.scosso = true;
   horse.fallCd = 3;
