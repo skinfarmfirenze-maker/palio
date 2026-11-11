@@ -14557,6 +14557,7 @@ const COPIONE_CADUTE = [
   [["sm", 1, 2], ["cas", 2, 1], ["sm", 3, 2]],
   [["sm", 1, 5], ["cas", 2, 1]],   // 6 cadute, non 7 (Simone)
   [["sm", 1, 3]],
+  [["sm", 1, 5, "fuori"]],   // palio 11: 5 Contrade sui materassi al primo San Martino (Simone)
 ];
 const COPIONE_KEY = "palio.copioneCadute.v1";
 function avviaCopioneCadute() {
@@ -14564,10 +14565,13 @@ function avviaCopioneCadute() {
   try { n = parseInt(localStorage.getItem(COPIONE_KEY) || "0", 10) || 0; } catch (e) { n = 0; }
   const idx = ((n % COPIONE_CADUTE.length) + COPIONE_CADUTE.length) % COPIONE_CADUTE.length;
   try { localStorage.setItem(COPIONE_KEY, String(n + 1)); } catch (e) { /* niente */ }
-  state.copioneIdx = idx + 1;   // 1..10, per chi guarda
+  state.copioneIdx = idx + 1;   // 1..11, per chi guarda
+  state.cicloN = n;             // palii contati: le PARTENZE usano lo stesso numero con un ciclo di 10 (si mischiano)
   state.copione = {};           // "sm#1" → cadute ancora da fare
   state.copioneAssegnato = {};
-  COPIONE_CADUTE[idx].forEach(([curva, giro, quante]) => {
+  state.copioneLato = {};       // "sm#1" → "fuori"/"dentro" se il copione lo impone
+  COPIONE_CADUTE[idx].forEach(([curva, giro, quante, latoFisso]) => {
+    if (latoFisso) state.copioneLato[curva + "#" + giro] = latoFisso;
     const q = Array.isArray(quante) ? quante[Math.floor(Math.random() * quante.length)] : quante;
     state.copione[curva + "#" + giro] = q;
   });
@@ -14592,7 +14596,7 @@ function copioneTick() {
     let gruppo = vivi.filter((h) => (h.progress || 0) >= testa - 30 && (h.progress || 0) <= giro * L + inizioCurva(curva));
     if (gruppo.length < quante) gruppo = vivi.slice();
     for (let i = 0; i < quante && gruppo.length; i += 1) {
-      const lato = Math.random() < (curva === "sm" ? 0.55 : 0.5) ? "fuori" : "dentro";
+      const lato = (state.copioneLato && state.copioneLato[k]) || (Math.random() < (curva === "sm" ? 0.55 : 0.5) ? "fuori" : "dentro");
       gruppo.sort((a, b) => lato === "fuori" ? a.lane - b.lane : b.lane - a.lane);
       const h = gruppo.shift();
       pianificaCaduta(h, curva, { lato });
@@ -19239,7 +19243,7 @@ const PARTENZE_PASSO = 10, PARTENZE_FINE = 90;
 const PARTENZE_RACCORDO = 20;   // metri in cui ci si raccorda dalla corsia vera alla linea disegnata
 const PARTENZE_AVANTI = 5;      // si mira un po' avanti: l'inseguimento di corsia ha un ritardo
 function assegnaPartenze() {
-  state.partenzeIdx = (((state.copioneIdx || 1) - 1) % 10 + 10) % 10;
+  state.partenzeIdx = (((state.cicloN ?? 0) % 10) + 10) % 10;   // ciclo di 10, mischiato col copione delle cadute (11)
   // per ORDINE REALE al via, dal colonnino ai palchi (il giocatore conta per il posto
   // che occupa, ma la sua linea non la segue nessuno)
   state.horses.filter((h) => !h.isRincorsa).sort((a, b) => (b.lane || 0) - (a.lane || 0))
