@@ -327,6 +327,10 @@ const NERBATA_PUSHBACK = 2.0;       // unità di arretramento del colpito (canap
 const NERBATA_SLOW = 0.15;          // −15% velocità del colpito (in gara)
 const NERBATA_SLOW_DUR = 1.5;       // durata del rallentamento in gara (secondi)
 const NERBATA_COOLDOWN = 0.6;       // cadenza minima fra due nerbate dello stesso attaccante
+// IN GARA si nerba solo chi è ACCANTO o DIETRO (Simone 11/11): la nerbata serve a non farsi
+// superare, non a frenare chi è già davanti (chi stava dietro «si agganciava come una molla»).
+// Accanto = il colpito è avanti al massimo di un quarto di cavallo.
+const NERBATA_AVANTI_MAX = HORSE_BLOCK_LENGTH * 0.25;
 const TIER_RANK = { brenna: 0, bono: 1, bombolone: 2 };   // per decidere la "sfavorita"
 // Posizione di partenza della rincorsa, dietro al canapo posteriore.
 const RINCORSA_START_PROGRESS = MOSSA_BACK_LIMIT - 3.4;
@@ -13000,6 +13004,11 @@ function nervPress(vittima, aggId, peso) {
 function puoNerbare(h) {
   return h && !h.caduto && !h.scosso;
 }
+// Si può nerbare quel bersaglio? Ai canapi sì (come prima); in gara solo se non è davanti.
+function nerbabile(attacker, target, phase) {
+  if (phase !== "race") return true;
+  return (target.progress ?? 0) - (attacker.progress ?? 0) <= NERBATA_AVANTI_MAX;
+}
 // Ricarica e cooldown delle nerbate: un tick per cavallo, ogni frame, in ogni fase.
 function tickNerbate(dt) {
   [...state.horses, state.horses.find((h) => h.isRincorsa)].forEach((h) => {
@@ -13030,6 +13039,7 @@ function vicinoDiLato(h, side, phase) {
     if (o === h || o.caduto) return;
     if (phase === "mossa" && (o.isRincorsa || !o.called || o.entering)) return;
     if (Math.abs((o.progress ?? 0) - (h.progress ?? 0)) > lenLimit) return;
+    if (!nerbabile(h, o, phase)) return;   // in gara: chi è davanti non si nerba
     const dl = o.lane - h.lane;
     if (Math.sign(dl) !== side) return;
     const ad = Math.abs(dl);
@@ -13060,6 +13070,7 @@ function playerTouchNerbata() {
   let target = null, best = Infinity;
   state.horses.forEach((o) => {
     if (o === pl || o.isRincorsa || o.scosso || o.caduto) return;
+    if (!nerbabile(pl, o, phase)) return;   // in gara: solo chi è accanto o dietro
     const dProg = Math.abs((o.progress || 0) - (pl.progress || 0));
     const dLane = Math.abs((o.lane || 0) - (pl.lane || 0));
     const d = dProg + dLane * 0.6;
@@ -13089,6 +13100,7 @@ function tiraNerbata(attacker, side, phase, forcedTarget = null) {
   attacker.nerbataSide = side;
   const target = forcedTarget || vicinoDiLato(attacker, side, phase);
   if (!target) return false;             // colpo a vuoto: nerbata sprecata
+  if (!nerbabile(attacker, target, phase)) return false;   // in gara chi è davanti non si nerba: a vuoto
   if (phase === "mossa") {
     target.nervousnessCurrent = clamp((target.nervousnessCurrent || 0) + NERBATA_NERV, 0, 1);
     // EFFETTO (rifatto): la nerbata NON manda più indietro (arretravano tutti e la
@@ -13714,6 +13726,7 @@ function updateAiHorse(horse, dt, time) {
     horse.harassCd = Math.max(0, (horse.harassCd || 0) - dt);
     const plAccanto = player && !player.finishTime && horse !== player && !player.scosso && !player.caduto
       && Math.abs((player.progress || 0) - (horse.progress || 0)) < 3.2
+      && nerbabile(horse, player, "race")   // il giocatore davanti non si nerba (niente «molla»)
       && Math.abs((player.lane || 0) - (horse.lane || 0)) < 3.4;
     if (plAccanto && aggroVsPlayerActive() && (horse.harassLeft || 0) <= 0 && (horse.harassCd || 0) <= 0 && !horse.friendlyToPlayer) {
       const vsRiv = rivalIntensity(horse.id, player.id) > 0 || rivalIntensity(player.id, horse.id) > 0;
