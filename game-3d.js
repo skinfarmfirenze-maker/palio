@@ -19041,10 +19041,9 @@ function animaNerbata(h, jockey, dt) {
 function programmaAndatura(h) {
   const L = track.length || 1;
   const giro = Math.floor(Math.max(0, h.progress || 0) / L);
-  if (giro === 0) {
-    const c = positiveMod(h.progress || 0, L);
-    return NARROW_READY && c >= SM_IN && c <= SM_OUT ? 3 : 4;
-  }
-  return giro === 1 ? 3 : 4;
+  const c = positiveMod(h.progress || 0, L);
+  // A OGNI San Martino e a OGNI Casato si scende a 3 (Simone 11/11, v2).
+  if (NARROW_READY && ((c >= SM_IN && c <= SM_OUT) || (c >= CAS_IN && c <= CAS_OUT))) return 3;
+  return giro === 1 ? 3 : 4;   // fuori dalle curve: giro 1 a 4, giro 2 a 3, giro 3 a 4
 }
 
