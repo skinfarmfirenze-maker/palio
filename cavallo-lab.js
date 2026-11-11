@@ -1132,16 +1132,18 @@ function _aggiornaCaduta(mesh, dt, h) {
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// 10. IL CANAPE — fune pesante che cade quando fianca la rincorsa, e gli zoccoli la scompigliano
+// 10. IL CANAPE — fune pesante che cade quando la rincorsa passa il verrocchino, e gli zoccoli la scompigliano
 // ════════════════════════════════════════════════════════════════════════════
-// Simone 11/11: «il canape anteriore (è una fune pesante) cada dal momento in cui fianca
-// la rincorsa». Prima era un cilindro rigido che scendeva di 0,58 in 0,34 s tremolando e
+// Simone 11/11: «il canape anteriore (è una fune pesante)…», poi «si deve abbassare dal
+// momento in cui la rincorsa passa il verrocchino, non quando preme F». QUANDO cade lo
+// decide il gioco (argomento `cade` di aggiorna): al via o alla mossa falsa.
+// Prima era un cilindro rigido che scendeva di 0,58 in 0,34 s tremolando e
 // spariva. Ora è una FUNE a 46 nodi (Verlet): finché è tesa sta fra i due pali; quando
 // cade i capi scendono lungo i pali e il peso la porta giù — si incurva in mezzo, tocca il
 // tufo, rimbalza appena e si adagia storta, un poco ondulata. Chi parte davanti se la porta un poco fra le
 // zampe: gli zoccoli la trascinano e la sollevano, la fune si piega in anse e si scompiglia
-// a terra (il suo peso la trattiene). Dopo un po' (in gara) sparisce. Torna tesa
-// quando si rifà la mossa. Solo a vista. THREE lo passa il gioco (questo modulo non lo importa).
+// a terra (il suo peso la trattiene). Dopo un po' (in gara) sparisce. Dopo la mossa
+// falsa torna su (capi prima, poi il mezzo); dopo il palio torna tesa alla mossa nuova. Solo a vista. THREE lo passa il gioco (questo modulo non lo importa).
 export const CANAPE = {
   nodi: 46, lasco: 1.015,   // fune spessa ma flessibile: tanti nodi, si piega in anse (non una stecca)
   g: 10.9,                  // u/s²
@@ -1158,6 +1160,8 @@ export const CANAPE = {
   zampe: { davanti: 1.05, dietro: -0.82, raggioZ: 0.45, largo: 0.4, presa: 0.55, alzaV: 1.6, vMax: 6.0 },
   tirata: 1.6,              // u: quanto un pezzo di fune si lascia trascinare via da dove è caduto
   onda: 0.7,                // u/s: quando cade si scompone un poco di lato, a terra non resta una stecca
+  risale: 1.2,              // s: dopo la mossa falsa la fune TORNA SU, prima i capi lungo i pali poi il mezzo
+  risaleRitardo: 0.35,      // quota del tempo di cui il mezzo parte dopo i capi
 };
 export function creaCanapeFune(THREE, a, b, alto, raggio, materiale) {
   const K = CANAPE, N = K.nodi, R = 8;
@@ -1175,14 +1179,14 @@ export function creaCanapeFune(THREE, a, b, alto, raggio, materiale) {
   geo.setIndex(idx);
   const mesh = new THREE.Mesh(geo, materiale);
   mesh.castShadow = true; mesh.frustumCulled = false;
-  const st = { cade: false, tTerra: 0, giu: false, posato: null, moto: 0, onda: false };
+  const st = { cade: false, tTerra: 0, giu: false, posato: null, moto: 0, onda: false, su: null };
   const nx = -(B.z - A.z) / lungTesa, nz = (B.x - A.x) / lungTesa;   // orizzontale, di traverso alla fune
   const tesa = () => {
     for (let i = 0; i < N; i += 1) {
       const t = i / (N - 1), sag = 0.035 * Math.sin(Math.PI * t);   // la fune tesa pende appena
       p[3 * i] = A.x + (B.x - A.x) * t; p[3 * i + 1] = alto - sag; p[3 * i + 2] = A.z + (B.z - A.z) * t;
     }
-    q.set(p); st.cade = false; st.tTerra = 0; st.giu = false; st.posato = null; mesh.visible = true;
+    q.set(p); st.cade = false; st.tTerra = 0; st.giu = false; st.posato = null; st.su = null; mesh.visible = true;
   };
   const tubo = () => {
     const T = new THREE.Vector3(), U = new THREE.Vector3(), V = new THREE.Vector3(), su = new THREE.Vector3(0, 1, 0);
@@ -1279,8 +1283,30 @@ export function creaCanapeFune(THREE, a, b, alto, raggio, materiale) {
     }
     return out.length ? out : null;
   };
+  // RISALITA (Simone 11/11: «dopo una mossa falsa deve tornare su il canape»): da dove è
+  // caduta la fune torna tesa fra i pali in K.risale secondi — i capi salgono per primi
+  // lungo i pali, il mezzo li segue. Se era sparita (dopo il palio) torna tesa e basta.
+  const risali = (dt) => {
+    if (!st.su) st.su = { t: 0, da: Float32Array.from(p) };
+    st.su.t += dt;
+    const u = Math.min(1, st.su.t / K.risale), rit = K.risaleRitardo;
+    if (u >= 1) { tesa(); tubo(); return; }
+    for (let i = 0; i < N; i += 1) {
+      const t = i / (N - 1), sag = 0.035 * Math.sin(Math.PI * t);
+      const tx = A.x + (B.x - A.x) * t, ty = alto - sag, tz = A.z + (B.z - A.z) * t;
+      const ui = Math.min(1, Math.max(0, (u - rit * Math.sin(Math.PI * t)) / (1 - rit)));
+      const e = ui * ui * (3 - 2 * ui), k = 3 * i, d = st.su.da;
+      p[k] = d[k] + (tx - d[k]) * e; p[k + 1] = d[k + 1] + (ty - d[k + 1]) * e; p[k + 2] = d[k + 2] + (tz - d[k + 2]) * e;
+    }
+    q.set(p); tubo();
+  };
   const aggiorna = (dt, cade, spariscaDopo, piedi) => {
-    if (!cade) { if (st.cade || st.giu || !mesh.visible) { tesa(); tubo(); } return; }
+    if (!cade) {
+      if (!st.cade && !st.giu && mesh.visible) return;                 // già tesa
+      if (!mesh.visible || K.risale <= 0) { tesa(); tubo(); return; }  // era sparita: tesa e basta
+      risali(dt); return;
+    }
+    if (st.su) { st.su = null; st.giu = false; st.tTerra = 0; st.posato = null; }   // ricade a metà risalita
     if (!st.cade) st.onda = true;
     st.cade = true;
     if (!mesh.visible) return;

@@ -605,7 +605,7 @@ const materials = {
   tufoDark: new THREE.MeshStandardMaterial({ color: 0xcdac63, roughness: 0.97, emissive: 0x40340f, emissiveIntensity: 0.45 }),
   grass: new THREE.MeshStandardMaterial({ color: 0x6b503b, roughness: 1 }),
   stone: new THREE.MeshStandardMaterial({ color: 0x8c6c56, roughness: 0.9 }),
-  rope: new THREE.MeshStandardMaterial({ color: 0xf0d992, roughness: 0.8 }),
+  rope: new THREE.MeshStandardMaterial({ color: 0x4a2f1c, roughness: 0.85 }),   // canapi marrone scuro (Simone 11/11: «non come il tufo»; era 0xf0d992)
   redRope: new THREE.MeshStandardMaterial({ color: 0xa53b2c, roughness: 0.75 }),
   white: new THREE.MeshStandardMaterial({ color: 0xf4ead8, roughness: 0.7 }),
   black: new THREE.MeshStandardMaterial({ color: 0x181410, roughness: 0.8 }),
@@ -1799,7 +1799,7 @@ function buildStartLine() {
   // UN CANAPE SOLO, di canapa. Prima ce n'erano due, e il secondo era ROSSO:
   // davanti ai cavalli, in Piazza, di canape ce n'e' uno — e la fune e' di
   // canapa, grossa. Ingrossato da 0.058 a 0.085 perche' e' una corda vera.
-  // FUNE PESANTE (cavallo-lab §10): cade col suo peso quando fianca la rincorsa.
+  // FUNE PESANTE (cavallo-lab §10): cade col suo peso quando la rincorsa passa il verrocchino.
   try { state.canapeFune = creaCanapeFune(THREE, a, b, 0.54, 0.085, materials.rope); state.canapi.add(state.canapeFune.mesh); }
   catch (e) { state.canapeFune = null; state.canapi.add(makeCylinderBetween(a.clone().setY(0.54), b.clone().setY(0.54), 0.085, materials.rope)); }
   const groundCanapo = new THREE.Group();
@@ -15423,12 +15423,12 @@ function updateAtmosphere(dt, time) {
   }
 
   if (state.canapi && state.canapeFune) {
-    // IL CANAPE (cavallo-lab §10): fune pesante che cade quando FIANCA LA RINCORSA
-    // (Simone 11/11), e in gara o nella mossa falsa; tesa di nuovo quando si rifà la mossa.
+    // IL CANAPE (cavallo-lab §10): fune pesante che cade quando la RINCORSA PASSA IL
+    // VERROCCHINO, cioè al via o alla mossa falsa (Simone 11/11: «non quando preme F»);
+    // tesa di nuovo quando si rifà la mossa.
     state.canapi.visible = true; state.canapi.position.y = 0; state.canapi.rotation.z = 0;
     if (!state.falseStartRunning && (state.mode === "race" || state.mode === "finished")) state.canapiDrop += dt;
-    const cade = state.mode === "race" || state.mode === "finished" || state.falseStartRunning
-      || (state.mode === "mossa" && state.rincorsaFiancaAt != null);
+    const cade = state.mode === "race" || state.mode === "finished" || state.falseStartRunning;
     // gli zoccoli: posizione, velocità vista e muso di ogni cavallo; chi passa sopra la fune
     // a terra se la porta un poco fra le zampe e la scompiglia (Simone 11/11)
     const canapePiedi = [];
