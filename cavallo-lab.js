@@ -792,34 +792,46 @@ function _aggiornaZampe(mesh, dt, cavallo) {
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// 8. CADUTA DEL CAVALLO — inciampo, rotolata, scivolata, a terra, rialzata
+// 8. CADUTA DEL CAVALLO — corpo rigido con gravità e contatto vero col tufo
 // ════════════════════════════════════════════════════════════════════════════
-// Simone 11/11: «sviluppa la dinamica delle cadute a San Martino… i cavalli cadono
-// 1/3 cadute, i fantini 3/3». La logica (chi cade, quando, quanto resta giù, dove
-// scivola) è del gioco: horse.caduto, cadutoTimer, cadutoDir, cadutoSlide. Qui
-// solo COME si vede, con le zampe del rig di §7:
-//  1. INCIAMPO  — il davanti cede: carpi piegati, ginocchia verso il tufo, muso giù;
-//  2. ROTOLA    — va giù sul fianco, accelerando come un corpo che cade;
-//  3. A TERRA   — piccolo rimbalzo all'urto, zampe che scalciano (smorzate, ogni
-//                 tanto riprova), la testa si alza;
-//  4. RIALZATA  — negli ultimi CADUTA.rialzata secondi di cadutoTimer: dal fianco
-//                 al petto con le zampe raccolte, poi su il davanti (seduto come
-//                 un cane), poi il dietro. Quando il gioco lo rimette in corsa è già
-//                 in piedi.
-// Lato: cadutoDir > 0 → coricato sul fianco verso la corsia + (interno),
-//       cadutoDir < 0 → verso la corsia − (esterno, i materassi).
-// Uscita: h.cadVista = { roll, pitch, dy } per placeHorse (rotation.z, rotation.x,
-// position.y) al posto del vecchio cadutoRoll rigido.
+// Simone 11/11: «fai proprio una dinamica di caduta corretta». La logica (chi cade,
+// quando, quanto resta giù, la scivolata) è del gioco: horse.caduto, cadutoTimer,
+// cadutoDir, cadutoSlide. Qui il corpo è un CORPO RIGIDO attorno al suo baricentro:
+//  · TUFFO    — il davanti cede (carpi piegati): beccheggio in avanti che accelera,
+//               il baricentro cade con la gravità (all'inizio il dietro regge un po'),
+//               il rollio verso il fianco comincia; lo slancio in avanti continua
+//               (lo fa il gioco con la scivolata);
+//  · CONTATTO — calcolato sui VERTICI DEL CORPO: tocca per primo il punto più basso
+//               (petto o spalla nel tuffo). Il corpo non entra mai nel tufo e non
+//               galleggia: l'altezza del baricentro la decide il contatto. All'urto:
+//               rimbalzo, colpo di frusta del collo, polvere e scossa (eventi al gioco);
+//  · SUL FIANCO — la gravità lo rovescia sul fianco (rollio fino a CADUTA.roll, con un
+//               piccolo rimbalzo), il dietro ricade (beccheggio che torna a zero con
+//               una molla smorzata), sbandata in imbardata che si spegne strisciando,
+//               zampe che scalciano sempre meno;
+//  · RIALZATA — negli ultimi CADUTA.rialzata s di cadutoTimer: sul petto con le zampe
+//               raccolte, su il davanti, su il dietro, muso di nuovo nel verso della pista.
+// Lato: cadutoDir > 0 → sul fianco verso la corsia + (interno), < 0 → verso la corsia −
+// (esterno, i materassi). Uscita per placeHorse: h.cadVista = { roll, pitch, yaw, dx, dy,
+// dz } — angoli (ordine YXZ) e spostamento del gruppo nel riferimento della pista, così
+// che si ruoti attorno al baricentro e non attorno agli zoccoli. Eventi: h.cadImpatto
+// (0..1, una volta all'urto), h.cadStriscia (0..1 mentre striscia) per polvere e suoni.
 export const CADUTA = {
-  inciampo: 0.30,     // s
-  rotola: 0.45,       // s
-  rialzata: 1.5,      // s, presi dalla fine di cadutoTimer
-  roll: 1.35,         // rad: sul fianco (il corpo tocca il tufo)
-  pGiu: 0.24,         // rad: muso giù all'inciampo (ginocchia a terra, dietro fermo)
-  dyGiu: -0.29,       // u: abbassamento all'inciampo
-  pSu: 0.42,          // rad: muso su da seduto (davanti dritto, dietro a terra)
+  g: 10.9,            // u/s² (1 u ≈ 0,9 m)
+  sostegno: 0.18,     // s: all'inizio il dietro regge ancora metà del peso
+  tuffo: 5.5,         // rad/s²: il muso va giù (finché non tocca)
+  tuffoMax: 0.75,     // rad
+  rollio0: 0.6,       // rad/s: comincia a piegarsi sul fianco già nel tuffo
+  rollioA: 5.0,       // rad/s²: la gravità lo rovescia
+  roll: 1.5,          // rad: tutto sul fianco, zampe quasi orizzontali sul tufo
+  rimbalzo: 0.22,     // restituzione all'urto (verticale e del rollio)
+  imbardata0: 0.35,   // rad/s: sbandata (la pista gira sotto, il corpo va dritto)
+  affonda: 0.06,      // u: quanto una zampa può affondare nel tufo (morbido) prima di reggere il corpo
+  strisciaAttrito: 1.4, // 1/s: la sbandata si spegne strisciando
+  rialzata: 1.6,      // s, presi dalla fine di cadutoTimer
+  pSu: 0.42,          // rad: muso su da seduto
   dySeduto: -0.29,    // u
-  dyPetto: -0.78,     // u: sul petto, pancia a terra
+  dyPetto: -0.78,     // u: sul petto
   scalcia: 1.8,       // Hz
 };
 const _c01 = (x) => Math.max(0, Math.min(1, x));
@@ -833,9 +845,57 @@ function _distesa(G, a, ph, amp) {
     ? { ...a, U: a.U + 0.35 + 0.35 * amp * s, C: a.C - 0.25 - 0.45 * amp * c, Pas: a.Pas - 0.3, Zo: a.Zo - 0.3 }
     : { ...a, U: a.U - 0.15 + 0.3 * amp * s, C: a.C + 0.15 + 0.4 * amp * c, Pas: a.Pas - 0.3, Zo: a.Zo - 0.4 };
 }
-const _RACC = { ant: { U: -2.79, C: 0.14, Pas: -2.09, Zo: -2.36 }, post: { U: -0.61, C: -3.0, Pas: -2.62, Zo: -2.79 } };
+// Sul petto: zampe ripiegate piatte sotto il corpo (la pancia resta ~0,13 u sopra il tufo).
+const _RACC = { ant: { U: -3.002, C: 0.07, Pas: -2.618, Zo: -2.793 }, post: { U: -0.209, C: -3.072, Pas: -2.967, Zo: -3.107 } };
 function _raccolta(G, a) { return { ...a, ...(G.ant ? _RACC.ant : _RACC.post) }; }
 const _FASE_ZAMPA = { AS: 0, AD: 1.7, PS: 3.4, PD: 5.1 };
+
+// Rotazione R = Ry(yaw)·Rx(pitch)·Rz(roll) (ordine YXZ di three.js) applicata a (x,y,z).
+function _ruota(yaw, pitch, roll, x, y, z, o) {
+  const cz = Math.cos(roll), sz = Math.sin(roll);
+  const x1 = x * cz - y * sz, y1 = x * sz + y * cz, z1 = z;
+  const cx = Math.cos(pitch), sx = Math.sin(pitch);
+  const y2 = y1 * cx - z1 * sx, z2 = y1 * sx + z1 * cx;
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  o[0] = x1 * cy + z2 * sy; o[1] = y2; o[2] = -x1 * sy + z2 * cy;
+  return o;
+}
+const _rv = [0, 0, 0];
+// Punti del corpo (niente gambe) nel riferimento del GRUPPO, relativi al baricentro.
+function _corpoCaduta(mesh, h, Z) {
+  if (Z.corpo) return Z.corpo;
+  const gamba = new Set();
+  for (const n of ZAMPE_ORDINE) {
+    const G = ZAMPE_DATI.gambe[n];
+    for (const k of ["zo", "pas", "fet", "cr", "ur"]) for (const v of G[k]) gamba.add(v);
+    if (G.stira) for (const r of G.stira) gamba.add(r[0]);
+  }
+  mesh.updateWorldMatrix(true, false); h.group.updateWorldMatrix(true, false);
+  const inv = h.group.matrixWorld.clone().invert();
+  const M = inv.multiply(mesh.matrixWorld);      // modello → gruppo (non dipende da dove sta il gruppo)
+  const e = M.elements, R = Z.riposo, pts = [];
+  let cx = 0, cy = 0, cz = 0;
+  for (let v = 0; v < R.length / 3; v += 1) {
+    if (gamba.has(v)) continue;
+    const x = R[3 * v], y = R[3 * v + 1], z = R[3 * v + 2];
+    const gx = e[0] * x + e[4] * y + e[8] * z + e[12], gy = e[1] * x + e[5] * y + e[9] * z + e[13], gz = e[2] * x + e[6] * y + e[10] * z + e[14];
+    pts.push(gx, gy, gz); cx += gx; cy += gy; cz += gz;
+  }
+  const n = pts.length / 3; cx /= n; cy /= n; cz /= n;
+  for (let i = 0; i < pts.length; i += 3) { pts[i] -= cx; pts[i + 1] -= cy; pts[i + 2] -= cz; }
+  const zampa = new Uint8Array(R.length / 3); gamba.forEach((v) => { zampa[v] = 1; });
+  Z.corpo = { pts: new Float32Array(pts), c: [cx, cy, cz], M: Float32Array.from(e), zampa };
+  return Z.corpo;
+}
+// Punto più basso del corpo (rispetto al baricentro) con questa rotazione.
+function _piuBasso(P, yaw, pitch, roll) {
+  let m = Infinity;
+  for (let i = 0; i < P.length; i += 3) {
+    _ruota(yaw, pitch, roll, P[i], P[i + 1], P[i + 2], _rv);
+    if (_rv[1] < m) m = _rv[1];
+  }
+  return m;
+}
 
 export function aggiornaCaduta(mesh, dt, cavallo) {
   try { return _aggiornaCaduta(mesh, dt, cavallo); }
@@ -847,64 +907,121 @@ export function aggiornaCaduta(mesh, dt, cavallo) {
 }
 function _aggiornaCaduta(mesh, dt, h) {
   const Z = _preparaZampe(mesh);
-  if (!Z || !h) return false;
+  if (!Z || !h || !h.group) return false;
   if (!h.caduto) {
-    // Finita: il gioco riporta a zero il suo cadutoRoll in ~1 s; finché lo fa, a vista
-    // resta dritto (il cavallo è già in piedi), poi si torna a placeHorse normale.
     if (h.cad) { h.cad = null; Z.px = null; }
-    h.cadVista = h.cadutoRoll ? { roll: 0, pitch: 0, dy: 0 } : null;
+    h.cadVista = h.cadutoRoll ? { roll: 0, pitch: 0, yaw: 0, dx: 0, dy: 0, dz: 0 } : null;
+    h.cadStriscia = 0;
     return false;
   }
   if (!(dt > 0)) return true;
-  if (!h.cad) h.cad = { t: 0, lato: (h.cadutoDir || 1) > 0 ? 1 : -1 };
-  const c = h.cad, K = CADUTA, lato = c.lato;
-  c.t += dt;
-  const stati = {};
-  let roll = 0, pitch = 0, dy = 0, collo = 0;
-  const resto = h.cadutoTimer ?? 0;
-  const tA = c.t - K.inciampo - K.rotola;
-  for (const n of ZAMPE_ORDINE) {
-    const G = ZAMPE_DATI.gambe[n], f = _appoggio(G, G.zN, 0);
-    const amp = tA > 0 ? 0.25 + 0.75 * Math.exp(-tA * 1.2) + 0.6 * Math.pow(Math.max(0, Math.sin(tA * 2.2)), 6) : 1;
-    const dist = _distesa(G, f, 2 * Math.PI * K.scalcia * Math.max(0, tA) + _FASE_ZAMPA[n], amp);
-    if (resto < K.rialzata) {
-      const r = 1 - Math.max(0, resto) / K.rialzata;
-      const r1 = _ese(r / 0.35), r2 = _ese((r - 0.35) / 0.3), r3 = _ese((r - 0.65) / 0.35);
-      const rac = _raccolta(G, f);
-      let a = _mix(dist, rac, r1);
-      a = _mix(a, f, G.ant ? r2 : r3);
-      stati[n] = a;
-    } else if (c.t < K.inciampo) {
-      stati[n] = _mix(f, _cede(G, f), _ese(c.t / K.inciampo));
-    } else if (c.t < K.inciampo + K.rotola) {
-      stati[n] = _mix(_cede(G, f), dist, _ese((c.t - K.inciampo) / K.rotola));
-    } else stati[n] = dist;
+  const K = CADUTA, corpo = _corpoCaduta(mesh, h, Z), P = corpo.pts, cc = corpo.c;
+  if (!h.cad) {
+    h.cad = { t: 0, lato: (h.cadutoDir || 1) > 0 ? 1 : -1, th: 0, wth: 0, ph: 0, wph: 0, ps: 0, wps: K.imbardata0,
+              yc: cc[1], vy: 0, contatto: false, tC: 0, collo: 0, wcollo: 0, ultimo: null };
+    h.cad.wph = h.cad.lato * K.rollio0;
   }
+  const c = h.cad, lato = c.lato, resto = h.cadutoTimer ?? 0;
+  const n = Math.max(1, Math.ceil(dt / (1 / 120))), hs = dt / n;
+  let impatto = 0;
+  if (resto >= K.rialzata) {
+    for (let i = 0; i < n; i += 1) {
+      c.t += hs;
+      // ── angoli
+      if (!c.contatto) {
+        if (c.th < K.tuffoMax) c.wth += K.tuffo * hs;
+        else c.wth *= Math.exp(-10 * hs);               // oltre il massimo il tuffo si ferma (il collo e il petto lo reggono)
+        c.wph += lato * K.rollioA * hs;
+      } else {
+        // il dietro ricade: beccheggio verso ~0 con una molla smorzata (2 Hz, z 0,55)
+        const w = 2 * Math.PI * 1.6;
+        c.wth += (-w * w * (c.th - 0.04) - 2 * 0.55 * w * c.wth) * hs;
+        // la gravità lo rovescia sul fianco
+        if (Math.abs(c.ph) < K.roll) c.wph += lato * K.rollioA * 1.6 * Math.max(0.25, Math.cos(c.ph)) * hs;
+        c.wps *= Math.exp(-K.strisciaAttrito * hs);
+      }
+      c.th += c.wth * hs; c.ph += c.wph * hs; c.ps += c.wps * hs;
+      if (Math.abs(c.ph) >= K.roll) {                     // appoggiato sul fianco: rimbalzo piccolo, poi fermo
+        c.ph = lato * K.roll;
+        if (c.wph * lato > 0) c.wph = -c.wph * K.rimbalzo;
+      }
+      c.wph *= Math.exp(-(c.contatto ? 2.5 : 0.3) * hs);
+      // ── baricentro: gravità (all'inizio il dietro regge metà del peso)
+      c.vy -= K.g * (c.t < K.sostegno ? 0.5 : 1) * hs;
+      c.yc += c.vy * hs;
+      // ── contatto sul punto più basso del corpo
+      const basso = c.yc + _piuBasso(P, c.ps, c.th, c.ph);
+      if (basso < 0) {
+        c.yc -= basso;
+        if (c.vy < 0) {
+          if (!c.contatto) { impatto = Math.max(impatto, _c01(-c.vy / 6 + 0.35)); c.contatto = true; c.tC = c.t; c.wcollo = -4.5; }
+          c.vy = -c.vy * K.rimbalzo;
+          if (c.vy < 0.4) c.vy = 0;
+        }
+      }
+      // ── collo: giù nel tuffo, colpo di frusta all'urto, poi testa un po' su
+      const bersCollo = !c.contatto ? 0.22 * _c01(c.th / 0.5) : -0.18;
+      const wc = 2 * Math.PI * 2.2;
+      c.wcollo += (-wc * wc * (c.collo - bersCollo) - 2 * 0.5 * wc * c.wcollo) * hs;
+      c.collo += c.wcollo * hs;
+    }
+    c.ultimo = { th: c.th, ph: c.ph, ps: c.ps, yc: c.yc, collo: c.collo };
+  }
+  // ── zampe
+  const stati = {}, tA = c.contatto ? c.t - c.tC : 0;
+  let th = c.th, ph = c.ph, ps = c.ps, yc = c.yc, collo = c.collo;
   if (resto < K.rialzata) {
-    // RIALZATA: fianco → petto (r1), davanti su (r2), dietro su (r3)
+    const u = c.ultimo || { th, ph, ps, yc, collo };
     const r = 1 - Math.max(0, resto) / K.rialzata;
     const r1 = _ese(r / 0.35), r2 = _ese((r - 0.35) / 0.3), r3 = _ese((r - 0.65) / 0.35);
-    roll = lato * _lrp(K.roll, 0.12, r1) * (1 - r3);
-    pitch = -K.pSu * r2 * (1 - r3);
-    dy = _lrp(_lrp(0, K.dyPetto, r1), K.dySeduto, r2) * (1 - r3);
-    collo = -0.25 * (1 - r2);
-  } else if (c.t < K.inciampo) {
-    const k = _ese(c.t / K.inciampo);
-    pitch = K.pGiu * k; dy = K.dyGiu * k; roll = lato * 0.2 * k; collo = 0.15 * k;
-  } else if (c.t < K.inciampo + K.rotola) {
-    const k = (c.t - K.inciampo) / K.rotola, e = _ese(k);
-    roll = lato * _lrp(0.2, K.roll, k * k);                 // accelera come un corpo che cade
-    pitch = K.pGiu * (1 - e); dy = K.dyGiu * (1 - e); collo = 0.15 * (1 - e);
+    ph = _lrp(u.ph, lato * 0.12, r1) * (1 - r3);
+    th = _lrp(_lrp(u.th, 0, r1), -K.pSu, r2) * (1 - r3);
+    ps = u.ps * (1 - _ese(r / 0.9));
+    const yPetto = cc[1] + K.dyPetto, ySeduto = cc[1] + K.dySeduto;
+    yc = _lrp(_lrp(_lrp(u.yc, yPetto, r1), ySeduto, r2), cc[1], r3);
+    collo = _lrp(u.collo, 0, r2);
+    const basso = yc + _piuBasso(P, ps, th, ph);
+    if (basso < 0) yc -= basso;                           // mai dentro il tufo, nemmeno rialzandosi
+    for (const nm of ZAMPE_ORDINE) {
+      const G = ZAMPE_DATI.gambe[nm], f = _appoggio(G, G.zN, 0);
+      const dist = _distesa(G, f, 0, 0.2);
+      let a = _mix(dist, _raccolta(G, f), r1);
+      stati[nm] = _mix(a, f, G.ant ? r2 : r3);
+    }
+    h.cadStriscia = 0;
   } else {
-    roll = lato * (K.roll - 0.06 * Math.exp(-tA * 5) * Math.cos(tA * 18));   // rimbalzo all'urto
-    collo = -0.25 * _ese(tA / 0.8);                                            // la testa si alza
+    const kTuffo = _c01(c.th / 0.6);
+    const amp = c.contatto ? 0.25 + 0.75 * Math.exp(-tA * 1.2) + 0.6 * Math.pow(Math.max(0, Math.sin(tA * 2.2)), 6) : 1;
+    for (const nm of ZAMPE_ORDINE) {
+      const G = ZAMPE_DATI.gambe[nm], f = _appoggio(G, G.zN, 0);
+      const dist = _distesa(G, f, 2 * Math.PI * K.scalcia * (c.contatto ? tA : c.t) + _FASE_ZAMPA[nm], amp);
+      stati[nm] = c.contatto ? _mix(_cede(G, f), dist, _ese(tA / 0.35)) : _mix(f, G.ant ? _cede(G, f) : dist, G.ant ? kTuffo : _ese(c.t / 0.4));
+    }
+    h.cadStriscia = c.contatto ? _c01((h.cadutoSlide || 0) / 8) : 0;
   }
+  // ── posa della mesh
   const pos = Z.geo.attributes.position, infl = mesh.morphTargetInfluences;
   _posaZampe(Z.riposo, stati, 0, pos.array);
   if (collo) _posaCollo(pos.array, 0, collo);
   if (infl) infl.fill(0);
   pos.needsUpdate = true;
   Z.attivo = true; Z.dy = 0; Z.colloYaw = 0; Z.colloPitch = collo; Z.cy = Z.cyv = Z.cp = Z.cpv = 0;
-  h.cadVista = { roll, pitch, dy };
+  // ── contatto finale su TUTTA la mesh posata: il corpo non entra mai nel tufo, le
+  //    zampe (raccolte, distese) al massimo di CADUTA.affonda. Se serve, il corpo sale.
+  {
+    const a = pos.array, e = corpo.M, fl = corpo.zampa;
+    let mC = Infinity, mZ = Infinity;
+    for (let v = 0, i = 0; i < a.length; v += 1, i += 3) {
+      const x = a[i], y = a[i + 1], z = a[i + 2];
+      _ruota(ps, th, ph, e[0] * x + e[4] * y + e[8] * z + e[12] - cc[0], e[1] * x + e[5] * y + e[9] * z + e[13] - cc[1], e[2] * x + e[6] * y + e[10] * z + e[14] - cc[2], _rv);
+      if (fl[v]) { if (_rv[1] < mZ) mZ = _rv[1]; } else if (_rv[1] < mC) mC = _rv[1];
+    }
+    const su = Math.max(0, -(yc + mC), -(yc + mZ + K.affonda));
+    if (su > 0) { yc += su; if (resto >= K.rialzata) { c.yc += su; if (c.vy < 0) c.vy = 0; } }
+  }
+  // ── uscita: rotazione attorno al BARICENTRO → spostamento del gruppo
+  _ruota(ps, th, ph, cc[0], cc[1], cc[2], _rv);
+  h.cadVista = { roll: ph, pitch: th, yaw: ps, dx: cc[0] - _rv[0], dy: yc - _rv[1], dz: cc[2] - _rv[2] };
+  if (impatto) h.cadImpatto = Math.max(h.cadImpatto || 0, impatto);
   return true;
 }

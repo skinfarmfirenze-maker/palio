@@ -3507,7 +3507,17 @@ function updateHorseGlb(dt) {
     // CADUTA (cavallo-lab §8): il cavallo a terra lo anima il rig — inciampo, fianco,
     // zampe che scalciano, rialzata. Se il rig non c'è, posa base rigida come prima.
     if (r.horse.caduto || r.horse.cadVista) {
-      if (r.morphMesh && aggiornaCaduta(r.morphMesh, dt, r.horse)) continue;
+      if (r.morphMesh && aggiornaCaduta(r.morphMesh, dt, r.horse)) {
+        // polvere e colpo all'URTO col tufo (non al distacco), polvere lungo la strisciata
+        const hp = r.horse.group.position;
+        if (r.horse.cadImpatto) {
+          try { dustPuffAt(hp.x, hp.z, 6 + Math.round(10 * r.horse.cadImpatto)); playColpoPalchi(0.5 + 0.4 * r.horse.cadImpatto); } catch (e) { /* niente */ }
+          state.cameraShake = Math.max(state.cameraShake || 0, 0.25 + 0.4 * r.horse.cadImpatto);
+          r.horse.cadImpatto = 0;
+        }
+        if (r.horse.cadStriscia > 0.05 && Math.random() < dt * 18 * r.horse.cadStriscia) { try { dustPuffAt(hp.x, hp.z, 2); } catch (e) { /* niente */ } }
+        continue;
+      }
       if (r.horse.caduto) { if (r.morphMesh) ripristinaZampe(r.morphMesh); if (infl) infl.fill(0); continue; }
     }
     const gsGrezza = Math.abs((r.horse.progress || 0) - (r.horse.prevProgress ?? r.horse.progress)) / step;
@@ -3913,7 +3923,23 @@ function placeHorse(horse, time) {
     horse.group.rotation.x = RZ.p;
     if (RZ.p < 0) horse.group.position.y += 1.6 * Math.sin(-RZ.p);   // si alza davanti facendo perno dietro
   } else horse.group.rotation.x = 0;
-  if (CV) { horse.group.rotation.x = CV.pitch; horse.group.position.y += CV.dy; }   // muso giù / su, perni sugli appoggi
+  if (CV) {
+    // corpo rigido attorno al BARICENTRO: beccheggio, sbandata e spostamento del gruppo
+    // (dx di lato, dz avanti, nel riferimento della pista) calcolati da cavallo-lab §8
+    const H = horse.group.rotation.y, cH = Math.cos(H), sH = Math.sin(H);
+    horse.group.rotation.x = CV.pitch;
+    horse.group.rotation.y = H + (CV.yaw || 0);
+    horse.group.position.x += (CV.dx || 0) * cH + (CV.dz || 0) * sH;
+    horse.group.position.z += -(CV.dx || 0) * sH + (CV.dz || 0) * cH;
+    horse.group.position.y += CV.dy || 0;
+  }
+  // SALTO di chi scavalca un cavallo a terra.
+  if (horse.saltoT > 0) {
+    horse.saltoT = Math.max(0, horse.saltoT - gdt);
+    const sj = Math.sin(Math.PI * (1 - horse.saltoT / SALTO_DURATA));
+    horse.group.position.y += SALTO_ALTEZZA * sj;
+    horse.group.rotation.x -= SALTO_BECCHEGGIO * sj;
+  }
   if (!horse.cadutoRoll && !CV) reazioneNerbataCorpo(horse, gdt, sample);
   horse.lastCurve = sample.curve;
   horse.collisionFlash = Math.max(0, horse.collisionFlash - 0.045);
@@ -13778,7 +13804,7 @@ function updateAiHorse(horse, dt, time) {
   const bkV = idealLineBucket(horse.progress);
   const aiMaxByStamina = getMaxAllowedSpeedByStamina(horse.stamina, horse.staminaMax); // 1..5
   const recA = state.idealAndatura ? state.idealAndatura[bkV] : null;
-  const aiAndatura = firstLapCapAndatura(horse, recA != null ? clamp(Math.round(recA), 1, aiMaxByStamina) : aiMaxByStamina);
+  const aiAndatura = Math.min(programmaAndatura(horse), aiMaxByStamina);   // il programma di Simone, entro la stamina
   // Fase nella curva: la curvatura che CRESCE = ENTRATA (stringi all'interno),
   // che CALA = USCITA (allarga). cornerPhase: +1 entrata … −1 uscita … 0 fuori curva.
   const curveRate = (sample.curve - (horse.cornerCurvePrev ?? sample.curve)) / Math.max(dt, 0.001);
@@ -14024,13 +14050,11 @@ function updateAiHorse(horse, dt, time) {
   const staminaCeil = andaturaToSpeed(aiMaxByStamina);
   // Velocità copiata con PICCOLA variazione personale (±4.5%), limitata comunque
   // dalla stamina: chi va un filo più forte, chi un filo più piano.
-  const aiCruiseBase = recS != null ? recS : andaturaToSpeed(aiAndatura);
+  const aiCruiseBase = andaturaToSpeed(aiAndatura);   // la velocità segue il programma, non il log del dispositivo
   let aiCruise = clamp(aiCruiseBase * (horse.speedVar || 1), 0, staminaCeil * 1.07);
   // PRIMO GIRO: la crociera segue il tuo log, che NON è per-giro; qui va limitata
   // esplicitamente al tetto del 1° giro (4, o 3 per le due AI contenute).
-  if (Math.floor(Math.max(0, horse.progress) / track.length) === 0) {
-    aiCruise = Math.min(aiCruise, andaturaToSpeed(horse.firstLapCap || 4));
-  }
+  // (il tetto del primo giro ora sta nel programma delle andature)
   if (!horse.travelSpeed) horse.travelSpeed = aiCruise;
   horse.travelSpeed += (aiCruise - horse.travelSpeed) * clamp(dt * 2.25, 0, 1);
   horse.speedLevel += (aiAndatura * 2 - horse.speedLevel) * clamp(dt * 2.25, 0, 1);
@@ -14242,7 +14266,8 @@ function updateRace(dt, time) {
       if (horse.cadutoSlide > 0) {
         horse.progress += horse.cadutoSlide * dt;
         const limScivolo = outerLimitAt(horse.progress) - 0.7;   // coricato è largo: si ferma col corpo davanti ai materassi
-        horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * 0.55, -limScivolo, innerLimitAt(horse.progress));
+        const diLato = horse.cadutaLato === "dentro" ? 0.12 : 0.55;   // al colonnino resta lì vicino, ai materassi ci scivola contro
+        horse.lane = clamp(horse.lane - horse.cadutoSlide * dt * diLato, -limScivolo, innerLimitAt(horse.progress));
         horse.targetLane = horse.lane;
       }
       horse.cadutoMult = 0;
@@ -14379,7 +14404,7 @@ function updateRace(dt, time) {
   // nessun avviso a schermo. Solo se Bruco non è il giocatore e non è già a terra.
   if (brucoFallActive() && NARROW_READY) {
     const bru = state.horses.find((h) => h.id === "bruco" && !isHuman(h) && !h.isRincorsa
-      && !h.scosso && !h.caduto && h.progress > SM_IN + 2 && h.progress < SM_OUT + 2);
+      && !h.scosso && !h.caduto && h.progress > SM_IN - 35 && h.progress < SM_OUT + 2);
     if (bru) pianificaCaduta(bru, "sm", { silenzioso: true });   // cade dove si cade a San Martino (Simone 11/11)
   }
   // INCIDENTE DI SAN MARTINO (Simone 9/11, al posto delle cadute a caso): al
@@ -14402,7 +14427,7 @@ function updateRace(dt, time) {
   if (frenoAttivo("tempestaFall") && !state.tempestaFellDone && NARROW_READY) {
     const t = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
       && h.jockey && h.jockey.nick === "Tempesta"
-      && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
+      && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
     if (t) {
       state.tempestaFellDone = true;
       // Nessun messaggio dedicato: dev'essere indistinguibile da una caduta normale
@@ -14415,7 +14440,7 @@ function updateRace(dt, time) {
   if (frenoAttivo("gridoFall") && !state.gridoFellDone && NARROW_READY) {
     const g = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
       && h.jockey && h.jockey.nick === "Grido"
-      && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
+      && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
     if (g) {
       state.gridoFellDone = true;
       pianificaCaduta(g, "sm", { silenzioso: true });
@@ -14426,7 +14451,7 @@ function updateRace(dt, time) {
   // San Martino ogni palio, fino al palio 630 (silenzioso).
   if (frenoAttivo("tartucaFall") && !state.tartucaFellDone && NARROW_READY) {
     const tt = state.horses.find((h) => h.id === "tartuca" && !h.isRincorsa && !h.scosso && !h.caduto
-      && !isHuman(h) && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4);
+      && !isHuman(h) && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
     if (tt) {
       state.tartucaFellDone = true;
       pianificaCaduta(tt, "sm", { silenzioso: true });
@@ -14437,7 +14462,7 @@ function updateRace(dt, time) {
   // fino al palio 880 (silenzioso).
   if (frenoAttivo("giraffaFall") && !state.giraffaFellDone && NARROW_READY) {
     const gf = state.horses.find((h) => h.id === "giraffa" && !h.isRincorsa && !h.scosso && !h.caduto
-      && !isHuman(h) && h.progress > CAS_IN + 2 && h.progress < CAS_OUT + 4);
+      && !isHuman(h) && h.progress > CAS_IN - 35 && h.progress < CAS_OUT + 4);
     if (gf) {
       state.giraffaFellDone = true;
       pianificaCaduta(gf, "cas", { silenzioso: true });   // dove si cade al Casato
@@ -14449,7 +14474,7 @@ function updateRace(dt, time) {
   if (frenoAttivo("dragoSelvaFall") && NARROW_READY) {
     state.horses.forEach((h) => {
       if ((h.id === "drago" || h.id === "selva") && !h.isRincorsa && !h.scosso && !h.caduto && !isHuman(h)
-          && h.progress > SM_IN + 2 && h.progress < SM_OUT + 4 && !h.cadPiano) {
+          && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4 && !h.cadPiano) {
         pianificaCaduta(h, "sm", { silenzioso: true });
       }
     });
@@ -14570,6 +14595,10 @@ function controMaterassiOSteccatoAlto(prog) {
 // ══ DOVE SI CADE (Simone 11/11, misure della chat Grafica) ═══════════════════
 // Il fantino cade SEMPRE; il cavallo in 1 caduta su 3.
 const CADUTA_CAVALLO_P = 1 / 3;
+// Chi arriva su un cavallo a terra: 1 su 3 inciampa (cade il fantino), 2 su 3 lo
+// scavalca con un salto visibile (chat Grafica; il numero è da confermare con Simone).
+const INCIAMPO_P = 1 / 3;
+const SALTO_DURATA = 0.45, SALTO_ALTEZZA = 0.9, SALTO_BECCHEGGIO = 0.25;
 function cade(h, lato, ctx) {
   if (!h || h.scosso) return;
   h.cadutaLato = lato || null;
@@ -14589,13 +14618,14 @@ function pianificaCaduta(h, curva, opz = {}) {
   if (!h || h.scosso || h.caduto || h.cadPiano) return;
   const lato = opz.lato || (Math.random() < (curva === "sm" ? 0.8 : 0.5) ? "fuori" : "dentro");
   const [da, a] = finestraCaduta(curva, lato);
-  h.cadPiano = { curva, lato, da, a, silenzioso: !!opz.silenzioso };
+  // Il PUNTO esatto è a caso nella finestra (prima cadevano tutti al primo metro).
+  h.cadPiano = { curva, lato, da, a, punto: da + Math.random() * (a - da), silenzioso: !!opz.silenzioso };
 }
 // L'imbocco della curva in cui si decide (cum): da 20 prima fino alla fine delle finestre.
 function curvaDiCaduta(cum) {
   if (!NARROW_READY) return null;
-  if (cum > SM_IN - 20 && cum < SM_OUT + 26.5) return "sm";
-  if (cum > CAS_IN - 20 && cum < CAS_OUT + 7.9) return "cas";
+  if (cum > SM_IN - 35 && cum < SM_OUT + 26.5) return "sm";    // si decide 35 prima: c'è tempo di arrivare al bordo
+  if (cum > CAS_IN - 35 && cum < CAS_OUT + 7.9) return "cas";
   return null;
 }
 function vaLargoTick() {
@@ -14616,10 +14646,16 @@ function vaLargoTick() {
     const P = h.cadPiano;
     if (!P) return;
     if (h.scosso || h.caduto) { h.cadPiano = null; return; }
-    const nellaFinestra = cum >= P.da && cum <= P.a;
     const alBordo = P.lato === "fuori" ? h.alBordoFuori : h.alBordoDentro;
-    const passata = cum > P.a && cum < P.a + 30;
-    if ((nellaFinestra && (alBordo || isHuman(h) || cum > P.a - 1.5)) || passata) {
+    // SI CADE SOLO AL BORDO (Simone 11/11): dal punto scelto in poi, appena tocca
+    // materassi/steccato/colonnino. Arrivato in fondo alla finestra senza toccarlo,
+    // il piano si annulla — tranne le cadute a COPIONE (freni), che devono avvenire.
+    // Le cadute a copione hanno 10 di margine in più per arrivare al bordo (se il
+    // gruppo le chiude): solo dopo cadono dove sono.
+    const fine = P.silenzioso ? P.a + 10 : P.a;
+    const fuoriTempo = cum > fine && cum < fine + 30;
+    if (fuoriTempo && !P.silenzioso) { h.cadPiano = null; return; }
+    if ((cum >= P.punto && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
       h.cadPiano = null;
       cade(h, P.lato);
       if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
@@ -14704,6 +14740,7 @@ function triggerHorseFall(horse) {
   // cambia — cambia solo che il cavallo non finisce sul tufo.
   if (frenoAttivo("soloFantiniCadono")) return;
   horse.caduto = true;
+  horse.cadutaNum = (horse.cadutaNum || 0) + 1;   // per il «un tiro per incontro» di chi gli arriva addosso
   horse.cadutoTimer = HORSE_DOWN_TIME + Math.random() * 1.6;
   // LATO (Simone 11/11, chat Fantini): sui materassi / steccato alto si cade verso
   // l'ESTERNO; sul colonnino o per una scivolata/urto si cade sul fianco INTERNO.
@@ -14989,6 +15026,12 @@ function resolveHorsePair(A, B, dt, feedback) {
     const su = giu === A ? B : A;
     if (!su.caduto && gap < HORSE_BLOCK_LENGTH * 0.8 && laneGap < HORSE_BLOCK_WIDTH) {
       const eraInSella = !su.scosso;
+      // UN SOLO TIRO PER INCONTRO (Simone 11/11: «a volte si inciampa sopra il cavallo
+      // in terra, altre si scavalca»): 1 su 3 inciampa e cade, 2 su 3 lo salta.
+      const incontro = giu.id + "#" + (giu.cadutaNum || 0);   // questa caduta di quel cavallo
+      if (su._incontroCon === incontro) return false;
+      su._incontroCon = incontro;
+      if (Math.random() >= INCIAMPO_P) { su.saltoT = SALTO_DURATA; return false; }
       triggerFall(su, { other: giu });   // calpestando il caduto: cade dal lato opposto a lui
       if (eraInSella && feedback && state.messageTimer <= 0) {
         showMessage(`${su.name} calpesta ${giu.name}: fantino a terra!`, 1.6, "danger");
@@ -18985,4 +19028,18 @@ function animaNerbata(h, jockey, dt) {
 
 
 
+
+// ── PROGRAMMA DELLE ANDATURE DELLE AI (Simone 11/11) ─────────────────────────
+// Giro 1: 4, a San Martino 3, poi 4 fino alla fine del giro. Giro 2: 3. Giro 3: 4.
+// Vale per tutte le AI (rincorsa compresa) e per il giocatore in autopilota; la stamina
+// resta un tetto (getMaxAllowedSpeedByStamina).
+function programmaAndatura(h) {
+  const L = track.length || 1;
+  const giro = Math.floor(Math.max(0, h.progress || 0) / L);
+  if (giro === 0) {
+    const c = positiveMod(h.progress || 0, L);
+    return NARROW_READY && c >= SM_IN && c <= SM_OUT ? 3 : 4;
+  }
+  return giro === 1 ? 3 : 4;
+}
 
