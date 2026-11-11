@@ -10949,8 +10949,9 @@ function releaseRace() {
   // tre AI di testa si stringono in curva e battono — maxi-caduta che si porta
   // dietro le attaccate (giocatore compreso, se è lì in mezzo). Il trigger vero
   // sta in updateRace.
-  state.sanMartinoIncident = Math.random() < 1 / 6;
+  state.sanMartinoIncident = false;   // sostituito dal COPIONE delle cadute (Simone 11/11)
   state.sanMartinoIncidentDone = false;
+  avviaCopioneCadute();               // le cadute di questo palio, dal ciclo di 10
   state.smLarghe = null;
   state.horses.forEach((h) => { h.cadPiano = null; h.curvaCadutaPrima = null; h.cadutaLato = null; });
   state.tempestaFellDone = false;   // guardia per la caduta provvisoria di Tempesta a San Martino
@@ -14402,7 +14403,7 @@ function updateRace(dt, time) {
   vaLargoTick();
   // FRENO SILENZIOSO su BRUCO (AI): va dritto a San Martino e CADE. Per ~1000 palii,
   // nessun avviso a schermo. Solo se Bruco non è il giocatore e non è già a terra.
-  if (brucoFallActive() && NARROW_READY) {
+  if (brucoFallActive() && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     const bru = state.horses.find((h) => h.id === "bruco" && !isHuman(h) && !h.isRincorsa
       && !h.scosso && !h.caduto && h.progress > SM_IN - 35 && h.progress < SM_OUT + 2);
     if (bru) pianificaCaduta(bru, "sm", { silenzioso: true });   // cade dove si cade a San Martino (Simone 11/11)
@@ -14424,7 +14425,7 @@ function updateRace(dt, time) {
 
   // FRENO PROVVISORIO: nei prossimi 10 palii il fantino TEMPESTA cade a San Martino
   // (se è in gara). Una volta per palio (guardia tempestaFellDone).
-  if (frenoAttivo("tempestaFall") && !state.tempestaFellDone && NARROW_READY) {
+  if (frenoAttivo("tempestaFall") && !state.tempestaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     const t = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
       && h.jockey && h.jockey.nick === "Tempesta"
       && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
@@ -14437,7 +14438,7 @@ function updateRace(dt, time) {
     }
   }
   // FRENO PROVVISORIO: nei prossimi 70 palii anche GRIDO cade a San Martino (silenzioso).
-  if (frenoAttivo("gridoFall") && !state.gridoFellDone && NARROW_READY) {
+  if (frenoAttivo("gridoFall") && !state.gridoFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     const g = state.horses.find((h) => !h.isRincorsa && !h.scosso && !h.caduto
       && h.jockey && h.jockey.nick === "Grido"
       && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
@@ -14449,7 +14450,7 @@ function updateRace(dt, time) {
   }
   // FRENO: la TARTUCA, quando è guidata da un'AI (non il giocatore), cade battendo a
   // San Martino ogni palio, fino al palio 630 (silenzioso).
-  if (frenoAttivo("tartucaFall") && !state.tartucaFellDone && NARROW_READY) {
+  if (frenoAttivo("tartucaFall") && !state.tartucaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     const tt = state.horses.find((h) => h.id === "tartuca" && !h.isRincorsa && !h.scosso && !h.caduto
       && !isHuman(h) && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4);
     if (tt) {
@@ -14460,7 +14461,7 @@ function updateRace(dt, time) {
   }
   // FRENO: la GIRAFFA, quando è guidata da un'AI, cade battendo al CASATO ogni palio,
   // fino al palio 880 (silenzioso).
-  if (frenoAttivo("giraffaFall") && !state.giraffaFellDone && NARROW_READY) {
+  if (frenoAttivo("giraffaFall") && !state.giraffaFellDone && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     const gf = state.horses.find((h) => h.id === "giraffa" && !h.isRincorsa && !h.scosso && !h.caduto
       && !isHuman(h) && h.progress > CAS_IN - 35 && h.progress < CAS_OUT + 4);
     if (gf) {
@@ -14471,7 +14472,7 @@ function updateRace(dt, time) {
   }
   // FRENO: DRAGO e SELVA, quando guidate da un'AI, cadono a San Martino, fino al palio
   // 1396 (silenzioso). Niente guardia: triggerHorseFall le rende caduto → non rientrano.
-  if (frenoAttivo("dragoSelvaFall") && NARROW_READY) {
+  if (frenoAttivo("dragoSelvaFall") && NARROW_READY && !state.copione) {   // col copione delle cadute: spento
     state.horses.forEach((h) => {
       if ((h.id === "drago" || h.id === "selva") && !h.isRincorsa && !h.scosso && !h.caduto && !isHuman(h)
           && h.progress > SM_IN - 35 && h.progress < SM_OUT + 4 && !h.cadPiano) {
@@ -14599,11 +14600,14 @@ const CADUTA_CAVALLO_P = 1 / 3;
 // scavalca con un salto visibile (chat Grafica; il numero è da confermare con Simone).
 const INCIAMPO_P = 1 / 3;
 const SALTO_DURATA = 0.45, SALTO_ALTEZZA = 0.9, SALTO_BECCHEGGIO = 0.25;
-function cade(h, lato, ctx) {
+function cade(h, lato, ctx, forzata = false) {
   if (!h || h.scosso) return;
   h.cadutaLato = lato || null;
-  if (Math.random() < CADUTA_CAVALLO_P) triggerHorseFall(h);
-  else triggerFall(h, ctx);
+  state.cadutaForzata = forzata;
+  try {
+    if (Math.random() < CADUTA_CAVALLO_P) triggerHorseFall(h);
+    else triggerFall(h, ctx);
+  } finally { state.cadutaForzata = false; }
 }
 // San Martino: 80% impanciati sui materassi (190-210), 20% sul colonnino del punto
 // 5 (162-169). Casato: 50% colonnino dell'angolo interno (297-303), 50% steccato
@@ -14633,8 +14637,67 @@ function curvaDiCaduta(cum) {
   if (cum > CAS_IN - 35 && cum < CAS_OUT + 7.9) return "cas";
   return null;
 }
+// ══ COPIONE DELLE CADUTE (Simone 11/11) ═══════════════════════════════════════
+// Un ciclo di 10 palii, contatore per dispositivo. In ogni palio le cadute delle AI
+// sono ESATTAMENTE queste (curva, giro, quante); tutto il resto (cadute a caso, freni,
+// incidente, urti delle AI) è spento. Il giocatore cade ancora da solo quando sbatte.
+const COPIONE_CADUTE = [
+  [["sm", 1, [2, 3]], ["cas", 3, 2]],
+  [["sm", 1, 3], ["cas", 3, 1]],
+  [["sm", 1, 4]],
+  [["sm", 1, 1], ["cas", 3, 3]],
+  [["cas", 1, 1], ["sm", 3, 1], ["cas", 3, 1]],
+  [],
+  [["sm", 1, 3], ["cas", 2, 1], ["sm", 3, 1]],
+  [["sm", 1, 2], ["cas", 2, 1], ["sm", 3, 2]],
+  [["sm", 1, 5], ["cas", 2, 1]],   // 6 cadute, non 7 (Simone)
+  [["sm", 1, 3]],
+];
+const COPIONE_KEY = "palio.copioneCadute.v1";
+function avviaCopioneCadute() {
+  let n = 0;
+  try { n = parseInt(localStorage.getItem(COPIONE_KEY) || "0", 10) || 0; } catch (e) { n = 0; }
+  const idx = ((n % COPIONE_CADUTE.length) + COPIONE_CADUTE.length) % COPIONE_CADUTE.length;
+  try { localStorage.setItem(COPIONE_KEY, String(n + 1)); } catch (e) { /* niente */ }
+  state.copioneIdx = idx + 1;   // 1..10, per chi guarda
+  state.copione = {};           // "sm#1" → cadute ancora da fare
+  state.copioneAssegnato = {};
+  COPIONE_CADUTE[idx].forEach(([curva, giro, quante]) => {
+    const q = Array.isArray(quante) ? quante[Math.floor(Math.random() * quante.length)] : quante;
+    state.copione[curva + "#" + giro] = q;
+  });
+}
+function inizioCurva(curva) { return curva === "sm" ? SM_IN : CAS_IN; }
+// Quando le AI di quel giro arrivano a 35 dall'imbocco, si scelgono i cavalli: per
+// «fuori» i più esterni, per «dentro» i più interni, fra quelli in gruppo (entro 30
+// dalla testa di quel giro). Se non bastano, si prende chi c'è.
+function copioneTick() {
+  if (!state.copione || !NARROW_READY) return;
+  const L = track.length || 1;
+  Object.keys(state.copione).forEach((k) => {
+    if (state.copioneAssegnato[k]) return;
+    const [curva, giroS] = k.split("#");
+    const giro = parseInt(giroS, 10) - 1;
+    const soglia = giro * L + inizioCurva(curva) - 35;
+    const vivi = state.horses.filter((h) => !h.isRincorsa && !h.player && !h.scosso && !h.caduto && !h.finishTime && !h.cadPiano);
+    const testa = vivi.reduce((m, h) => Math.max(m, h.progress || 0), -Infinity);
+    if (!(testa >= soglia)) return;
+    state.copioneAssegnato[k] = true;
+    let quante = state.copione[k];
+    let gruppo = vivi.filter((h) => (h.progress || 0) >= testa - 30 && (h.progress || 0) <= giro * L + inizioCurva(curva));
+    if (gruppo.length < quante) gruppo = vivi.slice();
+    for (let i = 0; i < quante && gruppo.length; i += 1) {
+      const lato = Math.random() < (curva === "sm" ? 0.55 : 0.5) ? "fuori" : "dentro";
+      gruppo.sort((a, b) => lato === "fuori" ? a.lane - b.lane : b.lane - a.lane);
+      const h = gruppo.shift();
+      pianificaCaduta(h, curva, { lato });
+      if (h.cadPiano) h.cadPiano.copione = k;
+    }
+  });
+}
 function vaLargoTick() {
   if (state.mode !== "race" || state.falseStartRunning || (state.raceClock || 0) < 3) return;
+  copioneTick();
   const L = track.length || 1;
   state.horses.forEach((h) => {
     if (h.isRincorsa || h.finishTime) return;
@@ -14642,7 +14705,7 @@ function vaLargoTick() {
     const curva = (h.scosso || h.caduto) ? null : curvaDiCaduta(cum);
     // Entrando nella curva, una AI può cadere (più facile se il fantino gira male):
     // stesso numero di cadute di prima, decide solo DOVE.
-    if (curva && h.curvaCadutaPrima !== curva && !isHuman(h)) {
+    if (curva && h.curvaCadutaPrima !== curva && !isHuman(h) && !state.copione) {
       const cv = (h.jockey && h.jockey.curva) || 3;
       const base = clamp(0.9 - (cv - 1) * 0.2, 0.1, 0.9);
       if (Math.random() < VA_LARGO_P * clamp(1 + (3 - cv) * 0.35, 0.4, 1.8) * base) pianificaCaduta(h, curva);
@@ -14657,12 +14720,14 @@ function vaLargoTick() {
     // il piano si annulla — tranne le cadute a COPIONE (freni), che devono avvenire.
     // Le cadute a copione hanno 10 di margine in più per arrivare al bordo (se il
     // gruppo le chiude): solo dopo cadono dove sono.
-    const fine = P.silenzioso ? P.a + 10 : P.a;
+    const obbligata = P.silenzioso || P.copione;
+    const fine = obbligata ? P.a + 10 : P.a;
     const fuoriTempo = cum > fine && cum < fine + 30;
-    if (fuoriTempo && !P.silenzioso) { h.cadPiano = null; return; }
+    if (fuoriTempo && !obbligata) { h.cadPiano = null; return; }
     if ((cum >= P.punto && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
       h.cadPiano = null;
-      cade(h, P.lato);
+      cade(h, P.lato, null, !!P.copione);
+      if (P.copione && state.copione && state.copione[P.copione] > 0 && (h.scosso || h.caduto)) state.copione[P.copione] -= 1;
       if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
         const msg = P.curva === "sm"
           ? (P.lato === "fuori" ? `San Martino: ${h.name} si impancia sui materassi!` : `San Martino: ${h.name} batte sul colonnino!`)
@@ -14683,6 +14748,7 @@ function fallImpactBordo(v, controColonnino, prog) {
 }
 function riskFall(horse, impact, cause, other, molt = 1) {
   if (!horse || horse.scosso || state.mode !== "race") return;   // solo IN CORSA, non già scossi
+  if (state.copione && !isHuman(horse)) return;                   // le AI cadono SOLO dal copione
   if ((state.raceClock || 0) < 3) return;                         // NON nei primi 3 secondi
   if ((horse.fallCd || 0) > 0) return;                            // un tiro di dado per volta
   if ((sampleAt(horse.progress).curve || 0) < 0.2) return;        // si cade SOLO in curva
@@ -14728,7 +14794,9 @@ const HORSE_DOWN_TIME = 4.6;      // secondi a terra prima di rialzarsi
 const MIN_A_CAVALLO_SORTE = [4, 6, 6, 7];
 let MIN_A_CAVALLO = 6;
 function tiraMinACavallo() {
-  MIN_A_CAVALLO = MIN_A_CAVALLO_SORTE[Math.floor(Math.random() * MIN_A_CAVALLO_SORTE.length)];
+  // FISSO a 4 col copione delle cadute (Simone 11/11): il palio più duro ne fa
+  // cadere 6, quindi 4 in sella non blocca mai il copione. Il sorteggio 4/6/6/7 è spento.
+  MIN_A_CAVALLO = 4;
   return MIN_A_CAVALLO;
 }
 function fantiniACavallo() {
@@ -14737,8 +14805,8 @@ function fantiniACavallo() {
 
 function triggerHorseFall(horse) {
   if (!horse || horse.caduto) return;
-  if (horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
-  if (fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella
+  if (!state.cadutaForzata && horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
+  if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella (non col copione)
   triggerFall(horse);                          // il fantino è già per terra (no-op se scosso)
   // Finche' dura il freno cade SOLO il fantino: il cavallo resta in piedi e
   // continua scosso. Tutto il resto (chi cade, quando, per quale urto) non
@@ -14787,8 +14855,8 @@ function maxiCaduta(a, b) {
 }
 function triggerFall(horse, ctx) {
   if (!horse || horse.scosso) return;
-  if (horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
-  if (fantiniACavallo() <= MIN_A_CAVALLO) return;   // tieni almeno MIN_A_CAVALLO fantini in sella
+  if (!state.cadutaForzata && horse.id === "istrice" && !isHuman(horse) && frenoAttivo("istriceNoFall")) return;  // Istrice AI immune
+  if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO) return;   // tieni almeno MIN_A_CAVALLO fantini in sella (non col copione)
   horse.scosso = true;
   horse.fallCd = 3;
   // Bonus/malus di stamina da SCOSSO (per-cavallo dal roster: es. Remorex +10,
@@ -15036,7 +15104,33 @@ function resolveHorsePair(A, B, dt, feedback) {
       const incontro = giu.id + "#" + (giu.cadutaNum || 0);   // questa caduta di quel cavallo
       if (su._incontroCon === incontro) return false;
       su._incontroCon = incontro;
+      // COPIONE: chi inciampa è una delle cadute previste in QUELLA curva e giro; se
+      // lì non ne restano (o non è una curva del copione), scavalca sempre.
+      let chiaveCop = null;
+      if (state.copione && !su.player) {   // il giocatore (anche in autopilota) non è nel copione
+        const Lc = track.length || 1, c = positiveMod(su.progress || 0, Lc);
+        const curvaQ = c > SM_IN - 35 && c < SM_OUT + 36.5 ? "sm" : (c > CAS_IN - 35 && c < CAS_OUT + 17.9 ? "cas" : null);
+        const k = curvaQ ? curvaQ + "#" + (Math.floor(Math.max(0, su.progress || 0) / Lc) + 1) : null;
+        if (!k || !(state.copione[k] > 0)) { su.saltoT = SALTO_DURATA; return false; }
+        chiaveCop = k;
+      }
       if (Math.random() >= INCIAMPO_P) { su.saltoT = SALTO_DURATA; return false; }
+      if (chiaveCop) {
+        state.cadutaForzata = true;
+        try { triggerFall(su, { other: giu }); } finally { state.cadutaForzata = false; }
+        if (su.scosso) {
+          state.copione[chiaveCop] -= 1;
+          // Se doveva già cadere lui, è la SUA caduta prevista; altrimenti è una in
+          // meno per chi non è ancora caduto (si toglie il piano a uno solo).
+          if (su.cadPiano && su.cadPiano.copione === chiaveCop) su.cadPiano = null;
+          else {
+            if (su.cadPiano) su.cadPiano = null;
+            const altro = state.horses.find((o) => o.cadPiano && o.cadPiano.copione === chiaveCop && o !== su);
+            if (altro) altro.cadPiano = null;
+          }
+        }
+        return false;
+      }
       triggerFall(su, { other: giu });   // calpestando il caduto: cade dal lato opposto a lui
       if (eraInSella && feedback && state.messageTimer <= 0) {
         showMessage(`${su.name} calpesta ${giu.name}: fantino a terra!`, 1.6, "danger");
@@ -19042,6 +19136,8 @@ function programmaAndatura(h) {
   const L = track.length || 1;
   const giro = Math.floor(Math.max(0, h.progress || 0) / L);
   const c = positiveMod(h.progress || 0, L);
+  // PRIMO GIRO: a 3 da 120 a 200 dell'editor, cioè da prima di San Martino a dopo l'uscita (Simone 11/11, v3).
+  if (giro === 0 && NARROW_READY && c >= SM_IN - 34.6 && c <= SM_OUT + 16.5) return 3;
   // A OGNI San Martino e a OGNI Casato si scende a 3 (Simone 11/11, v2).
   if (NARROW_READY && ((c >= SM_IN && c <= SM_OUT) || (c >= CAS_IN && c <= CAS_OUT))) return 3;
   return giro === 1 ? 3 : 4;   // fuori dalle curve: giro 1 a 4, giro 2 a 3, giro 3 a 4
