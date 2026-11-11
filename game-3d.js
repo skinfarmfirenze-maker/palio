@@ -10369,7 +10369,8 @@ function startMossa(fromTratta = false) {
       me.soldBurst = 0;
       me.soldNext = 12 + Math.random() * 18;     // prima raffica dopo 12-30s di tensione
     }
-    // ── AI PIÙ CATTIVE col GIOCATORE che corre (regola del palio, sempre).
+    // ── AI PIÙ CATTIVE col GIOCATORE che corre (regola del palio, sempre). Dal 12/11
+    // (Simone) NON più tutte: solo la RIVALE e chi punta davvero a vincere col BOMBOLONE.
     if (playing && playerId && aggroVsPlayerActive()) {
       // 1) La/le rivale/i del giocatore lo NERBANO e gli vengono ADDOSSO (vendetta
       //    diretta, oltre il cap dei 2 alleati).
@@ -10379,11 +10380,13 @@ function startMossa(fromTratta = false) {
           h.vendettaPending = true; h.vendettaTargetId = playerId; h.allyTargetId = playerId; h.allyHelp = true;
         }
       });
-      // 2) MOLTE PIÙ contrade PARANO il giocatore per non farlo vincere: fino a 3 in
-      //    più, fra quelle SENZA incarico, gli vanno DAVANTI a bloccarlo.
+      // 2) Chi ha un BOMBOLONE (punta davvero a vincere) PARA il giocatore: gli va
+      //    DAVANTI a bloccarlo, se non ha già un incarico. Prima lo facevano fino a 3
+      //    Contrade qualsiasi (tolto il 12/11, Simone).
       let extraPara = 0;
       state.horses.forEach((h) => {
         if (extraPara >= 3 || h.id === playerId || h.isRincorsa || h.friendlyToPlayer) return;
+        if (h.horseTier !== "bombolone") return;   // solo chi corre col bombolone
         if (h.paraInRace || h.allyTargetId || h.allyBeneficiaryId) return;   // già con un incarico
         h.paraInRace = playerId; h.allyTargetId = playerId; h.allyHelp = true; extraPara += 1;
       });
@@ -13750,7 +13753,8 @@ function updateAiHorse(horse, dt, time) {
       && Math.abs((player.lane || 0) - (horse.lane || 0)) < 3.4;
     if (plAccanto && aggroVsPlayerActive() && (horse.harassLeft || 0) <= 0 && (horse.harassCd || 0) <= 0 && !horse.friendlyToPlayer) {
       const vsRiv = rivalIntensity(horse.id, player.id) > 0 || rivalIntensity(player.id, horse.id) > 0;
-      if (Math.random() < dt * (vsRiv ? 0.55 : 0.12)) horse.harassLeft = 3 + (Math.random() < 0.5 ? 1 : 0);   // 3-4 colpi
+      // Dal 12/11 (Simone) le raffiche le tirano SOLO la rivale e chi ha il bombolone.
+      if ((vsRiv || horse.horseTier === "bombolone") && Math.random() < dt * 0.55) horse.harassLeft = 3 + (Math.random() < 0.5 ? 1 : 0);   // 3-4 colpi
     }
     if ((horse.harassLeft || 0) > 0 && plAccanto) {
       horse.harassLeft -= 1;
