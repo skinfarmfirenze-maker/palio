@@ -10566,6 +10566,18 @@ function applicaFianca(h, tipo) {
 // non cambia. Vale per il giocatore e per le AI, e anche quando si forza il canape.
 const SCATTINO_DURATA = 0.5, SCATTINO_AMPIEZZA = 0.9;   // s, unità in avanti al massimo
 const FORZA_CANAPE_RITARDO = 0.35;                      // s: prima si vede lo scattino, poi la mossa falsa
+// CHI FORZA IL CANAPE paga il fiato (Simone 11/11): −10 di stamina di colpo, appena parte
+// la mossa falsa. Recuperabile: il massimo non cambia, e alla mossa si riprende come il
+// resto del fiato (1 ogni 3 s se il cavallo sta calmo). Giocatore e AI.
+const CANAPE_FORZATO_FIATO = 10;
+function fiatoCanapeForzato(h) {
+  if (!h) return;
+  h.stamina = Math.max(0, (h.stamina ?? h.staminaMax ?? STAMINA_MIN_ROLL) - CANAPE_FORZATO_FIATO);
+  // al giocatore lo dice il mortaretto (prima c'è il «Partiti!» della falsa: non lo si rovina)
+  if (isHuman(h) && typeof state.falsaMotivo === "string" && state.falsaMotivo.indexOf("di fiato") < 0) {
+    state.falsaMotivo += ` (−${CANAPE_FORZATO_FIATO} di fiato)`;
+  }
+}
 function scattino(h) { if (h) h.scattoT = SCATTINO_DURATA; }
 function scattinoVista(h) {
   let v = 0;
@@ -10612,7 +10624,10 @@ function fiancaControlla(dt) {
     if (state.forzaCanape.t <= 0) {
       const h = state.forzaCanape.h;
       state.forzaCanape = null;
-      if (!state.falseStartRunning) triggerMossaFalsa(`${nomeConArticolo(h)} ha forzato il canape`);
+      if (!state.falseStartRunning) {
+        triggerMossaFalsa(`${nomeConArticolo(h)} ha forzato il canape`);
+        if (state.falseStartRunning) fiatoCanapeForzato(h);   // −10 di fiato a chi l'ha forzato
+      }
     }
     return;
   }
@@ -11744,6 +11759,7 @@ function updateMossa(dt, time) {
             state.forcedCanapeCd = 6;
             // (niente scritta "ha forzato il canape": lo si vede dal canape che si tende)
             triggerMossaFalsa(`${nomeConArticolo(horse)} ha forzato il canape`);
+            if (state.falseStartRunning) fiatoCanapeForzato(horse);   // −10 di fiato a chi l'ha forzato
             return;
           }
         } else {
