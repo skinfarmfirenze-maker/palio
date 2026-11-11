@@ -10481,8 +10481,8 @@ function startMossa(fromTratta = false) {
 // ══════════════════════════════════════════════════════════════════════════════
 const FIANCA_FORZA = 2.0, FIANCA_BUONA_DOPO = 1.2;
 const FIANCA_EFFETTO = {
-  perfetta: { mult: 1.08, durata: 2.5, msg: "Fiancata!" },          // negli ultimi 2 s prima del verrocchino
-  anticipo: { mult: 1.05, durata: 2.0, msg: "Fiancata in ritardo" }, // entro 1,2 s dopo
+  perfetta: { mult: 1.08, durata: 2.5, msg: "Hai fiancato avanti a tutti!" },   // negli ultimi 2 s prima del verrocchino
+  anticipo: { mult: 1.05, durata: 2.0, msg: "Hai fiancato in tempo!" },         // entro 1,2 s dopo
 };
 // Scattino PRONUNCIATO al via per chi ha la fiancata buona (+8%): si vede balzare avanti.
 const BALZO_DURATA = 0.6, BALZO_AMPIEZZA = 1.6;
@@ -10491,6 +10491,15 @@ const FIANCA_AI = {
   1: [0.10, 0.25, 0.03], 2: [0.20, 0.30, 0.02], 3: [0.35, 0.30, 0.01], 4: [0.50, 0.25, 0.005], 5: [0.65, 0.20, 0],
 };
 // Il cavallo che gli sta subito davanti (stessa linea, a meno di un corpo), se c'è.
+// «a» + articolo: al Nicchio, alla Torre, all'Oca, allo …
+function preposizioneA(h) {
+  const n = nomeConArticolo(h);
+  if (/^l'/i.test(n)) return "all'" + n.slice(2);
+  if (/^il /i.test(n)) return "al " + n.slice(3);
+  if (/^la /i.test(n)) return "alla " + n.slice(3);
+  if (/^lo /i.test(n)) return "allo " + n.slice(3);
+  return "a " + n;
+}
 function cavalloDavanti(h) {
   let best = null, gap = Infinity;
   state.horses.forEach((o) => {
@@ -10507,7 +10516,7 @@ function applicaFianca(h, tipo) {
   if (davanti) {
     h.fiancaTipo = "addosso"; h.fiancaMult = 0.96; h.fiancaTimer = 1.2;
     davanti.nervousnessCurrent = Math.min(1, (davanti.nervousnessCurrent || 0) + 0.12);
-    if (isHuman(h)) showMessage(`Scattato addosso a ${nomeConArticolo(davanti)}`, 1.6, "danger");
+    if (isHuman(h)) showMessage(`Scattato addosso ${preposizioneA(davanti)}`, 1.6, "danger");
     return;
   }
   h.fiancaTipo = tipo; h.fiancaMult = e.mult; h.fiancaTimer = e.durata;
@@ -10522,7 +10531,7 @@ function applicaFianca(h, tipo) {
     }
   }
   if (h.startQuality && h.startQuality !== "closed") h.startQuality = "clean";
-  if (isHuman(h)) showMessage(e.msg, 1.6, "good");
+  if (isHuman(h)) { state.messageTimer = 0; showMessage(e.msg, 2.2, "good"); state.msgPartenzaFatto = true; }
 }
 // Forzare il canape con la F: stessa mossa falsa del 5 (stessi freni).
 // SCATTINO VISIBILE (Simone 11/11): chi preme F ai canapi si butta in avanti contro
@@ -10590,6 +10599,16 @@ function fiancaControlla(dt) {
 function fiancaTick() {
   if (!state.horses || !state.horses.length) return;
   const t = state.tGioco || 0;
+  // PARTENZA DEL GIOCATORE (Simone 11/11): se 2 s dopo il via non ha preso nessuna
+  // fiancata buona (né ne ha una in arrivo) → «Ti hanno lasciato ai canapi!».
+  if (state.mode === "race" && !state.falseStartRunning && state.viaA != null && !state.msgPartenzaFatto
+      && t - state.viaA >= FIANCA_FORZA + 0.05) {
+    const p = getPlayer();
+    state.msgPartenzaFatto = true;
+    if (p && !p.isRincorsa && !p.fiancaTipo && p.fPremuto == null) {
+      state.messageTimer = 0; showMessage("Ti hanno lasciato ai canapi!", 2.2, "danger");
+    }
+  }
   state.horses.forEach((h) => {
     if (h.fPremuto == null || t - h.fPremuto < FIANCA_FORZA) return;
     h.fPremuto = null;
@@ -10616,6 +10635,7 @@ function fiancaRincorsaPartita() {
 // Al VIA: la fiancata del giocatore (premuta prima) e quelle delle AI.
 function fiancaAlVia() {
   state.viaA = state.tGioco || 0;
+  state.msgPartenzaFatto = false;
   state.horses.forEach((h) => { h.fiancaTipo = null; h.fiancaMult = 1; h.fiancaTimer = 0; });
   state.horses.forEach((h) => {
     if (h.isRincorsa) return;
@@ -15053,7 +15073,7 @@ function resolveHorsePair(A, B, dt, feedback) {
     behind.collisionFlash = Math.max(behind.collisionFlash, 0.85);
     front.collisionFlash = Math.max(front.collisionFlash, 0.55);
     if (held && Math.random() < dt * 3) emitDust(behind);
-    if (held && (behind.player || front.player) && state.messageTimer <= 0) {
+    if (held && (behind.player || front.player) && state.messageTimer <= 0 && (state.raceClock || 0) > 6) {   // non sopra i messaggi della partenza
       showMessage(behind.player ? "Bloccato in scia: cerca il varco" : "Sorpasso parato", 0.6, behind.player ? "danger" : "good");
     }
   }
