@@ -10887,6 +10887,7 @@ function releaseRace() {
   state.sanMartinoIncident = false;   // sostituito dal COPIONE delle cadute (Simone 11/11)
   state.sanMartinoIncidentDone = false;
   avviaCopioneCadute();               // le cadute di questo palio, dal ciclo di 10
+  assegnaPartenze();                  // le partenze disegnate dello stesso palio, per ordine reale al via
   state.smLarghe = null;
   state.horses.forEach((h) => { h.cadPiano = null; h.curvaCadutaPrima = null; h.cadutaLato = null; });
 
@@ -14070,7 +14071,10 @@ function updateAiHorse(horse, dt, time) {
   const aiInnerLim = innerLimitAt(horse.progress);
   let aiInnerAvanti = aiInnerLim;
   for (let k = 2; k <= AI_STRETTOIA_AVANTI; k += 2) aiInnerAvanti = Math.min(aiInnerAvanti, innerLimitAt(horse.progress + k));
-  if (liberoAlVia) horse.targetLane = horse.lane;   // nessun bersaglio: tiene la corsia che ha
+  if (liberoAlVia) {   // nei primi 90 m la PARTENZA disegnata da Simone; altrimenti tiene la corsia che ha
+    const bp = bersaglioPartenza(horse);
+    horse.targetLane = bp != null ? bp : horse.lane;
+  }
   // ── GOMITO A GOMITO ───────────────────────────────────────────────────────
   // Fra due Contrade affiancate non c'era NIENTE che le tenesse separate: il
   // codice dei sorpassi guarda solo chi sta DAVANTI, quindi due che puntavano
@@ -14171,7 +14175,7 @@ function updateAiHorse(horse, dt, time) {
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt * (horse.rampaVel || 1 / 4) * (0.85 + 0.15 * (horse.sprint || 1)));
   const progPrimaLibero = horse.progress;
   horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
-  if (liberoAlVia && horse.raceTurn) {
+  if (liberoAlVia && horse.raceTurn && !inPartenza(horse)) {
     // Di sbieco: avanti lungo la pista quanto ha fatto, di lato quanto vuole il muso.
     const muso = clamp(horse.raceTurn, -0.6, 0.6);
     horse.lane = clamp(horse.lane + Math.tan(muso) * Math.max(0, horse.progress - progPrimaLibero), -aiOuterLim, aiInnerLim);
@@ -19092,3 +19096,164 @@ function programmaAndatura(h) {
 
 
 
+
+// ══ PARTENZE DELLE CONTRADE (Simone 11/11, editor «Partenze delle Contrade») ═══════
+// [palio del ciclo 1-10][partenza: le nove dal colonnino ai palchi, poi la rincorsa]
+// [corsia a 0, 10, … 90 metri dal canape] (+ colonnino, − palchi).
+const PARTENZE = [
+  [ // palio 1
+    [5.7, 5.75, 6.2, 7.05, 8.3, 9.2, 8.8, 7.45, 5.35, 2.25],   // posta 1
+    [4.45, 4.35, 4.75, 5.3, 6.25, 7.1, 6.85, 5.5, 3.9, 1.35],   // posta 2
+    [2.8, 3.4, 3.95, 4.55, 5.35, 5.95, 5.85, 4.7, 3.35, 0.05],   // posta 3
+    [0.35, 1.4, 2.3, 2.95, 3.85, 4.1, 4.55, 3.55, 1.7, -1.05],   // posta 4
+    [-0.85, -0.9, -0.7, 1.25, 1.8, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [-4.8, -3.1, -2.7, -1.8, -1.2, 0.15, -0.5, -1.55, -2.25, -5],   // posta 6
+    [-5.8, -6.15, -4.25, -3.35, -2.65, -1.55, -1.85, -2.6, -0.9, 0.35],   // posta 7
+    [-7.6, -5.65, -4.35, -3.2, -3.7, -2.65, -2.4, -3, -3.7, -6.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, -2.85, -2.15, -2.55, -3.2, -3.35, -3.55],   // posta 9
+    [-14.6, -12.7, -10.55, -6.75, -3.05, -1.15, 0.1, 0.25, 0.2, 0.25],   // rincorsa
+  ],
+  [ // palio 2
+    [5.7, 5.75, 6.2, 5.7, 4.9, 5.1, 4.95, 4.25, 2.85, 2.25],   // posta 1
+    [4.45, 4.35, 4.75, 5.3, 6.25, 7.1, 6.85, 5.5, 3.9, 1.35],   // posta 2
+    [2.8, 3.4, 3.95, 4.55, 5.35, 5.95, 5.85, 4.7, 3.35, 0.05],   // posta 3
+    [0.35, 1.4, 2.3, 2.95, 3.85, 4.1, 4.55, 3.55, 1.7, -1.05],   // posta 4
+    [-0.85, -1.55, -0.7, 0.55, 1.75, 1.85, -1.75, -3.4, -5.7, -7.25],   // posta 5
+    [-4.8, -3.1, -2.7, -1.8, -1.2, 0.15, -0.5, -1.55, -2.25, -5],   // posta 6
+    [-5.8, -6.15, -4.25, -3.35, -2.65, -1.55, -1.85, -2.6, -0.9, 0.35],   // posta 7
+    [-7.6, -5.65, -4.35, -1, 2.3, 3.9, 6.35, 5, 4.05, 2.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, -2.85, -2.15, -2.55, -3.2, -3.35, -3.55],   // posta 9
+    [-14.6, -12.7, -5.65, -0.4, 2.8, 4.25, 4.55, 3.6, 2.65, 0.25],   // rincorsa
+  ],
+  [ // palio 3
+    [5.7, 5.25, 6.65, 8.8, 10.25, 9.7, 9.6, 8.45, 5.35, 2.25],   // posta 1
+    [4.45, 4.35, 5.5, 6.25, 7.5, 8.85, 8.5, 7.7, 6.4, 5.2],   // posta 2
+    [2.8, 3.4, 5.05, 6.1, 7.2, 8.05, 7.5, 7.65, 6.55, 6.1],   // posta 3
+    [0.35, 1.4, 2.3, 2.95, 3.85, 5.9, 6.4, 6.1, 5.4, 3.8],   // posta 4
+    [-0.85, -0.9, -0.7, 1.25, 1.8, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [-4.8, -3.1, -2.7, -1.8, -1.2, 0.15, -0.5, 1.35, 2.1, 4.8],   // posta 6
+    [-5.8, -6.15, -4.25, -3.35, -2.65, -1.55, -1.85, 1.05, 3.7, 4.8],   // posta 7
+    [-7.6, -5.65, -4.35, -3.2, -3.7, -2.65, -2.4, -0.4, 0.25, 0.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, -2.85, -2.15, -2.55, -1.25, -1.75, -3.55],   // posta 9
+    [-14.6, -12.7, -10.55, -6.75, -3.05, -1.15, 0.1, 2.6, 2.5, 2.45],   // rincorsa
+  ],
+  [ // palio 4
+    [5.7, 5.75, 6.2, 7.35, 8.3, 9.2, 8.8, 7.45, 5.35, 2.25],   // posta 1
+    [5.1, 5.05, 6.45, 6.6, 7.15, 7.1, 6.85, 5.5, 3.9, 1.35],   // posta 2
+    [4.55, 4.3, 5.3, 5.5, 7.15, 5.95, 5.85, 4.7, 3.35, 0.05],   // posta 3
+    [3.95, 3.6, 4.95, 4.65, 5.5, 4.1, 4.55, 3.55, 1.7, -1.05],   // posta 4
+    [3.15, 3.85, 4.5, 3.95, 2.85, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [1.65, 2.65, 3.85, 2.8, 1.15, 1.7, 2, 0.55, -2.25, -5],   // posta 6
+    [-0.45, 1.8, 3.8, 6.15, 5.35, 4.1, 2.65, 1.7, 0.9, 0.35],   // posta 7
+    [-2.5, 0.7, 2.1, 3.25, 3.1, 2.55, 2.7, 1.9, 1.2, 1.8],   // posta 8
+    [-3.75, 0.1, -0.3, 2.35, 2.55, 1.55, 2.35, 1.4, 0.9, -0.55],   // posta 9
+    [-14.6, -8.9, -3.1, -0.75, 0.15, 0.8, 0.95, 0.25, 0.2, 0.25],   // rincorsa
+  ],
+  [ // palio 5
+    [3.1, 3, 3.65, 4, 4.45, 4.25, 3.4, 2.2, 0.85, -1.75],   // posta 1
+    [2.2, 2.35, 3.1, 3.4, 2.65, 2.9, 2.15, 0.5, -0.65, -3.9],   // posta 2
+    [1.2, 1.35, 2.2, 2.4, 2.95, 2.5, 1.55, -0.3, -2, -4.55],   // posta 3
+    [0.35, 0.4, 0.85, 1.5, 2.35, 2.2, 2.25, 1.05, -1.2, -4.6],   // posta 4
+    [-0.85, -0.9, -0.7, -0.55, 0.75, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [-4.8, -2.1, -1.5, -1.8, 0.2, 1.8, 0.7, -1.55, -2.25, -5],   // posta 6
+    [-5.8, -3.1, -2.75, -2.8, -0.8, 0.55, -0.3, -2.6, -3.95, -6.6],   // posta 7
+    [-7.6, -5.65, -4.35, -3.55, -1.95, -0.65, 0.4, -3, -3.7, -6.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, 2.8, 4.75, 4.75, 4.35, 3.5, 2.45],   // posta 9
+    [-14.6, -10, -1.4, 6.1, 9.15, 9.85, 9.8, 8.8, 7.55, 6.1],   // rincorsa
+  ],
+  [ // palio 6
+    [5.7, 5.75, 6.2, 7.05, 8.95, 9.2, 8.8, 7.45, 5.35, 2.25],   // posta 1
+    [4.45, 4.35, 4.75, 5.3, 6.9, 7.1, 6.85, 5.5, 3.9, 1.35],   // posta 2
+    [2.8, 3.4, 3.95, 4.55, 5.35, 5.95, 5.85, 4.7, 3.35, 0.05],   // posta 3
+    [0.35, 1.4, 2.3, 2.95, 3.85, 4.1, 4.55, 3.55, 1.7, -1.05],   // posta 4
+    [-0.85, -0.9, -0.7, 1.25, 1.8, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [-4.8, -3.1, -2.7, -1.8, -1.2, 0.15, -0.5, -1.55, -2.25, -5],   // posta 6
+    [-5.8, -6.15, -4.25, -3.35, -2.65, -1.55, -1.85, -2.6, -0.9, 0.35],   // posta 7
+    [-7.6, -5.65, -4.35, -3.2, -3.7, -2.65, -2.4, -3, -3.7, -6.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, -2.85, -2.15, -2.55, -3.2, -3.35, -3.55],   // posta 9
+    [-14.6, -9.05, -4.2, -0.25, 3.1, 3.45, 3.2, 2.65, 1.25, 0.25],   // rincorsa
+  ],
+  [ // palio 7
+    [5.7, 5.75, 6.2, 7.05, 8.3, 9.2, 8.8, 7.45, 5.35, 2.25],   // posta 1
+    [4.45, 4.35, 4.75, 5.3, 6.25, 7.1, 6.85, 5.5, 3.9, 1.35],   // posta 2
+    [2.8, 3.4, 3.95, 4.55, 5.35, 5.95, 5.85, 4.7, 3.35, 0.05],   // posta 3
+    [0.35, 1.4, 2.3, 2.95, 3.85, 4.1, 4.55, 3.55, 1.7, -1.05],   // posta 4
+    [-0.85, -0.9, -0.7, 1.25, 1.8, 2.5, 2.35, 1.05, -0.75, -3.6],   // posta 5
+    [-4.8, -3.1, -2.7, -1.8, -1.2, 0.15, -0.5, -1.55, -2.25, -5],   // posta 6
+    [-5.8, -6.15, -4.25, -3.35, -2.65, -1.55, -1.85, -2.6, -0.9, 0.35],   // posta 7
+    [-7.6, -5.65, -4.35, -3.2, -3.7, -2.65, -2.4, -3, -3.7, -6.25],   // posta 8
+    [-9.4, -7.25, -5.8, -5, -2.85, -2.15, -2.55, -3.2, -3.35, -3.55],   // posta 9
+    [-14.6, -12.7, -10.55, -6.75, -3.05, -1.15, 0.1, 0.25, 0.2, 0.25],   // rincorsa
+  ],
+  [ // palio 8
+    [5.7, 5.75, 6.55, 8.4, 9.85, 10.55, 10.15, 9.05, 7.6, 6.25],   // posta 1
+    [5, 4.45, 5.3, 7.1, 8.55, 9.25, 8.85, 7.75, 6.3, 4.95],   // posta 2
+    [4.3, 2.9, 3.9, 5.8, 7.25, 7.95, 7.55, 6.45, 5, 3.65],   // posta 3
+    [3.4, 0.75, 2.3, 4.5, 5.95, 6.65, 6.25, 5.15, 3.7, 2.35],   // posta 4
+    [2, -0.45, 1, 3.2, 4.65, 5.35, 4.95, 3.85, 2.4, 1.05],   // posta 5
+    [0.8, -1.6, -0.95, 1.9, 3.35, 4.05, 3.65, 2.55, 1.1, -0.25],   // posta 6
+    [-1.2, -2.95, -2.2, 0.6, 2.05, 2.75, 2.35, 1.25, -0.2, -1.55],   // posta 7
+    [-2.45, -3.35, -3.6, -0.7, 0.75, 1.45, 1.05, -0.05, -1.5, -2.85],   // posta 8
+    [-3.75, -5.25, -5.05, -2, -0.55, 0.15, -0.25, -1.35, -2.8, -4.15],   // posta 9
+    [-14.6, -10.75, -7.25, -3.8, -1.85, -1.15, -1.55, 0.5, 0.95, 0.05],   // rincorsa
+  ],
+  [ // palio 9
+    [5.7, 5.75, 6.55, 8.4, 9.85, 10.55, 10.15, 9.05, 7.6, 6.25],   // posta 1
+    [4.45, 4.45, 5.3, 7.1, 8.55, 9.25, 8.85, 7.75, 6.3, 4.95],   // posta 2
+    [2.8, 2.9, 3.9, 5.8, 7.25, 7.95, 7.55, 6.45, 5, 3.65],   // posta 3
+    [0.35, 0.75, 2.3, 4.5, 5.95, 6.65, 6.25, 5.15, 3.7, 2.35],   // posta 4
+    [-2.2, -0.45, 1, 3.2, 4.65, 5.35, 4.95, 3.85, 2.4, 1.05],   // posta 5
+    [-5.8, -2.35, 0.55, 4.7, 6.9, 7.4, 6.5, 5.05, 3, 1.3],   // posta 6
+    [-6.7, -4.8, -2.2, 0.6, 2.05, 2.75, 2.35, 1.25, -0.2, -1.55],   // posta 7
+    [-7.6, -6.45, -3.6, -0.7, 0.75, 1.45, 1.05, -0.05, -1.5, -2.85],   // posta 8
+    [-8.55, -8.15, -5.05, -2, -0.55, 0.15, -0.25, -1.35, -2.8, -4.15],   // posta 9
+    [-14.6, -8.75, -1, 2.45, 3.85, 3.75, 2.8, 2, 1.1, 1.2],   // rincorsa
+  ],
+  [ // palio 10
+    [4.75, 5.75, 6.55, 8.4, 9.85, 10.55, 10.15, 9.05, 7.6, 6.25],   // posta 1
+    [3.85, 4.45, 5.3, 7.1, 8.55, 9.55, 9.4, 7.75, 6.3, 4.95],   // posta 2
+    [2.8, 3.8, 3.9, 5.8, 7.25, 7.95, 8.2, 7.25, 5, 3.65],   // posta 3
+    [0.35, 2.6, 4.2, 5.55, 5.95, 6.65, 6.25, 5.15, 3.7, 2.35],   // posta 4
+    [-0.85, -0.45, 1, 3.2, 4.65, 5.35, 4.95, 3.85, 2.4, 1.05],   // posta 5
+    [-4.8, -3.75, -0.95, 1.9, 3.35, 4.05, 3.65, 2.55, 1.1, -0.25],   // posta 6
+    [-5.8, -4.8, -2.2, 0.6, 2.05, 2.75, 2.35, 1.25, -0.2, -1.55],   // posta 7
+    [-7.6, -6.45, -3.6, -0.7, 0.75, 1.45, 1.05, -0.05, -1.5, -2.85],   // posta 8
+    [-9.4, -5.65, -2.2, -0.1, -0.55, 0.15, -0.25, -1.35, -2.8, -4.15],   // posta 9
+    [-14.6, -9.75, -5.5, -3.3, -1.85, -1.15, -1.55, -2.65, -4.1, -5.45],   // rincorsa
+  ],
+];
+const PARTENZE_PASSO = 10, PARTENZE_FINE = 90;
+const PARTENZE_RACCORDO = 20;   // metri in cui ci si raccorda dalla corsia vera alla linea disegnata
+const PARTENZE_AVANTI = 5;      // si mira un po' avanti: l'inseguimento di corsia ha un ritardo
+function assegnaPartenze() {
+  state.partenzeIdx = (((state.copioneIdx || 1) - 1) % 10 + 10) % 10;
+  // per ORDINE REALE al via, dal colonnino ai palchi (il giocatore conta per il posto
+  // che occupa, ma la sua linea non la segue nessuno)
+  state.horses.filter((h) => !h.isRincorsa).sort((a, b) => (b.lane || 0) - (a.lane || 0))
+    .forEach((h, k) => { h.partenzaK = Math.min(k, 8); h.partenzaOff = null; });
+  state.horses.forEach((h) => { if (h.isRincorsa) { h.partenzaK = 9; h.partenzaOff = null; } });
+}
+function inPartenza(h) {
+  const pr = h.progress || 0;
+  return state.partenzeIdx != null && h.partenzaK != null && pr >= 0 && pr <= PARTENZE_FINE;
+}
+// Hermite monotona aperta, la stessa curva che l'editor disegna fra i punti.
+function corsiaPartenza(v, c) {
+  const n = v.length, d = [], t = new Array(n).fill(0);
+  for (let k = 0; k < n - 1; k++) d.push((v[k + 1] - v[k]) / PARTENZE_PASSO);
+  for (let k = 1; k < n - 1; k++) if (d[k - 1] * d[k] > 0) t[k] = 2 / (1 / d[k - 1] + 1 / d[k]);
+  t[0] = d[0]; t[n - 1] = d[n - 2];
+  if (d[0] * (d[1] ?? d[0]) <= 0) t[0] = 0;
+  if (d[n - 2] * (d[n - 3] ?? d[n - 2]) <= 0) t[n - 1] = 0;
+  const x = clamp(c, 0, (n - 1) * PARTENZE_PASSO), i = Math.min(n - 2, Math.floor(x / PARTENZE_PASSO));
+  const u = (x - i * PARTENZE_PASSO) / PARTENZE_PASSO, h = PARTENZE_PASSO, u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * v[i] + (u3 - 2 * u2 + u) * h * t[i] + (-2 * u3 + 3 * u2) * v[i + 1] + (u3 - u2) * h * t[i + 1];
+}
+function bersaglioPartenza(h) {
+  if (!inPartenza(h) || (h.player && !h.autopilot)) return null;
+  const v = PARTENZE[state.partenzeIdx][h.partenzaK], pr = h.progress || 0;
+  // MARGINE: si parte da dove il cavallo è davvero e ci si raccorda alla linea in 20 m.
+  if (h.partenzaOff == null) h.partenzaOff = (h.lane || 0) - corsiaPartenza(v, pr);
+  const t = Math.min(1, pr / PARTENZE_RACCORDO), w = 1 - t * t * (3 - 2 * t);
+  return corsiaPartenza(v, Math.min(PARTENZE_FINE, pr + PARTENZE_AVANTI)) + h.partenzaOff * w;
+}
