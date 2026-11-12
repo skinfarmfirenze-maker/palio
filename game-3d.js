@@ -10418,7 +10418,7 @@ function startMossa(fromTratta = false) {
   state.tuttiFuoriMax = rTF < 0.4 ? 1 : (rTF < 0.75 ? 2 : 3);
   state.forcedStartWindow = 0;                     // finestra forzata dei 5 minuti
   state.rincorsaFiancaAt = null; state.forzaCanape = null;   // FIANCA: da capo
-  state.horses.forEach((h) => { h.fPremuto = null; h.balzoT = 0; });
+  state.horses.forEach((h) => { h.fPremuto = null; h.fChiamata = false; h.balzoT = 0; });
   state.chaosTimer = 0;
   state.recallCount = 0;                            // richiami singoli (2° → tutti fuori)
   state.recallCd = 0;
@@ -10612,7 +10612,11 @@ function premiFianca() {
       return;
     }
     if (!p.called || p.entering || p.fPremuto != null) return;
-    if (giocatoreHaLaMossa()) return;   // la mossa è tua: parti a 5, non si forza
+    if (giocatoreHaLaMossa()) {         // la mossa è tua: F = parti a 5 (Simone 12/11), non si forza
+      p.speedSetting = ANDATURA_MAX;    // la partenza a chiamata la dà il ramo dei canapi
+      p.fChiamata = true;               // al via parte come chi ha fiancato bene
+      return;
+    }
     p.fPremuto = state.tGioco || 0;    // lo scattino arriva fra 2 s (fiancaTick)
     return;
   }
@@ -10692,6 +10696,9 @@ function fiancaAlVia() {
   state.horses.forEach((h) => {
     if (h.isRincorsa) return;
     if (h.fPremuto != null) { h.fPremuto = null; applicaFianca(h, "perfetta"); return; }
+    // MOSSA COMPRATA: chi parte a chiamata (a 5 o con F) dà lui il via, quindi parte
+    // come chi ha fiancato bene (chiamataNoStaminaT lo mette releaseRace un attimo prima).
+    if (isHuman(h) && (h.fChiamata || (h.chiamataNoStaminaT || 0) > 0)) { h.fChiamata = false; applicaFianca(h, "perfetta"); return; }
     if (isHuman(h)) return;   // il giocatore senza pressione: niente (può ancora premere entro 1,2 s: +5%)
     let tipo = h.fiancaAI;
     if (tipo === undefined) {   // via senza fiancata vista (partenza forzata): si tira ora
@@ -11160,7 +11167,7 @@ function triggerMossaFalsa(motivo) {
   state.falseStartCount = (state.falseStartCount || 0) + 1;
   state.falseStartRunning = true;
   state.rincorsaFiancaAt = null; state.forzaCanape = null;   // FIANCA: si riparte da capo
-  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; h.scattoT = 0; h.fPremuto = null; h.balzoT = 0; });
+  state.horses.forEach((h) => { h.fiancaAI = undefined; h.fiancaPremeTra = 0; h.scattoT = 0; h.fPremuto = null; h.fChiamata = false; h.balzoT = 0; });
   state.falseStartTimer = 0;
   state.falseStartMortarettoDone = false;
   state.falsaMotivo = motivo || motivoMossaFalsa();
@@ -12648,13 +12655,13 @@ function updateRincorsa(rincorsa, dt) {
         const rinReady = rincorsaPronta();
         if (ownsMossa && !state.cartelloMossaFatto) {
           state.cartelloMossaFatto = true;       // una volta per palio, non a ogni frame
-          mostraCartello("Parti a 5 quando vuoi, la rincorsa ti darà la mossa", 2);
+          mostraCartello("Parti a 5 o premi F quando vuoi, la rincorsa ti darà la mossa", 2);
         }
         if (ownsMossa && rinReady) {
           if (Math.round(meAsta.speedSetting || 1) >= ANDATURA_MAX && isMossaAligned()) {
             chiamataA5 = true; state.chiamataA5 = true;                       // parte a chiamata
           } else if (state.messageTimer <= 0) {
-            showMessage("Parti a 5 · ti do la mossa!", 1.0, "good");          // spingi a 5 per partire
+            showMessage("Parti a 5 o premi F · ti do la mossa!", 1.0, "good");          // spingi a 5 per partire
           }
         }
         // ── SE LA RINCORSA E' IL TUO CAVALLO, FIANCHI TU ────────────────────
@@ -12879,7 +12886,7 @@ function updateRincorsaWatcher(rincorsa) {
     statusText = "Aspetta…";         statusCls = "";
   } else if (giocatoreHaLaMossa()) {
     // Comprata la mossa: qui non serve dire "osserva", serve dirgli COSA FARE.
-    statusText = "Parti a 5 quando vuoi, la rincorsa ti darà la mossa"; statusCls = "good";
+    statusText = "Parti a 5 o premi F quando vuoi, la rincorsa ti darà la mossa"; statusCls = "good";
   } else {
     statusText = "Osserva la mossa"; statusCls = "";
   }
