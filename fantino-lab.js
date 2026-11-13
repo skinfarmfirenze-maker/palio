@@ -1106,7 +1106,9 @@ export function buildFantino(contrada, opts = {}) {
 //  · GINOCCHIA (v4): la gamba del modello è un pezzo solo, piegato da fantino in sella;
 //    nel clone caduto diventa coscia + stinco (vertici pesati lungo la gamba), così può
 //    distendersi;
-//  · SI RIALZA (v4): fermo da un po', si mette seduto, si alza in piedi e si allontana
+//  · RESTA A TERRA (13/11): rimbalza sui materassi e resta sdraiato sulla pista (il
+//    rialzarsi del v4 è spento, CADUTA_FANTINO.rialza);
+//  · SI RIALZA (v4, ora spento): fermo da un po', si mette seduto, si alza in piedi e si allontana
 //    zoppicando verso il bordo da cui è caduto (si ferma davanti ai materassi), poi
 //    resta lì in piedi finché il gioco non lo dissolve (f.restAge, prima spariva sul
 //    posto ancora sdraiato).
@@ -1124,7 +1126,10 @@ export const CADUTA_FANTINO = {
   dorme: { v: 0.3, w: 0.6, t: 0.6 },
   ariaF: 3.0, ariaZ: 0.35, // molle degli arti in volo (Hz, smorzamento)
   terraF: 1.3, terraZ: 0.5,
-  // v4: si rialza
+  // v4: si rialza — SPENTO (Simone 13/11: «devono rimbalzare sui materassi e rimanere a
+  // terra sulla pista»): il fantino resta sdraiato dove si è fermato finché il gioco non
+  // lo dissolve. Con rialza: true torna il v4 (seduto → in piedi → zoppica verso il bordo).
+  rialza: false,
   attesa: 1.2,             // s fermo prima di rialzarsi
   seduto: 0.9,             // s per mettersi seduto
   inPiedi: 1.1,            // s per alzarsi
@@ -1304,7 +1309,7 @@ export function passoFantinoCaduto(f, dt, mondo) {
   }
   // ── SI RIALZA (v4): fermo da K.attesa s → seduto → in piedi → zoppica verso il bordo
   if (f.restAge == null) f.restAge = 14;
-  if (F.dorme && !F.rialza) {
+  if (F.dorme && !F.rialza && K.rialza) {
     F.tDorme = (F.tDorme || 0) + dt;
     if (F.tDorme > K.attesa) {
       const dir = new THREE.Vector3();

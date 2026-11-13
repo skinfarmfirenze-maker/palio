@@ -15082,18 +15082,33 @@ function fantinoControBordo(f) {
 function mondoFantinoCaduto(f) {
   if (f.mondo) return f.mondo;
   const lungh = track.length || 1;
+  // PROIEZIONE VERA sulla pista (Simone 13/11: i fantini passavano attraverso i
+  // materassi). Prima si proiettava lungo la retta del cavallo al momento della caduta:
+  // a San Martino la pista gira, il fantino vola dritto e risultava ancora in corsia.
+  // Ora: il campione della pista più vicino (ricerca locale che segue il fantino),
+  // progress e corsia veri, normale del muro quella locale (verso la pista).
+  const S = track.samples, NS = S.length;
   const proietta = (x, z) => {
-    const dx = x - f.pos0.x, dz = z - f.pos0.z;
-    return { prog: f.bordo.prog0 + dx * f.F.x + dz * f.F.z, lane: f.bordo.lane0 - (dx * f.L.x + dz * f.L.z) };
+    if (!NS) return { prog: f.bordo.prog0, lane: f.bordo.lane0, s: null };
+    let i0 = f._iPista;
+    if (i0 == null) i0 = Math.round(positiveMod(f.bordo.prog0, lungh) / lungh * NS) % NS;
+    let best = i0, bd = Infinity;
+    for (let k = -40; k <= 40; k += 1) {
+      const j = (i0 + k + NS) % NS, q = S[j].point, d = (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z);
+      if (d < bd) { bd = d; best = j; }
+    }
+    f._iPista = best;
+    const sm = S[best], dx = x - sm.point.x, dz = z - sm.point.z;
+    return { prog: sm.cum + dx * sm.tangent.x + dz * sm.tangent.z, lane: dx * sm.normal.x + dz * sm.normal.z, s: sm };
   };
   f.mondo = {
     suolo: (x, z) => trackHeightAt(positiveMod(proietta(x, z).prog, lungh)),
     muro: (x, z) => {
       if (!NARROW_READY) return null;
       const p = proietta(x, z);
-      if (!controMaterassiOSteccatoAlto(p.prog)) return null;
+      if (!p.s || !controMaterassiOSteccatoAlto(p.prog)) return null;
       const pen = -outerLimitAt(p.prog) - p.lane;
-      return pen > 0 ? { nx: -f.L.x, nz: -f.L.z, pen } : null;
+      return pen > 0 ? { nx: p.s.normal.x, nz: p.s.normal.z, pen } : null;
     },
   };
   return f.mondo;
