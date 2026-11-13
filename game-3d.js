@@ -15106,7 +15106,7 @@ function mondoFantinoCaduto(f) {
     muro: (x, z) => {
       if (!NARROW_READY) return null;
       const p = proietta(x, z);
-      if (!p.s || !controMaterassiOSteccatoAlto(p.prog)) return null;
+      if (!p.s) return null;   // muro su TUTTO il bordo esterno: materassi, steccato alto e palancata (Simone 13/11)
       const pen = -outerLimitAt(p.prog) - p.lane;
       return pen > 0 ? { nx: p.s.normal.x, nz: p.s.normal.z, pen } : null;
     },
