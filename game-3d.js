@@ -14609,17 +14609,34 @@ const COPIONE_CADUTE = [
   [["sm", 1, 5, "fuori"]],   // palio 11: 5 Contrade sui materassi al primo San Martino (Simone)
 ];
 const COPIONE_KEY = "palio.copioneCadute.v1";
+// ══ SCONTRO A SAN MARTINO (Simone 13/11) ══════════════════════════════════════
+// «Nei prossimi 5 palii fai cadere 7 Contrade in uno scontro feroce al primo San
+// Martino sui materassi». Vale per i primi 5 palii di ogni dispositivo da questa
+// versione in poi, AL POSTO della riga del ciclo; il ciclo intanto avanza (le
+// partenze continuano a cambiare). Dopo il 5° si torna al copione normale.
+const SCONTRO_SM = [["sm", 1, 7, "fuori"]];
+const SCONTRO_SM_PALII = 5;
+const SCONTRO_SM_KEY = "palio.scontroSM.v1";
+// Le 7 cadute stanno nel primo tratto dei materassi (questa frazione), non sparse
+// su tutto: è uno scontro, non una fila.
+const SCONTRO_SM_TRATTO = 0.5;
 function avviaCopioneCadute() {
   let n = 0;
   try { n = parseInt(localStorage.getItem(COPIONE_KEY) || "0", 10) || 0; } catch (e) { n = 0; }
   const idx = ((n % COPIONE_CADUTE.length) + COPIONE_CADUTE.length) % COPIONE_CADUTE.length;
   try { localStorage.setItem(COPIONE_KEY, String(n + 1)); } catch (e) { /* niente */ }
-  state.copioneIdx = idx + 1;   // 1..11, per chi guarda
+  // Senza localStorage niente scontro: altrimenti ci sarebbe a ogni palio.
+  let scontri = SCONTRO_SM_PALII;
+  try { scontri = parseInt(localStorage.getItem(SCONTRO_SM_KEY) || "0", 10) || 0; } catch (e) { scontri = SCONTRO_SM_PALII; }
+  state.scontroSM = scontri < SCONTRO_SM_PALII;
+  state.scontroDetto = false;
+  if (state.scontroSM) { try { localStorage.setItem(SCONTRO_SM_KEY, String(scontri + 1)); } catch (e) { /* niente */ } }
+  state.copioneIdx = state.scontroSM ? "scontro " + (scontri + 1) : idx + 1;   // 1..11, per chi guarda
   state.cicloN = n;             // palii contati: le PARTENZE usano lo stesso numero con un ciclo di 10 (si mischiano)
   state.copione = {};           // "sm#1" → cadute ancora da fare
   state.copioneAssegnato = {};
   state.copioneLato = {};       // "sm#1" → "fuori"/"dentro" se il copione lo impone
-  COPIONE_CADUTE[idx].forEach(([curva, giro, quante, latoFisso]) => {
+  (state.scontroSM ? SCONTRO_SM : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso]) => {
     if (latoFisso) state.copioneLato[curva + "#" + giro] = latoFisso;
     const q = Array.isArray(quante) ? quante[Math.floor(Math.random() * quante.length)] : quante;
     state.copione[curva + "#" + giro] = q;
@@ -14655,7 +14672,11 @@ function copioneTick() {
       if (h.cadPiano && curva === "sm" && lato === "fuori" && state.copioneLato && state.copioneLato[k] === "fuori") {
         const m = trattoMaterassi(), P = h.cadPiano;
         P.da = m.da; P.a = m.a - 1;
-        P.punto = m.da + (m.a - 1 - m.da) * Math.min(0.92, (i + 0.5) / Math.max(1, quante));
+        const tratto = state.scontroSM ? SCONTRO_SM_TRATTO : 1;   // scontro: tutti nel primo pezzo
+        P.punto = m.da + (m.a - 1 - m.da) * tratto * Math.min(0.92, (i + 0.5) / Math.max(1, quante));
+        // Scontro: chi non arriva al bordo (gli interni, chiusi dai caduti) va giù nella
+        // mischia entro 12 dal suo punto, non da solo dopo i materassi.
+        if (state.scontroSM) P.fineMax = Math.min(P.a, P.punto + 12);
       }
     }
   });
@@ -14686,7 +14707,7 @@ function vaLargoTick() {
     // Le cadute a copione hanno 10 di margine in più per arrivare al bordo (se il
     // gruppo le chiude): solo dopo cadono dove sono.
     const obbligata = P.silenzioso || P.copione;
-    const fine = obbligata ? P.a + 10 : P.a;
+    const fine = P.fineMax != null ? P.fineMax : (obbligata ? P.a + 10 : P.a);
     // fine della finestra sul progress ASSOLUTO, fissata la prima volta che si guarda il piano
     if (P.fineAbs == null) P.fineAbs = (h.progress || 0) + positiveMod(fine - cum, L);
     const fuoriTempo = obbligata ? (h.progress || 0) > P.fineAbs : (cum > fine && cum < fine + 30);
@@ -14695,7 +14716,10 @@ function vaLargoTick() {
       h.cadPiano = null;
       cade(h, P.lato, null, !!P.copione);
       if (P.copione && state.copione && state.copione[P.copione] > 0 && (h.scosso || h.caduto)) state.copione[P.copione] -= 1;
-      if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
+      if ((h.scosso || h.caduto) && P.copione && state.scontroSM && !state.scontroDetto) {
+        state.scontroDetto = true;
+        showMessage("San Martino: scontro sui materassi, Contrade a terra!", 3, "danger");
+      } else if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
         const msg = P.curva === "sm"
           ? (P.lato === "fuori" ? `San Martino: ${h.name} si impancia sui materassi!` : `San Martino: ${h.name} batte sul colonnino!`)
           : (P.lato === "fuori" ? `Casato: ${h.name} batte sullo steccato!` : `Casato: ${h.name} batte sul colonnino!`);
