@@ -14557,12 +14557,13 @@ const CADUTA_CAVALLO_P = 1 / 3;
 // scavalca con un salto visibile (chat Grafica; il numero è da confermare con Simone).
 const INCIAMPO_P = 1 / 3;
 const SALTO_DURATA = 0.45, SALTO_ALTEZZA = 0.9, SALTO_BECCHEGGIO = 0.25;
-function cade(h, lato, ctx, forzata = false) {
+function cade(h, lato, ctx, forzata = false, rovinosa = false) {
   if (!h || h.scosso) return;
   h.cadutaLato = lato || null;
   state.cadutaForzata = forzata;
   try {
-    if (Math.random() < CADUTA_CAVALLO_P) triggerHorseFall(h);
+    // Caduta ROVINOSA (scontri a copione): va giù sempre anche il cavallo.
+    if (rovinosa || Math.random() < CADUTA_CAVALLO_P) triggerHorseFall(h);
     else triggerFall(h, ctx);
   } finally { state.cadutaForzata = false; }
 }
@@ -14612,34 +14613,40 @@ const COPIONE_CADUTE = [
   [["sm", 1, 5, "fuori"]],   // palio 11: 5 Contrade sui materassi al primo San Martino (Simone)
 ];
 const COPIONE_KEY = "palio.copioneCadute.v1";
-// ══ SCONTRO A SAN MARTINO (Simone 13/11) ══════════════════════════════════════
-// «Nei prossimi 5 palii fai cadere 7 Contrade in uno scontro feroce al primo San
-// Martino sui materassi». Vale per i primi 5 palii di ogni dispositivo da questa
-// versione in poi, AL POSTO della riga del ciclo; il ciclo intanto avanza (le
-// partenze continuano a cambiare). Dopo il 5° si torna al copione normale.
-const SCONTRO_SM = [["sm", 1, 7, "fuori"]];
-const SCONTRO_SM_PALII = 5;
-const SCONTRO_SM_KEY = "palio.scontroSM.v1";
-// Le 7 cadute stanno nel primo tratto dei materassi (questa frazione), non sparse
-// su tutto: è uno scontro, non una fila.
-const SCONTRO_SM_TRATTO = 0.5;
+// ══ CADUTE ROVINOSE A COPIONE (Simone 14/11) ══════════════════════════════════
+// «Nei prossimi 1 e 3 palii una caduta rovinosa al terzo giro al Casato di 8
+// Contrade, ai prossimi 2 e 4 caduta di 7 Contrade rovinosa al primo San Martino».
+// Valgono per i primi 4 palii di ogni dispositivo da questa versione, AL POSTO della
+// riga del ciclo; il ciclo intanto avanza (le partenze continuano a cambiare). Dopo
+// il 4° si torna al copione normale. Rovinosa = va giù anche il cavallo.
+// (Sostituisce lo scontro del 13/11: 7 a San Martino nei 5 palii successivi.)
+const SCONTRI = [
+  [["cas", 3, 8, "fuori"]],   // 1°: Casato, 3° giro, 8 Contrade contro lo steccato alto
+  [["sm", 1, 7, "fuori"]],    // 2°: primo San Martino, 7 Contrade sui materassi
+  [["cas", 3, 8, "fuori"]],   // 3°
+  [["sm", 1, 7, "fuori"]],    // 4°
+];
+const SCONTRI_KEY = "palio.scontri.v2";
+// Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
+// frazione), non sparse su tutto: è uno scontro, non una fila.
+const SCONTRO_TRATTO = 0.5;
 function avviaCopioneCadute() {
   let n = 0;
   try { n = parseInt(localStorage.getItem(COPIONE_KEY) || "0", 10) || 0; } catch (e) { n = 0; }
   const idx = ((n % COPIONE_CADUTE.length) + COPIONE_CADUTE.length) % COPIONE_CADUTE.length;
   try { localStorage.setItem(COPIONE_KEY, String(n + 1)); } catch (e) { /* niente */ }
-  // Senza localStorage niente scontro: altrimenti ci sarebbe a ogni palio.
-  let scontri = SCONTRO_SM_PALII;
-  try { scontri = parseInt(localStorage.getItem(SCONTRO_SM_KEY) || "0", 10) || 0; } catch (e) { scontri = SCONTRO_SM_PALII; }
-  state.scontroSM = scontri < SCONTRO_SM_PALII;
+  // Senza localStorage niente scontri: altrimenti ci sarebbero a ogni palio.
+  let fatti = SCONTRI.length;
+  try { fatti = parseInt(localStorage.getItem(SCONTRI_KEY) || "0", 10) || 0; } catch (e) { fatti = SCONTRI.length; }
+  state.scontro = fatti < SCONTRI.length;
   state.scontroDetto = false;
-  if (state.scontroSM) { try { localStorage.setItem(SCONTRO_SM_KEY, String(scontri + 1)); } catch (e) { /* niente */ } }
-  state.copioneIdx = state.scontroSM ? "scontro " + (scontri + 1) : idx + 1;   // 1..11, per chi guarda
+  if (state.scontro) { try { localStorage.setItem(SCONTRI_KEY, String(fatti + 1)); } catch (e) { /* niente */ } }
+  state.copioneIdx = state.scontro ? "scontro " + (fatti + 1) : idx + 1;   // 1..11, per chi guarda
   state.cicloN = n;             // palii contati: le PARTENZE usano lo stesso numero con un ciclo di 10 (si mischiano)
   state.copione = {};           // "sm#1" → cadute ancora da fare
   state.copioneAssegnato = {};
   state.copioneLato = {};       // "sm#1" → "fuori"/"dentro" se il copione lo impone
-  (state.scontroSM ? SCONTRO_SM : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso]) => {
+  (state.scontro ? SCONTRI[fatti] : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso]) => {
     if (latoFisso) state.copioneLato[curva + "#" + giro] = latoFisso;
     const q = Array.isArray(quante) ? quante[Math.floor(Math.random() * quante.length)] : quante;
     state.copione[curva + "#" + giro] = q;
@@ -14670,16 +14677,18 @@ function copioneTick() {
       const h = gruppo.shift();
       pianificaCaduta(h, curva, { lato });
       if (h.cadPiano) h.cadPiano.copione = k;
-      // Lato imposto dal copione sui MATERASSI (palio 11): tutto il tratto dei materassi,
-      // e il punto scala con l'ordine (il più esterno cade per primo, gli altri dopo).
-      if (h.cadPiano && curva === "sm" && lato === "fuori" && state.copioneLato && state.copioneLato[k] === "fuori") {
-        const m = trattoMaterassi(), P = h.cadPiano;
+      // Lato «fuori» imposto dal copione (palio 11, scontri): tutto il tratto dei MATERASSI
+      // a San Martino o dello STECCATO ALTO al Casato, e il punto scala con l'ordine (il
+      // più esterno cade per primo, gli altri dopo).
+      const latoImposto = state.copioneLato && state.copioneLato[k] === "fuori";
+      if (h.cadPiano && lato === "fuori" && latoImposto && (curva === "sm" || state.scontro)) {
+        const m = curva === "sm" ? trattoMaterassi() : trattoSteccatoAlto(), P = h.cadPiano;
         P.da = m.da; P.a = m.a - 1;
-        const tratto = state.scontroSM ? SCONTRO_SM_TRATTO : 1;   // scontro: tutti nel primo pezzo
+        const tratto = state.scontro ? SCONTRO_TRATTO : 1;   // scontro: tutti nel primo pezzo
         P.punto = m.da + (m.a - 1 - m.da) * tratto * Math.min(0.92, (i + 0.5) / Math.max(1, quante));
         // Scontro: chi non arriva al bordo (gli interni, chiusi dai caduti) va giù nella
-        // mischia entro 12 dal suo punto, non da solo dopo i materassi.
-        if (state.scontroSM) P.fineMax = Math.min(P.a, P.punto + 12);
+        // mischia entro 12 dal suo punto, non da solo dopo il tratto. E va giù anche il cavallo.
+        if (state.scontro) { P.fineMax = Math.min(P.a, P.punto + 12); P.rovinosa = true; }
       }
     }
   });
@@ -14717,11 +14726,13 @@ function vaLargoTick() {
     if (fuoriTempo && !obbligata) { h.cadPiano = null; return; }
     if ((cum >= P.punto && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
       h.cadPiano = null;
-      cade(h, P.lato, null, !!P.copione);
+      cade(h, P.lato, null, !!P.copione, !!P.rovinosa);
       if (P.copione && state.copione && state.copione[P.copione] > 0 && (h.scosso || h.caduto)) state.copione[P.copione] -= 1;
-      if ((h.scosso || h.caduto) && P.copione && state.scontroSM && !state.scontroDetto) {
+      if ((h.scosso || h.caduto) && P.rovinosa && !state.scontroDetto) {
         state.scontroDetto = true;
-        showMessage("San Martino: scontro sui materassi, Contrade a terra!", 3, "danger");
+        showMessage(P.curva === "sm"
+          ? "San Martino: caduta rovinosa sui materassi, Contrade a terra!"
+          : "Casato: caduta rovinosa contro lo steccato, Contrade a terra!", 3, "danger");
       } else if ((h.scosso || h.caduto) && !P.silenzioso && state.messageTimer <= 0) {
         const msg = P.curva === "sm"
           ? (P.lato === "fuori" ? `San Martino: ${h.name} si impancia sui materassi!` : `San Martino: ${h.name} batte sul colonnino!`)
@@ -15150,7 +15161,10 @@ function resolveHorsePair(A, B, dt, feedback) {
       // COPIONE: chi inciampa è una delle cadute previste in QUELLA curva e giro; se
       // lì non ne restano (o non è una curva del copione), scavalca sempre.
       let chiaveCop = null;
-      if (state.copione && !su.player) {   // il giocatore (anche in autopilota) non è nel copione
+      // Conta solo chi è ancora IN SELLA: un cavallo già scosso che passa sul caduto non
+      // è una caduta del copione (prima la contava e toglieva il piano a chi doveva
+      // ancora cadere: allo scontro del 14/11 ne cadevano 6 invece di 8).
+      if (state.copione && !su.player && eraInSella) {   // il giocatore (anche in autopilota) non è nel copione
         const Lc = track.length || 1, c = positiveMod(su.progress || 0, Lc);
         const curvaQ = c > SM_IN - 35 && c < SM_OUT + 36.5 ? "sm" : (c > CAS_IN - 35 && c < CAS_OUT + 17.9 ? "cas" : null);
         const k = curvaQ ? curvaQ + "#" + (Math.floor(Math.max(0, su.progress || 0) / Lc) + 1) : null;
@@ -15160,7 +15174,8 @@ function resolveHorsePair(A, B, dt, feedback) {
       if (Math.random() >= INCIAMPO_P) { su.saltoT = SALTO_DURATA; return false; }
       if (chiaveCop) {
         state.cadutaForzata = true;
-        try { triggerFall(su, { other: giu }); } finally { state.cadutaForzata = false; }
+        // Negli scontri (cadute rovinose) chi inciampa va giù col cavallo.
+        try { if (state.scontro) triggerHorseFall(su); else triggerFall(su, { other: giu }); } finally { state.cadutaForzata = false; }
         if (su.scosso) {
           state.copione[chiaveCop] -= 1;
           // Se doveva già cadere lui, è la SUA caduta prevista; altrimenti è una in
