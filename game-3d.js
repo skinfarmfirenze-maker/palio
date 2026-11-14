@@ -9076,7 +9076,10 @@ function setupQuickEconomy() {
   if (!contrada) return;
   const rid = (player && topRunningRivalId(player.id))
     || (RIVALS[contrada.id] ? Object.keys(RIVALS[contrada.id])[0] : null);
-  const rival = CONTRADE.find((c) => c.id === rid) || CONTRADE.find((c) => c.id !== contrada.id) || contrada;
+  // Chi non ha una rivale (Bruco, Drago, Giraffa, Selva) resta SENZA, come in Campagna:
+  // prima prendeva la prima Contrada che non era la sua (l'Aquila) e il gioco gli
+  // proponeva di pararla e di non farla vincere (Simone 14/11).
+  const rival = (rid && CONTRADE.find((c) => c.id === rid)) || null;
   // Tesoro PERSISTENTE: ognuna riparte da dove era rimasta (5000 alla primissima
   // partita di questo account), mai da capo.
   const budgets = loadPersistentBudgets();
