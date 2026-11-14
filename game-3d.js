@@ -14614,19 +14614,18 @@ const COPIONE_CADUTE = [
 ];
 const COPIONE_KEY = "palio.copioneCadute.v1";
 // ══ CADUTE ROVINOSE A COPIONE (Simone 14/11) ══════════════════════════════════
-// «Nei prossimi 1 e 3 palii una caduta rovinosa al terzo giro al Casato di 8
-// Contrade, ai prossimi 2 e 4 caduta di 7 Contrade rovinosa al primo San Martino».
-// Valgono per i primi 4 palii di ogni dispositivo da questa versione, AL POSTO della
+// «Ai prossimi 3 palii si cade al primo San Martino»: 7 Contrade sui materassi.
+// Valgono per i primi 3 palii di ogni dispositivo da questa versione, AL POSTO della
 // riga del ciclo; il ciclo intanto avanza (le partenze continuano a cambiare). Dopo
-// il 4° si torna al copione normale. Rovinosa = va giù anche il cavallo.
-// (Sostituisce lo scontro del 13/11: 7 a San Martino nei 5 palii successivi.)
+// il 3° si torna al copione normale. Rovinosa = va giù anche il cavallo.
+// (Sostituisce la serie precedente del 14/11: 8 al Casato al 3° giro nel 1° e 3°,
+// 7 al primo San Martino nel 2° e 4°.)
 const SCONTRI = [
-  [["cas", 3, 8, "fuori"]],   // 1°: Casato, 3° giro, 8 Contrade contro lo steccato alto
-  [["sm", 1, 7, "fuori"]],    // 2°: primo San Martino, 7 Contrade sui materassi
-  [["cas", 3, 8, "fuori"]],   // 3°
-  [["sm", 1, 7, "fuori"]],    // 4°
+  [["sm", 1, 7, "fuori"]],    // 1°: primo San Martino, 7 Contrade sui materassi
+  [["sm", 1, 7, "fuori"]],    // 2°
+  [["sm", 1, 7, "fuori"]],    // 3°
 ];
-const SCONTRI_KEY = "palio.scontri.v2";
+const SCONTRI_KEY = "palio.scontri.v3";
 // Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
 // frazione), non sparse su tutto: è uno scontro, non una fila.
 const SCONTRO_TRATTO = 0.5;
