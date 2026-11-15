@@ -14613,19 +14613,16 @@ const COPIONE_CADUTE = [
   [["sm", 1, 5, "fuori"]],   // palio 11: 5 Contrade sui materassi al primo San Martino (Simone)
 ];
 const COPIONE_KEY = "palio.copioneCadute.v1";
-// ══ CADUTE ROVINOSE A COPIONE (Simone 14/11) ══════════════════════════════════
-// «Ai prossimi 3 palii si cade al primo San Martino»: 7 Contrade sui materassi.
-// Valgono per i primi 3 palii di ogni dispositivo da questa versione, AL POSTO della
-// riga del ciclo; il ciclo intanto avanza (le partenze continuano a cambiare). Dopo
-// il 3° si torna al copione normale. Rovinosa = va giù anche il cavallo.
-// (Sostituisce la serie precedente del 14/11: 8 al Casato al 3° giro nel 1° e 3°,
-// 7 al primo San Martino nel 2° e 4°.)
-const SCONTRI = [
-  [["sm", 1, 7, "fuori"]],    // 1°: primo San Martino, 7 Contrade sui materassi
-  [["sm", 1, 7, "fuori"]],    // 2°
-  [["sm", 1, 7, "fuori"]],    // 3°
-];
-const SCONTRI_KEY = "palio.scontri.v3";
+// ══ CADUTE ROVINOSE A COPIONE (Simone 15/11) ══════════════════════════════════
+// «Nei prossimi 10 palii cadono le prime 8 al primo San Martino»: le 8 Contrade in
+// testa (fra le AI: il giocatore e la rincorsa restano fuori dal copione) vanno giù
+// sui materassi. Valgono per i primi 10 palii di ogni dispositivo da questa versione,
+// AL POSTO della riga del ciclo; il ciclo intanto avanza (le partenze continuano a
+// cambiare). Dopo il 10° si torna al copione normale. Rovinosa = va giù anche il cavallo.
+// (Sostituisce la serie del 14/11: 7 Contrade al primo San Martino nei 3 palii successivi.)
+// Quinto campo "prime": cadono le prime in corsa, non le più esterne.
+const SCONTRI = Array.from({ length: 10 }, () => [["sm", 1, 8, "fuori", "prime"]]);
+const SCONTRI_KEY = "palio.scontri.v4";
 // Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
 // frazione), non sparse su tutto: è uno scontro, non una fila.
 const SCONTRO_TRATTO = 0.5;
@@ -14645,8 +14642,10 @@ function avviaCopioneCadute() {
   state.copione = {};           // "sm#1" → cadute ancora da fare
   state.copioneAssegnato = {};
   state.copioneLato = {};       // "sm#1" → "fuori"/"dentro" se il copione lo impone
-  (state.scontro ? SCONTRI[fatti] : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso]) => {
+  state.copionePrime = {};      // "sm#1" → true: cadono le prime in corsa (scontri del 15/11)
+  (state.scontro ? SCONTRI[fatti] : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso, chi]) => {
     if (latoFisso) state.copioneLato[curva + "#" + giro] = latoFisso;
+    if (chi === "prime") state.copionePrime[curva + "#" + giro] = true;
     const q = Array.isArray(quante) ? quante[Math.floor(Math.random() * quante.length)] : quante;
     state.copione[curva + "#" + giro] = q;
   });
@@ -14670,6 +14669,9 @@ function copioneTick() {
     let quante = state.copione[k];
     let gruppo = vivi.filter((h) => (h.progress || 0) >= testa - 30 && (h.progress || 0) <= giro * L + inizioCurva(curva));
     if (gruppo.length < quante) gruppo = vivi.slice();
+    // «Le prime 8»: si prendono le AI in testa alla corsa; poi, come sempre, la più
+    // esterna cade per prima.
+    if (state.copionePrime && state.copionePrime[k]) gruppo = vivi.slice().sort((a, b) => (b.progress || 0) - (a.progress || 0)).slice(0, quante);
     for (let i = 0; i < quante && gruppo.length; i += 1) {
       const lato = (state.copioneLato && state.copioneLato[k]) || (Math.random() < (curva === "sm" ? 0.55 : 0.5) ? "fuori" : "dentro");
       gruppo.sort((a, b) => lato === "fuori" ? a.lane - b.lane : b.lane - a.lane);
@@ -15168,6 +15170,9 @@ function resolveHorsePair(A, B, dt, feedback) {
         const curvaQ = c > SM_IN - 35 && c < SM_OUT + 36.5 ? "sm" : (c > CAS_IN - 35 && c < CAS_OUT + 17.9 ? "cas" : null);
         const k = curvaQ ? curvaQ + "#" + (Math.floor(Math.max(0, su.progress || 0) / Lc) + 1) : null;
         if (!k || !(state.copione[k] > 0)) { su.saltoT = SALTO_DURATA; return false; }
+        // «Le prime 8» (15/11): chi non è fra le scelte scavalca, non prende il posto di
+        // una di testa.
+        if (state.copionePrime && state.copionePrime[k] && !(su.cadPiano && su.cadPiano.copione === k)) { su.saltoT = SALTO_DURATA; return false; }
         chiaveCop = k;
       }
       if (Math.random() >= INCIAMPO_P) { su.saltoT = SALTO_DURATA; return false; }
