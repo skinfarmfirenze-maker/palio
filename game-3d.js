@@ -3941,6 +3941,7 @@ function placeHorse(horse, time) {
     horse.group.position.z += -(CV.dx || 0) * sH + (CV.dz || 0) * cH;
     horse.group.position.y += CV.dy || 0;
   }
+  if (horse.cumuloY) horse.group.position.y += horse.cumuloY;   // CUMULO: sopra un altro cavallo a terra
   if (horse.balzoT > 0) horse.balzoT = Math.max(0, horse.balzoT - gdt);   // scattino pronunciato al via
   // SALTO di chi scavalca un cavallo a terra.
   if (horse.saltoT > 0) {
@@ -11259,6 +11260,7 @@ function resetMossaAfterFalsa() {
     // Sono stati quattro secondi di corsa vera: puo' esserci chi e' caduto o e'
     // rimasto scosso. Ai canapi si torna tutti interi.
     h.caduto = false; h.cadutoTimer = 0; h.cadutoRoll = 0; h.cadutoMult = 1; h.cadutoSlide = 0;
+    h.nelCumulo = false; h.cumuloY = 0; h.haSopra = false;
     h.scosso = false; h.finishTime = null; h.boosting = false;
     h.mossaModMult = 1; h.mossaModTimer = 0;
     h.returningToTondino = true;
@@ -14271,6 +14273,7 @@ function updateRace(dt, time) {
     state.raceRunout -= dt;
     if (state.raceRunout <= 0) { finishRace(); return; }
   }
+  cumuloTick(dt);   // strati del mucchio degli scontri (16/11)
   state.horses.forEach((horse) => {
     horse.prevProgress = horse.progress;
     if (horse.fallCd > 0) horse.fallCd -= dt;   // cooldown fra due "tiri" di caduta
@@ -14283,7 +14286,21 @@ function updateRace(dt, time) {
       // decelerando in ~1.2s. Il moto normale è azzerato (cadutoMult 0): a
       // muoverlo è solo lo slancio della caduta, non le gambe.
       horse.cadutoSlide = Math.max(0, (horse.cadutoSlide ?? 0) - dt * 8);
-      if (horse.cadutoSlide > 0) {
+      const Cm = horse.nelCumulo && state.cumulo, baseM = Cm && Cm.base;
+      if (baseM && baseM !== horse && horse.cumuloPosto && (horse.cumuloT = (horse.cumuloT || 0) + dt) < 2.6) {
+        // CUMULO: scivola verso il suo posto nel mucchio (non si ferma a metà strada:
+        // un minimo di slancio finché non ci arriva), un poco anche all'indietro.
+        const limM = outerLimitAt(horse.progress) - 0.7;
+        const tp = baseM.progress + horse.cumuloPosto[0];
+        const tl = clamp(baseM.lane + horse.cumuloPosto[1], -limM, innerLimitAt(horse.progress));
+        const dpM = tp - horse.progress, dlM = tl - horse.lane;
+        const arrivato = Math.abs(dpM) < 0.12 && Math.abs(dlM) < 0.12;
+        const passo = (arrivato ? 0 : Math.max(horse.cadutoSlide, 3.5)) * dt;
+        horse.progress += clamp(dpM, -passo * 0.6, passo);
+        horse.lane += clamp(dlM, -passo, passo);
+        horse.targetLane = horse.lane;
+        if (arrivato) horse.cadutoSlide = 0;
+      } else if (horse.cadutoSlide > 0) {
         horse.progress += horse.cadutoSlide * dt;
         const limScivolo = outerLimitAt(horse.progress) - 0.7;   // coricato è largo: si ferma col corpo davanti ai materassi
         const diLato = horse.cadutaLato === "dentro" ? 0.12 : 0.55;   // al colonnino resta lì vicino, ai materassi ci scivola contro
@@ -14299,6 +14316,8 @@ function updateRace(dt, time) {
       horse.cadutoMult = 0;
       horse.cadutoRoll = lerp(horse.cadutoRoll || 0, 1.25 * (horse.cadutoDir || 1), clamp(dt * 5, 0, 1));
       horse.speedLevel = 0;                      // gambe ferme: è per terra
+      // CUMULO: chi ha un cavallo sopra resta giù finché quello non si è tolto.
+      if (horse.haSopra && horse.cadutoTimer < 2.2) horse.cadutoTimer = 2.2;
       if (horse.cadutoTimer <= 0) horse.caduto = false;   // si rialza
     } else if (horse.cadutoRoll) {
       horse.cadutoRoll = lerp(horse.cadutoRoll, 0, clamp(dt * 2.5, 0, 1));
@@ -14622,7 +14641,22 @@ const COPIONE_KEY = "palio.copioneCadute.v1";
 // (Sostituisce la serie del 14/11: 7 Contrade al primo San Martino nei 3 palii successivi.)
 // Quinto campo "prime": cadono le prime in corsa, non le più esterne.
 const SCONTRI = Array.from({ length: 10 }, () => [["sm", 1, 8, "fuori", "prime"]]);
-const SCONTRI_KEY = "palio.scontri.v4";
+const SCONTRI_KEY = "palio.scontri.v5";   // v5 (16/11): 10 palii nuovi, col cumulo
+// CUMULO (Simone 16/11: «devi mettere proprio che cadono rovinosamente uno sopra
+// l'altro»). Negli scontri le 8 vanno giù tutte nello stesso punto: il primo caduto
+// scivola poco e fa da base, gli altri scivolano verso di lui (ognuno al suo posto,
+// CUMULO_POSTI) e chi finisce addosso a un cavallo a terra gli resta SOPRA, a strati.
+// Chi ha qualcuno sopra non si rialza finché quello sopra non si è tolto, e i fantini
+// cadono sopra i cavalli (il suolo dei fantini caduti tiene conto del mucchio).
+const CUMULO_STRATO = 0.72;     // u: un cavallo coricato è alto 0,84 sul tufo; i corpi si incastrano un po'
+const CUMULO_MAX = 3;           // strati al massimo: un mucchio, non una torre
+const CUMULO_SPESSORE = 0.84;   // u: altezza del fianco di un cavallo coricato (misurata)
+const CUMULO_GIU_IN_PIU = 2.5;  // s a terra in più per chi è nel mucchio
+// [avanti, verso dentro] rispetto al primo caduto, in ordine di caduta: i primi tre
+// a terra uno accanto all'altro, i successivi sopra fra due di sotto, uno in cima, gli
+// ultimi due di sbieco davanti e dietro, mezzi sopra. Strati attesi 3 · 4 · 1.
+const CUMULO_POSTI = [[0, 0], [0.6, 1.4], [-0.5, 2.8], [0.2, 0.7], [-0.1, 2.1], [0.1, 1.4], [2.7, 0.8], [-2.6, 2.0]];
+const CUMULO_LARGO = 1.25;      // u di corsia: più vicini di così, uno sta sopra l'altro (il fianco coricato è largo ~1,3)
 // Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
 // frazione), non sparse su tutto: è uno scontro, non una fila.
 const SCONTRO_TRATTO = 0.5;
@@ -14643,6 +14677,7 @@ function avviaCopioneCadute() {
   state.copioneAssegnato = {};
   state.copioneLato = {};       // "sm#1" → "fuori"/"dentro" se il copione lo impone
   state.copionePrime = {};      // "sm#1" → true: cadono le prime in corsa (scontri del 15/11)
+  state.cumulo = null;          // il mucchio dello scontro: { base, n }
   (state.scontro ? SCONTRI[fatti] : COPIONE_CADUTE[idx]).forEach(([curva, giro, quante, latoFisso, chi]) => {
     if (latoFisso) state.copioneLato[curva + "#" + giro] = latoFisso;
     if (chi === "prime") state.copionePrime[curva + "#" + giro] = true;
@@ -14690,6 +14725,8 @@ function copioneTick() {
         // Scontro: chi non arriva al bordo (gli interni, chiusi dai caduti) va giù nella
         // mischia entro 12 dal suo punto, non da solo dopo il tratto. E va giù anche il cavallo.
         if (state.scontro) { P.fineMax = Math.min(P.a, P.punto + 12); P.rovinosa = true; }
+        // Cumulo (16/11): tutte nello stesso punto, in fondo al primo pezzo di materassi.
+        if (state.scontro) { P.punto = m.da + 2 + i * 0.4; P.fineMax = Math.min(P.a, P.punto + 4); }
       }
     }
   });
@@ -14812,7 +14849,9 @@ function fantiniACavallo() {
 function triggerHorseFall(horse) {
   if (!horse || horse.caduto) return;
   if (!state.cadutaForzata && fantiniACavallo() <= MIN_A_CAVALLO && !horse.scosso) return;   // tieni almeno MIN_A_CAVALLO in sella (non col copione)
-  triggerFall(horse, { conCavallo: true });   // il fantino vola oltre il collo (no-op se già scosso)
+  // CUMULO (scontri, 16/11): il fantino non vola lontano, finisce sul mucchio.
+  const nelCumulo = !!(state.scontro && state.cadutaForzata);
+  triggerFall(horse, { conCavallo: true, cumulo: nelCumulo });   // il fantino vola oltre il collo (no-op se già scosso)
   horse.caduto = true;
   horse.cadMuroFatto = false;   // potrà battere sui materassi (cavallo-lab §8)
   horse.cadutaNum = (horse.cadutaNum || 0) + 1;   // per il «un tiro per incontro» di chi gli arriva addosso
@@ -14827,6 +14866,17 @@ function triggerHorseFall(horse) {
   // (primo frame), si assume un galoppo pieno.
   const vStim = (horse.progress - (horse.prevProgress ?? horse.progress)) * 60;
   horse.cadutoSlide = clamp(vStim > 0.5 ? vStim : 9, 3, 15);
+  // CUMULO (scontri, 16/11): chi cade a copione entra nel mucchio. Il primo fa da base
+  // (scivola meno, il mucchio resta lì), gli altri ci scivolano sopra.
+  horse.nelCumulo = nelCumulo;
+  if (horse.nelCumulo) {
+    if (!state.cumulo) { state.cumulo = { base: horse, n: 0 }; horse.cadutoSlide *= 0.6; }
+    horse.cumuloPosto = CUMULO_POSTI[state.cumulo.n % CUMULO_POSTI.length];
+    state.cumulo.n += 1;
+    horse.cumuloOrd = state.cumulo.n;
+    horse.cumuloT = 0;
+    horse.cadutoTimer += CUMULO_GIU_IN_PIU;
+  }
   state.cameraShake = Math.max(state.cameraShake || 0, 0.5);
   try { playColpoPalchi(0.85); } catch (e) { /* niente */ }   // batte e cade: tonfo sui palchi, non nitrito
   if (state.messageTimer <= 0) showMessage(`${horse.name}: a terra anche il cavallo!`, 2.0, "danger");
@@ -14970,8 +15020,10 @@ function startJockeyFall(horse, rider, ctx) {
     // CADE ANCHE IL CAVALLO (fantino-lab v4): il cavallo pianta il muso, il fantino
     // vola OLTRE IL COLLO — tutto lo slancio in avanti, spinta in alto, poco di lato.
     const conCavallo = !!(ctx && ctx.conCavallo);
+    // Nel CUMULO degli scontri (16/11) poco slancio: il fantino cade sul mucchio, non 20 avanti.
+    const avanti = conCavallo ? (ctx.cumulo ? 0.3 : 0.95) : FALL.FWD_FRAC;
     const vel = new THREE.Vector3()
-      .addScaledVector(F, spd * (conCavallo ? 0.95 : FALL.FWD_FRAC))
+      .addScaledVector(F, spd * avanti)
       .addScaledVector(side, rnd(FALL.LAT) * u * (conCavallo ? 0.4 : 1))
       .addScaledVector(new THREE.Vector3(0, 1, 0), conCavallo ? 2.6 + Math.random() * 0.8 : rnd(FALL.UP) * u);
 
@@ -15117,7 +15169,7 @@ function mondoFantinoCaduto(f) {
     return { prog: sm.cum + dx * sm.tangent.x + dz * sm.tangent.z, lane: dx * sm.normal.x + dz * sm.normal.z, s: sm };
   };
   f.mondo = {
-    suolo: (x, z) => trackHeightAt(positiveMod(proietta(x, z).prog, lungh)),
+    suolo: (x, z) => trackHeightAt(positiveMod(proietta(x, z).prog, lungh)) + sopraIlCumulo(x, z),
     muro: (x, z) => {
       if (!NARROW_READY) return null;
       const p = proietta(x, z);
@@ -15127,6 +15179,51 @@ function mondoFantinoCaduto(f) {
     },
   };
   return f.mondo;
+}
+// CUMULO (16/11): altezza dei cavalli del mucchio sopra il tufo nel punto (x, z), per i
+// fantini che ci cadono addosso. Il corpo coricato sta di lato rispetto all'origine del
+// gruppo, dalla parte in cui è caduto (misurato: ~1,2 di lato, ~0,3 avanti); il fianco
+// è un dosso alto CUMULO_SPESSORE, lungo quanto il cavallo.
+function sopraIlCumulo(x, z) {
+  if (!state.cumulo) return 0;
+  let top = 0;
+  state.horses.forEach((h) => {
+    if (!h.nelCumulo || !h.caduto || !h.group) return;
+    const g = h.group.position, yaw = h.group.rotation.y, sY = Math.sin(yaw), cY = Math.cos(yaw);
+    const lat = -(h.cadutoDir || 1) * 1.2;
+    const cx = g.x + cY * lat + sY * 0.3, cz = g.z - sY * lat + cY * 0.3;
+    const dx = x - cx, dz = z - cz;
+    const av = dx * sY + dz * cY, tr = dx * cY - dz * sY;
+    if (Math.abs(av) > HORSE_BLOCK_LENGTH * 0.5) return;
+    const q = Math.abs(tr) / 0.8;
+    if (q >= 1) return;
+    const y = (h.cumuloY || 0) + CUMULO_SPESSORE * Math.sqrt(1 - q * q);
+    if (y > top) top = y;
+  });
+  return top;
+}
+// Strati del mucchio, una volta per frame: in ordine di caduta, chi si sovrappone a un
+// cavallo già a terra (sotto di lui) sale di uno strato sopra quello.
+function cumuloTick(dt) {
+  const giu = state.cumulo ? state.horses.filter((h) => h.nelCumulo && h.caduto).sort((a, b) => a.cumuloOrd - b.cumuloOrd) : [];
+  state.horses.forEach((h) => { h.haSopra = false; });
+  giu.forEach((h, i) => {
+    let base = 0;
+    for (let j = 0; j < i; j += 1) {
+      const y = giu[j];
+      if (Math.abs(y.progress - h.progress) < HORSE_BLOCK_LENGTH * 0.7 && Math.abs(y.lane - h.lane) < CUMULO_LARGO) {
+        base = Math.max(base, (y.cumuloSu || 0) + CUMULO_STRATO);
+        y.haSopra = true;
+      }
+    }
+    h.cumuloSu = Math.min(base, CUMULO_STRATO * (CUMULO_MAX - 1));
+  });
+  state.horses.forEach((h) => {
+    const meta = h.nelCumulo && h.caduto ? (h.cumuloSu || 0) : 0;
+    if (!h.cumuloY && !meta) return;
+    h.cumuloY = lerp(h.cumuloY || 0, meta, clamp(dt * (meta > (h.cumuloY || 0) ? 10 : 6), 0, 1));
+    if (!meta && h.cumuloY < 0.01) h.cumuloY = 0;
+  });
 }
 function clearFallenRiders() {
   (state.fallenRiders || []).forEach((f) => { try { scene.remove(f.obj); } catch (e) { /* niente */ } });
