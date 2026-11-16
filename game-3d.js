@@ -13768,7 +13768,7 @@ function updateAiHorse(horse, dt, time) {
   if (horse.player && !horse.autopilot && state.mode !== "finished") return;   // autopilot (ASSISTI): guidato come un'AI
   if (horse.launching) return; // ritardo di reazione individuale al via
   // Partito storto: si raddrizza per gradi galoppando (~1.5s), non di scatto.
-  if (horse.raceTurn) horse.raceTurn *= Math.max(0, 1 - dt * 1.1);
+  if (horse.raceTurn && !horse.caduto) horse.raceTurn *= Math.max(0, 1 - dt * 1.1);   // a terra resta girato dove andava
   const player = getPlayer();
   // ── AI: NERBATA IN GARA. Con munizioni e cadenza pronta, ogni tanto (in base
   // all'AGGRESSIVITÀ del fantino) frusta un cavallo accanto per rallentarlo —
@@ -14169,7 +14169,18 @@ function updateAiHorse(horse, dt, time) {
   // INCIDENTE DI SAN MARTINO: le due di testa sorteggiate vanno LARGHE, fino ai
   // materassi (vedi updateRace). Qui, perché è qui che la guida sceglie la corsia.
   // CADUTA PIANIFICATA: verso i materassi/steccato (fuori) o il colonnino (dentro).
-  if (horse.cadPiano) horse.targetLane = horse.cadPiano.lato === "fuori" ? -aiOuterLim : aiInnerLim;
+  if (horse.cadPiano) {
+    const Pg = horse.cadPiano;
+    if (Pg.stringe && !horse.caduto) {
+      // SCONTRO a San Martino: prima STRINGE al colonnino, dalla svolta non gira più
+      // (la corsia la fa la strada dritta, dopo l'avanzamento).
+      if (!Pg.dritto && (horse.progress || 0) < Pg.svoltaAbs) horse.targetLane = aiInnerLim;
+      else {
+        if (!Pg.dritto) { Pg.dritto = true; Pg.yaw0 = sample.yaw; }
+        horse.targetLane = horse.lane;
+      }
+    } else horse.targetLane = Pg.lato === "fuori" ? -aiOuterLim : aiInnerLim;
+  }
   horse.alBordoFuori = horse.lane <= -aiOuterLim + 0.6;   // per vaLargoTick: è sui materassi/steccato
   horse.alBordoDentro = horse.lane >= aiInnerLim - 0.6;   // …o sul colonnino
   const previousLane = horse.lane;
@@ -14224,7 +14235,7 @@ function updateAiHorse(horse, dt, time) {
   // (strettoia) e lui viene spostato verso l'interno, non è un urto.
   const controColonnino = horse.lane >= aiInnerLim - 0.06 && horse.laneVelocity > RAIL_HIT_MIN_COLONNINI * 0.75;
   const controPalchi = horse.lane <= -(aiOuterLim - 0.06) && horse.laneVelocity < -RAIL_HIT_MIN;
-  if (controColonnino || controPalchi) {
+  if ((controColonnino || controPalchi) && !(horse.cadPiano && horse.cadPiano.stringe)) {
     riskFall(horse, fallImpactBordo(horse.laneVelocity, controColonnino, horse.progress), "steccato", null,
       !controColonnino && controMaterassiOSteccatoAlto(horse.progress) ? LARGO_CADUTA_MOLT : 1);
   }
@@ -14237,12 +14248,21 @@ function updateAiHorse(horse, dt, time) {
   // piu' stretto, e solo per chi corre forte. Non e' il vecchio freno (che
   // arrivava a -30% e si sentiva come un risucchio): serve a far girare le
   // Contrade con la curva invece di scaraventarcisi dentro.
-  const curvePenalty = 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
+  const curvePenalty = horse.cadPiano && horse.cadPiano.stringe ? SCONTRO_A_TUTTA
+    : 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt * (horse.rampaVel || 1 / 4) * (0.85 + 0.15 * (horse.sprint || 1)));
   const progPrimaLibero = horse.progress;
   horse.progress += horse.travelSpeed * curvePenalty * RACE_SPEED_MULT * horse.launchRamp * frenataArrivo(horse) * dt * progressPerStrada(sample, horse.lane) * jkTerzoMult(horse) * tierSpeedMult(horse) * (horse.balanceMult || 1) * (horse.scosso ? SCOSSO_MULT : 1) * (horse.cadutoMult ?? 1) * nerbSlowMult(horse) * leaderBrakeMult(horse) * lastBoostMult(horse) * accordiSpeedMult(horse) * letWinMult(horse) * mossaSpeedMod(horse) * ultime3Mult(horse);
-  if (liberoAlVia && horse.raceTurn && !inPartenza(horse)) {
+  const Pd = horse.cadPiano;
+  if (Pd && Pd.dritto && !horse.caduto && !horse.scosso) {
+    // NON GIRA: tiene la direzione che aveva alla svolta. La pista gli gira sotto, quindi
+    // di lato va verso l'esterno tanto più quanto la curva si è chiusa; il muso resta
+    // dritto (raceTurn = quanto la pista ha girato da lì).
+    let aD = sample.yaw - Pd.yaw0; aD = Math.atan2(Math.sin(aD), Math.cos(aD));
+    horse.lane = clamp(horse.lane - Math.tan(Math.min(Math.abs(aD), 1.25)) * Math.max(0, horse.progress - progPrimaLibero), -aiOuterLim, aiInnerLim);
+    horse.raceTurn = -aD;
+  } else if (liberoAlVia && horse.raceTurn && !inPartenza(horse)) {
     // Di sbieco: avanti lungo la pista quanto ha fatto, di lato quanto vuole il muso.
     const muso = clamp(horse.raceTurn, -0.6, 0.6);
     horse.lane = clamp(horse.lane + Math.tan(muso) * Math.max(0, horse.progress - progPrimaLibero), -aiOuterLim, aiInnerLim);
@@ -14657,6 +14677,38 @@ const CUMULO_GIU_IN_PIU = 2.5;  // s a terra in più per chi è nel mucchio
 // ultimi due di sbieco davanti e dietro, mezzi sopra. Strati attesi 3 · 4 · 1.
 const CUMULO_POSTI = [[0, 0], [0.6, 1.4], [-0.5, 2.8], [0.2, 0.7], [-0.1, 2.1], [0.1, 1.4], [2.7, 0.8], [-2.6, 2.0]];
 const CUMULO_LARGO = 1.25;      // u di corsia: più vicini di così, uno sta sopra l'altro (il fianco coricato è largo ~1,3)
+// COME SI BATTE A SAN MARTINO negli scontri (Simone 16/11: «non che vanno esterni lungo
+// il bordo fino a toccare i materassi, ma entrano super interni, prendono l'uscita
+// larghissima e battono a tutto fuoco, come se avessero stretto prima e non fossero
+// riusciti a girare»). Le 8 si buttano al colonnino all'ingresso; dalla SVOLTA non
+// girano più: vanno dritte (la pista gira, loro no), col muso dritto e a tutta, e
+// arrivano di petto sui materassi SVOLTA_BATTE_DOPO dopo il loro inizio.
+const SVOLTA_BATTE_DOPO = 6;
+const SCONTRO_A_TUTTA = 1.04;   // in curva non rallentano (le altre −8% all'apice): un filo più forte
+let _svoltaSM = null;
+// La SVOLTA si trova simulando, una volta per pista: dal colonnino, andando dritte, da
+// dove si arriva al bordo esterno in quel punto dei materassi.
+function svoltaSanMartino() {
+  const L = track.length || 1;
+  if (_svoltaSM && _svoltaSM.L === L) return _svoltaSM;
+  const m = trattoMaterassi(), meta = m.da + SVOLTA_BATTE_DOPO;
+  let best = null;
+  for (let s0 = SM_IN - 25; s0 <= m.da; s0 += 0.5) {
+    const y0 = sampleAt(s0).yaw;
+    let lane = innerLimitAt(s0) - 0.8, sx = s0, colpo = null;
+    while (sx < m.a + 20) {
+      sx += 0.25;
+      let a = sampleAt(sx).yaw - y0; a = Math.atan2(Math.sin(a), Math.cos(a));
+      lane -= Math.tan(Math.min(Math.abs(a), 1.25)) * 0.25;
+      if (lane <= -outerLimitAt(sx) + 0.6) { colpo = sx; break; }
+    }
+    if (colpo == null) continue;
+    const err = Math.abs(colpo - meta);
+    if (!best || err < best.err) best = { s0, colpo, err };
+  }
+  _svoltaSM = { L, svolta: best ? best.s0 : SM_IN, colpo: best ? best.colpo : null };
+  return _svoltaSM;
+}
 // Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
 // frazione), non sparse su tutto: è uno scontro, non una fila.
 const SCONTRO_TRATTO = 0.5;
@@ -14725,8 +14777,14 @@ function copioneTick() {
         // Scontro: chi non arriva al bordo (gli interni, chiusi dai caduti) va giù nella
         // mischia entro 12 dal suo punto, non da solo dopo il tratto. E va giù anche il cavallo.
         if (state.scontro) { P.fineMax = Math.min(P.a, P.punto + 12); P.rovinosa = true; }
-        // Cumulo (16/11): tutte nello stesso punto, in fondo al primo pezzo di materassi.
-        if (state.scontro) { P.punto = m.da + 2 + i * 0.4; P.fineMax = Math.min(P.a, P.punto + 4); }
+        // Scontro a San Martino (16/11): strette al colonnino, dalla svolta dritte a
+        // battere sui materassi. Cadono appena li toccano, ovunque dopo la svolta (non
+        // vanno lungo il bordo ad aspettare il punto).
+        if (state.scontro && curva === "sm") {
+          const sv = svoltaSanMartino();
+          P.stringe = true; P.svoltaAbs = giro * L + sv.svolta;
+          P.punto = sv.svolta; P.fineMax = P.a;
+        } else if (state.scontro) { P.punto = m.da + 2 + i * 0.4; P.fineMax = Math.min(P.a, P.punto + 4); }
       }
     }
   });
