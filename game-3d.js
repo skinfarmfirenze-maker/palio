@@ -14174,6 +14174,19 @@ function updateAiHorse(horse, dt, time) {
     if (Pg.stringe && !horse.caduto) {
       // SCONTRO a San Martino: prima STRINGE al colonnino, dalla svolta non gira più
       // (la corsia la fa la strada dritta, dopo l'avanzamento).
+      if (Pg.svoltaAbs == null) {
+        const cumG = positiveMod(horse.progress || 0, track.length || 1);
+        // Meta oltre il tratto di petto: riportata dentro in proporzione (l'ordine resta).
+        const dp = trattoDiPetto(Pg.curva);
+        if (Pg.punto > dp.a) {
+          const fz = clamp((Pg.punto - dp.a) / Math.max(1, Pg.a - dp.a), 0, 1);
+          Pg.punto = dp.da + (dp.a - dp.da) * (0.5 + 0.5 * fz);
+        }
+        // chi resta chiuso da un altro cavallo cade lì, contro di lui, non oltre i materassi
+        if (Pg.fineMax == null) { Pg.fineMax = Math.min(Pg.a + 10, Pg.punto + 12); Pg.fineAbs = null; }
+        Pg.svolta = svoltaPer(Pg.curva, Pg.punto).svolta;
+        Pg.svoltaAbs = (horse.progress || 0) + (Pg.svolta - cumG);
+      }
       if (!Pg.dritto && (horse.progress || 0) < Pg.svoltaAbs) horse.targetLane = aiInnerLim;
       else {
         if (!Pg.dritto) { Pg.dritto = true; Pg.yaw0 = sample.yaw; }
@@ -14248,7 +14261,7 @@ function updateAiHorse(horse, dt, time) {
   // piu' stretto, e solo per chi corre forte. Non e' il vecchio freno (che
   // arrivava a -30% e si sentiva come un risucchio): serve a far girare le
   // Contrade con la curva invece di scaraventarcisi dentro.
-  const curvePenalty = horse.cadPiano && horse.cadPiano.stringe ? SCONTRO_A_TUTTA
+  const curvePenalty = horse.cadPiano && horse.cadPiano.dritto ? (state.scontro ? SCONTRO_A_TUTTA : 1)
     : 1 - clamp(sample.curve, 0, 1) * AI_CURVA_PIANO * clamp((horse.speedLevel - 5) / 5, 0, 1);
   // Accelerazione graduale alla partenza: 0 → piena in 4 secondi (no "scoppio").
   horse.launchRamp = Math.min(1, (horse.launchRamp ?? 1) + dt * (horse.rampaVel || 1 / 4) * (0.85 + 0.15 * (horse.sprint || 1)));
@@ -14626,6 +14639,9 @@ function pianificaCaduta(h, curva, opz = {}) {
   const [da, a] = finestraCaduta(curva, lato);
   // Il PUNTO esatto è a caso nella finestra (prima cadevano tutti al primo metro).
   h.cadPiano = { curva, lato, da, a, punto: da + Math.random() * (a - da), silenzioso: !!opz.silenzioso };
+  // Verso l'esterno si batte di petto: stringe, non gira, va dritto (17/11). La svolta
+  // si calcola alla prima guida, sul punto definitivo (il copione può spostarlo).
+  if (lato === "fuori") h.cadPiano.stringe = true;
 }
 // L'imbocco della curva in cui si decide (cum): da 20 prima fino alla fine delle finestre.
 function curvaDiCaduta(cum) {
@@ -14677,37 +14693,76 @@ const CUMULO_GIU_IN_PIU = 2.5;  // s a terra in più per chi è nel mucchio
 // ultimi due di sbieco davanti e dietro, mezzi sopra. Strati attesi 3 · 4 · 1.
 const CUMULO_POSTI = [[0, 0], [0.6, 1.4], [-0.5, 2.8], [0.2, 0.7], [-0.1, 2.1], [0.1, 1.4], [2.7, 0.8], [-2.6, 2.0]];
 const CUMULO_LARGO = 1.25;      // u di corsia: più vicini di così, uno sta sopra l'altro (il fianco coricato è largo ~1,3)
-// COME SI BATTE A SAN MARTINO negli scontri (Simone 16/11: «non che vanno esterni lungo
-// il bordo fino a toccare i materassi, ma entrano super interni, prendono l'uscita
-// larghissima e battono a tutto fuoco, come se avessero stretto prima e non fossero
-// riusciti a girare»). Le 8 si buttano al colonnino all'ingresso; dalla SVOLTA non
-// girano più: vanno dritte (la pista gira, loro no), col muso dritto e a tutta, e
-// arrivano di petto sui materassi SVOLTA_BATTE_DOPO dopo il loro inizio.
-const SVOLTA_BATTE_DOPO = 6;
-const SCONTRO_A_TUTTA = 1.04;   // in curva non rallentano (le altre −8% all'apice): un filo più forte
-let _svoltaSM = null;
-// La SVOLTA si trova simulando, una volta per pista: dal colonnino, andando dritte, da
-// dove si arriva al bordo esterno in quel punto dei materassi.
-function svoltaSanMartino() {
-  const L = track.length || 1;
-  if (_svoltaSM && _svoltaSM.L === L) return _svoltaSM;
-  const m = trattoMaterassi(), meta = m.da + SVOLTA_BATTE_DOPO;
+// COME SI BATTE FUORI (Simone 16/11: «non che vanno esterni lungo il bordo fino a
+// toccare i materassi, ma entrano super interni, prendono l'uscita larghissima e
+// battono a tutto fuoco, come se avessero stretto prima e non fossero riusciti a
+// girare»; 17/11: «deve valere in generale per le cadute»). OGNI caduta verso
+// l'esterno — materassi di San Martino, steccato alto del Casato, a copione, incidente
+// o scontro — va così: il cavallo stringe al colonnino all'ingresso, dalla SVOLTA non
+// gira più, va dritto (la pista gira, lui no) col muso dritto e batte di petto nel
+// punto previsto. Le cadute sul colonnino restano come prima.
+const SVOLTA_BATTE_DOPO = 6;    // scontro: si batte 6 dopo l'inizio dei materassi
+const SCONTRO_A_TUTTA = 1.04;   // scontro: in curva non rallentano (le altre −8% all'apice), un filo più forte
+// Si batte DI PETTO: almeno questo angolo (rad, ~43°) fra la direzione del cavallo e il
+// bordo. Più avanti la diagonale diventa radente — di nuovo lungo il bordo — quindi le
+// mete oltre si riportano, in proporzione, nel tratto dove l'angolo c'è.
+const SVOLTA_ANGOLO_MIN = 0.75;
+// Tabella della curva (direzione della pista e bordi ogni 0,25), una volta per pista.
+const _tabCurve = {};
+function tabCurva(curva) {
+  const L = track.length || 1, da = (curva === "sm" ? SM_IN : CAS_IN) - 25;
+  let T = _tabCurve[curva];
+  if (T && T.L === L && T.da === da) return T;
+  const n = 480, yaw = new Float32Array(n), fuori = new Float32Array(n), dentro = new Float32Array(n);
+  for (let k = 0; k < n; k += 1) {
+    const sx = da + k * 0.25;
+    yaw[k] = sampleAt(sx).yaw; fuori[k] = outerLimitAt(sx); dentro[k] = innerLimitAt(sx);
+  }
+  T = _tabCurve[curva] = { L, da, n, yaw, fuori, dentro, svolte: new Map() };
+  return T;
+}
+// Da dove deve smettere di girare chi parte dal colonnino per battere sul bordo
+// esterno nel punto `meta` (cum): si simula andando dritti da ogni punto possibile e si
+// tiene quello che ci arriva più vicino.
+function svoltaPer(curva, meta) {
+  const T = tabCurva(curva), chiave = Math.round(meta * 2);
+  if (T.svolte.has(chiave)) return T.svolte.get(chiave);
+  const kMeta = Math.round((meta - T.da) / 0.25);
   let best = null;
-  for (let s0 = SM_IN - 25; s0 <= m.da; s0 += 0.5) {
-    const y0 = sampleAt(s0).yaw;
-    let lane = innerLimitAt(s0) - 0.8, sx = s0, colpo = null;
-    while (sx < m.a + 20) {
-      sx += 0.25;
-      let a = sampleAt(sx).yaw - y0; a = Math.atan2(Math.sin(a), Math.cos(a));
+  for (let k0 = 0; k0 < Math.min(kMeta - 8, T.n); k0 += 2) {
+    const y0 = T.yaw[k0];
+    let lane = T.dentro[k0] - 0.4, colpo = null;   // chi stringe sta a ~0,4 dal colonnino (misurato)
+    for (let k = k0 + 1; k < T.n && k < kMeta + 100; k += 1) {
+      let a = T.yaw[k] - y0; a = Math.atan2(Math.sin(a), Math.cos(a));
       lane -= Math.tan(Math.min(Math.abs(a), 1.25)) * 0.25;
-      if (lane <= -outerLimitAt(sx) + 0.6) { colpo = sx; break; }
+      if (lane <= -T.fuori[k] + 0.6) { colpo = k; break; }
     }
     if (colpo == null) continue;
-    const err = Math.abs(colpo - meta);
-    if (!best || err < best.err) best = { s0, colpo, err };
+    const err = Math.abs(colpo - kMeta);
+    if (!best || err < best.err) best = { k0, colpo, err };
   }
-  _svoltaSM = { L, svolta: best ? best.s0 : SM_IN, colpo: best ? best.colpo : null };
-  return _svoltaSM;
+  let r = { svolta: T.da + 25, colpo: null, angolo: 0 };
+  if (best) {
+    let a = T.yaw[best.colpo] - T.yaw[best.k0]; a = Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+    r = { svolta: T.da + best.k0 * 0.25, colpo: T.da + best.colpo * 0.25, angolo: a };
+  }
+  T.svolte.set(chiave, r);
+  return r;
+}
+// Il tratto del bordo dove si batte di petto: dall'inizio dei materassi / dello steccato
+// alto (+3) all'ultima meta che si raggiunge con almeno SVOLTA_ANGOLO_MIN.
+function trattoDiPetto(curva) {
+  const T = tabCurva(curva);
+  if (T.diPetto) return T.diPetto;
+  const m = curva === "sm" ? trattoMaterassi() : trattoSteccatoAlto();
+  const da = m.da + 3;
+  let a = da;
+  for (let meta = da; meta <= m.a; meta += 1) {
+    const sv = svoltaPer(curva, meta);
+    if (sv.colpo != null && Math.abs(sv.colpo - meta) < 1.5 && sv.angolo >= SVOLTA_ANGOLO_MIN) a = meta;
+  }
+  T.diPetto = { da, a };
+  return T.diPetto;
 }
 // Le cadute stanno nel primo tratto dei materassi / dello steccato alto (questa
 // frazione), non sparse su tutto: è uno scontro, non una fila.
@@ -14780,11 +14835,8 @@ function copioneTick() {
         // Scontro a San Martino (16/11): strette al colonnino, dalla svolta dritte a
         // battere sui materassi. Cadono appena li toccano, ovunque dopo la svolta (non
         // vanno lungo il bordo ad aspettare il punto).
-        if (state.scontro && curva === "sm") {
-          const sv = svoltaSanMartino();
-          P.stringe = true; P.svoltaAbs = giro * L + sv.svolta;
-          P.punto = sv.svolta; P.fineMax = P.a;
-        } else if (state.scontro) { P.punto = m.da + 2 + i * 0.4; P.fineMax = Math.min(P.a, P.punto + 4); }
+        if (state.scontro && curva === "sm") { P.punto = m.da + SVOLTA_BATTE_DOPO; P.fineMax = P.a; }
+        else if (state.scontro) { P.punto = m.da + 2 + i * 0.4; P.fineMax = Math.min(P.a, P.punto + 4); }
       }
     }
   });
@@ -14820,7 +14872,9 @@ function vaLargoTick() {
     if (P.fineAbs == null) P.fineAbs = (h.progress || 0) + positiveMod(fine - cum, L);
     const fuoriTempo = obbligata ? (h.progress || 0) > P.fineAbs : (cum > fine && cum < fine + 30);
     if (fuoriTempo && !obbligata) { h.cadPiano = null; return; }
-    if ((cum >= P.punto && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
+    // Chi va a battere dritto (stringe) cade appena tocca il bordo, ovunque dopo la svolta.
+    const daQui = P.stringe && P.svolta != null ? P.svolta : P.punto;
+    if ((cum >= daQui && cum <= fine && (alBordo || isHuman(h))) || fuoriTempo) {
       h.cadPiano = null;
       cade(h, P.lato, null, !!P.copione, !!P.rovinosa);
       if (P.copione && state.copione && state.copione[P.copione] > 0 && (h.scosso || h.caduto)) state.copione[P.copione] -= 1;
@@ -15354,6 +15408,23 @@ function resolveHorsePair(A, B, dt, feedback) {
       }
     }
     return false;
+  }
+  // CHI VA A BATTERE DRITTO (17/11) non resta in scia a chi incontra attraversando la
+  // pista: lo sposta di lato (verso fuori, dove sta) e prosegue fino al bordo. Prima
+  // veniva fermato e rimandato dentro, e cadeva a metà pista. Il giocatore non si sposta.
+  {
+    const dA = !!(A.cadPiano && A.cadPiano.dritto && !A.caduto && !A.scosso);
+    const dB = !!(B.cadPiano && B.cadPiano.dritto && !B.caduto && !B.scosso);
+    if (dA !== dB && gap < HORSE_BLOCK_LENGTH && laneGap < HORSE_BLOCK_WIDTH) {
+      const dr = dA ? A : B, al = dA ? B : A;
+      if (!isHuman(al) && !al.caduto) {
+        const side = Math.sign(al.lane - dr.lane) || -1;
+        al.lane = side < 0
+          ? Math.max(-outerLimitAt(al.progress), dr.lane - HORSE_BLOCK_WIDTH)
+          : Math.min(innerLimitAt(al.progress), dr.lane + HORSE_BLOCK_WIDTH);
+        return true;
+      }
+    }
   }
   // SWEPT (anti-tunneling): se i due hanno invertito l'ordine in progress in
   // questo frame restando affiancati, si sono attraversati -> trattali come urto.
