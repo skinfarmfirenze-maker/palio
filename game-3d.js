@@ -181,6 +181,20 @@ let MOSSA_MAX_DURATION = 300.0;
 // Durata minima della mossa: la rincorsa non può entrare (e quindi la corsa non
 // può partire) prima di questo tempo. Tiene la mossa lunga e tesa.
 const MOSSA_MIN_DURATION = 30.0;
+// CAMPAGNA (Simone 21/11: «in modalità campagna la mossa deve per forza durare
+// almeno 10 minuti e massimo 15»). Vale solo nei palii della campagna, non nella
+// Paliata veloce né nella prova; lì restano i minuti scelti con la rotellina.
+//  · Ogni palio pesca il suo minimo fra 10 e 14 minuti (state.mossaMinCamp): prima la
+//    rincorsa non dà la mossa, e se varca comunque (per sbaglio, o la guidi tu) è
+//    MOSSA FALSA, anche dopo tre false. Le mosse false prima del minimo restano.
+//  · Passato il minimo entra al primo momento buono, come oggi a mossa lunga.
+//  · A 14:30 si forza come allo scadere dei minuti scelti (fila schierata + 10 s);
+//    a 14:50 si forza comunque, anche con la fila non schierata: mai oltre 15 minuti.
+const MOSSA_CAMPAGNA_MIN = 600, MOSSA_CAMPAGNA_MIN_ALTO = 840;
+const MOSSA_CAMPAGNA_FORZA = 870, MOSSA_CAMPAGNA_TETTO = 890;
+function mossaDiCampagna() { return !!(state.campaign && state.campaign.active && !state.campaign.quick); }
+function mossaMinEff() { return mossaDiCampagna() ? (state.mossaMinCamp || MOSSA_CAMPAGNA_MIN) : MOSSA_MIN_DURATION; }
+function mossaMaxEff() { return mossaDiCampagna() ? MOSSA_CAMPAGNA_FORZA : MOSSA_MAX_DURATION; }
 // Attesa della rincorsa PRIMA di potersi lanciare, contata come tempo CUMULATIVO
 // col campo schierato ai canapi (state.rincorsaWait). NON si azzera quando il
 // Mossiere chiama "tutti fuori": la rincorsa è là fuori che aspetta comunque, e
@@ -9964,6 +9978,7 @@ function startMossa(fromTratta = false) {
   // laterale doveva riselezionarla ogni volta.
   if (!state.cameraMode) state.cameraMode = "follow";
   state.mossaTimer = 0;
+  state.mossaMinCamp = MOSSA_CAMPAGNA_MIN + Math.random() * (MOSSA_CAMPAGNA_MIN_ALTO - MOSSA_CAMPAGNA_MIN);   // solo in campagna
   state.cartelloMossaFatto = false;   // il cartello della mossa comprata torna a ogni palio
   state.mossaDuration = 13.2 + Math.random() * 1.4;
   state.canapiDrop = 0;
@@ -12414,7 +12429,9 @@ function updateMossa(dt, time) {
     // La rincorsa ha VARCATO. Vale SOLO se le 9 sono allineate al canapo (nessuna
     // proprio dietro). Se ha varcato durante l'"Aspetta" / con una rimasta indietro
     // → MOSSA FALSA. Girata ma sulla linea = valida. Dopo 3 false si dà comunque buona.
-    if (isMossaAligned() || (state.falseStartCount || 0) >= 3 || (state.forcedStartWindow || 0) > 0 || state.provaDiretta) {
+    // In campagna, prima del minimo, non c'è mossa valida (Simone 21/11).
+    const prestoCampagna = mossaDiCampagna() && state.mossaTimer < mossaMinEff() && !((state.forcedStartWindow || 0) > 0);
+    if (!prestoCampagna && (isMossaAligned() || (state.falseStartCount || 0) >= 3 || (state.forcedStartWindow || 0) > 0 || state.provaDiretta)) {
       releaseRace();
     } else {
       triggerMossaFalsa();
@@ -12427,9 +12444,13 @@ function updateMossa(dt, time) {
   // sono state CHIAMATE e sono AL CANAPO (non prima: se una non è ancora chiamata
   // si aspetta). Da lì la RINCORSA ha 10 secondi per entrare, per forza: SOLO in
   // questo caso la mossa è comunque VALIDA (niente mossa falsa).
-  if (state.mossaTimer >= MOSSA_MAX_DURATION && !(state.forcedStartWindow > 0) && allNineCalledAndAtCanape()) {
+  if (state.mossaTimer >= mossaMaxEff() && !(state.forcedStartWindow > 0) && allNineCalledAndAtCanape()) {
     state.forcedStartWindow = 10;
     // (niente scritta sui 5 minuti scaduti: la rincorsa parte e basta)
+  }
+  // Campagna: tetto dei 15 minuti, anche se la fila non è schierata.
+  if (mossaDiCampagna() && state.mossaTimer >= MOSSA_CAMPAGNA_TETTO && !(state.forcedStartWindow > 0)) {
+    state.forcedStartWindow = 10;
   }
   if (state.forcedStartWindow > 0) {
     state.forcedStartWindow -= dt;
@@ -12597,10 +12618,10 @@ function updateRincorsa(rincorsa, dt) {
           && (o.capOffP || 0) < -1.5);
         const goodEntry = fieldAssembled &&
           (state.mossaFalsaCooldown || 0) <= 0 &&
-          state.mossaTimer >= MOSSA_MIN_DURATION &&
+          state.mossaTimer >= mossaMinEff() &&
           (state.rincorsaWait || 0) >= RINCORSA_MIN_TENSION && (
             (score > threshold && isMossaAligned()) ||
-            (state.mossaTimer > MOSSA_MAX_DURATION * 0.6 && !capriccioFuoriFila) // fallback: mossa lunghissima (non su un capriccio)
+            (state.mossaTimer > mossaMaxEff() * 0.6 && !capriccioFuoriFila) // fallback: mossa lunghissima (non su un capriccio)
           )
           // ONORA L'ASTA: se qualcuno si è comprato la mossa, la rincorsa aspetta
           // il momento buono PER LUI. Dopo 2 minuti molla il vincolo, altrimenti
@@ -12626,7 +12647,7 @@ function updateRincorsa(rincorsa, dt) {
         // FALSA (mortaretto + si riparte). Non a ogni frame, e non oltre 2 false.
         let fiancata = false;
         if (rivalIsMale && !capriccioFuoriFila && fieldAssembled && (state.mossaFalsaCooldown || 0) <= 0
-            && state.mossaTimer >= MOSSA_MIN_DURATION && (state.rincorsaWait || 0) >= 15
+            && state.mossaTimer >= mossaMinEff() && (state.rincorsaWait || 0) >= 15
             && (state.falseStartCount || 0) < 2) {
           // ~30% per DECISIONE (la rincorsa decide ogni ~0.6s): quando la rivale è
           // messa male ci prova a fiancare entro un paio di secondi.
@@ -12650,7 +12671,7 @@ function updateRincorsa(rincorsa, dt) {
               && (t.nervousnessCurrent || 0) < 0.7;
           }
         }
-        const rivalBloccaVia = (rivalIsBene || noMossaBene) && state.mossaTimer < MOSSA_MAX_DURATION;
+        const rivalBloccaVia = (rivalIsBene || noMossaBene) && state.mossaTimer < mossaMaxEff();
         // ── MOSSA A CHIAMATA: se il GIOCATORE si è comprato la mossa, è schierato ai
         // canapi e la rincorsa è in posizione per fiancare, quando porta l'andatura a 5
         // la rincorsa gli dà la mossa → parte LUI (senza forzare il canape, se allineato).
@@ -12819,7 +12840,7 @@ function evaluateRincorsaEntry(rincorsa, horses, mossaTimer) {
   const straggler = avg - Math.min(...progs);
   const noStraggler = straggler <= 1.2 ? 1 : clamp(1 - (straggler - 1.2) / 0.9, 0, 1);
   // Dopo 2 minuti il mossiere ignora il ritardatario e lancia comunque.
-  const stragglerWeight = clamp(1 - (mossaTimer - MOSSA_MAX_DURATION) / 5, 0, 1);
+  const stragglerWeight = clamp(1 - (mossaTimer - mossaMaxEff()) / 5, 0, 1);
   const effectiveNoStraggler = lerp(1, noStraggler, stragglerWeight);
   const slancioScore = clamp((rincorsa.rincorsaSpeed - 0.5) / 4.0, 0, 1);
   return (frontScore * 0.42 + alignScore * 0.43 + slancioScore * 0.15) * effectiveNoStraggler;
@@ -12914,7 +12935,7 @@ function campoSchierato() {
 // La rincorsa è pronta a dare la mossa: campo schierato, tempo minimo passato e
 // la rincorsa ha aspettato abbastanza.
 function rincorsaPronta() {
-  return campoSchierato() && state.mossaTimer >= MOSSA_MIN_DURATION
+  return campoSchierato() && state.mossaTimer >= mossaMinEff()
     && (state.rincorsaWait || 0) >= 15;
 }
 function giocatoreHaLaMossa() {
@@ -12953,7 +12974,7 @@ function updateRincorsaHud(rincorsa) {
   if (!active) return;
   const score = evaluateRincorsaEntry(rincorsa, state.horses, state.mossaTimer);
   const canEnter = state.mossaPhase === "tension"
-    && state.mossaTimer >= MOSSA_MIN_DURATION
+    && state.mossaTimer >= mossaMinEff()
     && (state.rincorsaWait || 0) >= RINCORSA_MIN_TENSION  // attesa cumulativa della rincorsa
     && score >= 0.38;
   const statusEl = document.getElementById("rincorsaStatus");
