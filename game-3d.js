@@ -182,20 +182,27 @@ let MOSSA_MAX_DURATION = 300.0;
 // può partire) prima di questo tempo. Tiene la mossa lunga e tesa.
 const MOSSA_MIN_DURATION = 30.0;
 // CAMPAGNA (Simone 21/11: «in modalità campagna la mossa deve per forza durare
-// almeno 10 minuti e massimo 15»). Vale solo nei palii della campagna, non nella
-// Paliata veloce né nella prova; lì restano i minuti scelti con la rotellina.
-//  · Ogni palio pesca il suo minimo fra 10 e 14 minuti (state.mossaMinCamp): prima la
-//    rincorsa non dà la mossa, e se varca comunque (per sbaglio, o la guidi tu) è
-//    MOSSA FALSA, anche dopo tre false. Le mosse false prima del minimo restano.
-//  · Passato il minimo entra al primo momento buono, come oggi a mossa lunga.
-//  · A 14:30 si forza come allo scadere dei minuti scelti (fila schierata + 10 s);
-//    a 14:50 si forza comunque, anche con la fila non schierata: mai oltre 15 minuti.
+// almeno 10 minuti e massimo 15»; poi: «fai che in campagna duri fra 10 e 20 minuti,
+// al massimo 30»). Vale solo nei palii della campagna: lì la rotellina non conta.
+//  · Ogni palio pesca il suo minimo fra 10 e 20 minuti (state.mossaMinCamp).
+//  · Passato il minimo la rincorsa entra al primo momento buono.
+//  · A 29:30 si forza (fila schierata + 10 s); a 29:50 si forza comunque: mai oltre 30.
+// FUORI DALLA CAMPAGNA (Paliata veloce) il minimo è il 60% del massimo
+// scelto con la rotellina (Simone 21/11: «su 30 min minimo 18 minuti»): 5 → 3 min,
+// 10 → 6, 20 → 12, 30 → 18. La PROVA DIRETTA resta com'era (30 s): serve a provare.
+// Ovunque, prima del minimo il varco della rincorsa è MOSSA FALSA (anche dopo tre
+// false, anche se la guidi tu); le mosse false prima del minimo restano.
 // Casino a pagamento ai canapi (Simone 21/11): raffiche di 8-12 s, pause di 5-9 s.
 const CASINO_RAFFICA_S = 8, CASINO_PAUSA_S = 5;
-const MOSSA_CAMPAGNA_MIN = 600, MOSSA_CAMPAGNA_MIN_ALTO = 840;
-const MOSSA_CAMPAGNA_FORZA = 870, MOSSA_CAMPAGNA_TETTO = 890;
+const MOSSA_CAMPAGNA_MIN = 600, MOSSA_CAMPAGNA_MIN_ALTO = 1200;
+const MOSSA_CAMPAGNA_FORZA = 1770, MOSSA_CAMPAGNA_TETTO = 1790;
+const MOSSA_MIN_QUOTA = 0.6;
 function mossaDiCampagna() { return !!(state.campaign && state.campaign.active && !state.campaign.quick); }
-function mossaMinEff() { return mossaDiCampagna() ? (state.mossaMinCamp || MOSSA_CAMPAGNA_MIN) : MOSSA_MIN_DURATION; }
+function mossaMinEff() {
+  if (mossaDiCampagna()) return state.mossaMinCamp || MOSSA_CAMPAGNA_MIN;
+  if (state.provaDiretta) return MOSSA_MIN_DURATION;
+  return MOSSA_MAX_DURATION * MOSSA_MIN_QUOTA;
+}
 function mossaMaxEff() { return mossaDiCampagna() ? MOSSA_CAMPAGNA_FORZA : MOSSA_MAX_DURATION; }
 // Attesa della rincorsa PRIMA di potersi lanciare, contata come tempo CUMULATIVO
 // col campo schierato ai canapi (state.rincorsaWait). NON si azzera quando il
@@ -4440,6 +4447,7 @@ function openSettingsScreen() {
           + 'border:1px solid rgba(240,203,53,.28);background:rgba(255,246,225,.06);color:#f3e7cf;cursor:pointer;flex:1;min-width:64px'
           + (s.mossaMinuti === m ? ";" + attivo : "") + '">' + m + ' min</button>').join("")
     +   '</div>'
+    +   '<div style="font-size:12px;opacity:.7">Minimo: il 60% del massimo. In campagna la mossa dura da 10 a 30 minuti.</div>'
     +   '<div style="font-size:12.5px;opacity:.7">Oltre questo tempo il mossiere dà il via comunque.</div>'
     + '</div>'
     + (IS_TOUCH_DEVICE ? "" : '<div style="display:flex;flex-direction:column;gap:8px">'
@@ -9982,7 +9990,7 @@ function startMossa(fromTratta = false) {
   // laterale doveva riselezionarla ogni volta.
   if (!state.cameraMode) state.cameraMode = "follow";
   state.mossaTimer = 0;
-  state.mossaMinCamp = MOSSA_CAMPAGNA_MIN + Math.random() * (MOSSA_CAMPAGNA_MIN_ALTO - MOSSA_CAMPAGNA_MIN);   // solo in campagna
+  state.mossaMinCamp = MOSSA_CAMPAGNA_MIN + Math.random() * (MOSSA_CAMPAGNA_MIN_ALTO - MOSSA_CAMPAGNA_MIN);   // solo in campagna: 10-20 min
   state.cartelloMossaFatto = false;   // il cartello della mossa comprata torna a ogni palio
   state.mossaDuration = 13.2 + Math.random() * 1.4;
   state.canapiDrop = 0;
@@ -12473,8 +12481,8 @@ function updateMossa(dt, time) {
     // La rincorsa ha VARCATO. Vale SOLO se le 9 sono allineate al canapo (nessuna
     // proprio dietro). Se ha varcato durante l'"Aspetta" / con una rimasta indietro
     // → MOSSA FALSA. Girata ma sulla linea = valida. Dopo 3 false si dà comunque buona.
-    // In campagna, prima del minimo, non c'è mossa valida (Simone 21/11).
-    const prestoCampagna = mossaDiCampagna() && state.mossaTimer < mossaMinEff() && !((state.forcedStartWindow || 0) > 0);
+    // Prima del minimo non c'è mossa valida (Simone 21/11), tranne nella prova diretta.
+    const prestoCampagna = !state.provaDiretta && state.mossaTimer < mossaMinEff() && !((state.forcedStartWindow || 0) > 0);
     if (!prestoCampagna && (isMossaAligned() || (state.falseStartCount || 0) >= 3 || (state.forcedStartWindow || 0) > 0 || state.provaDiretta)) {
       releaseRace();
     } else {
