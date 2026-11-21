@@ -194,6 +194,15 @@ const MOSSA_MIN_DURATION = 30.0;
 // false, anche se la guidi tu); le mosse false prima del minimo restano.
 // Casino a pagamento ai canapi (Simone 21/11): raffiche di 8-12 s, pause di 5-9 s.
 const CASINO_RAFFICA_S = 8, CASINO_PAUSA_S = 5;
+// Al massimo 2 casino a pagamento per palio, fra accordi con le Contrade e fantini
+// corrotti (Simone 21/11: «i bot accettano max 2 che fanno casino ai canapi»).
+const CASINO_MAX_PALIO = 2;
+function casinoPresi(cmp) {
+  if (!cmp) return 0;
+  const acc = (cmp.accordi || []).filter((a) => a.obiettivi && a.obiettivi.indexOf("casino") >= 0).length;
+  const cor = Object.values(cmp.corruptOrders || {}).filter((o) => o && o.indexOf("casino") >= 0).length;
+  return acc + cor;
+}
 const MOSSA_CAMPAGNA_MIN = 600, MOSSA_CAMPAGNA_MIN_ALTO = 1200;
 const MOSSA_CAMPAGNA_FORZA = 1770, MOSSA_CAMPAGNA_TETTO = 1790;
 const MOSSA_MIN_QUOTA = 0.6;
@@ -7147,7 +7156,8 @@ function campaignCorruptionScreen() {
           .filter((o) => o && o.indexOf("interno") >= 0).length;
         const obiettivi = CORRUZIONE_OBIETTIVI.filter((o) => (!o.rivalOnly || (rivalRunning && !isRival))
           && !(o.playOnly && inAssisti)
-          && !(o.id === "interno" && internoCorrotti >= 1));
+          && !(o.id === "interno" && internoCorrotti >= 1)
+          && !(o.id === "casino" && casinoPresi(cmp) >= CASINO_MAX_PALIO));       // max 2 casino per palio
         openBtn.addEventListener("click", () => {
           // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
           // "buttati in curva" = killer: +100. "Resta ai canapi" costa il TRIPLO
@@ -7875,7 +7885,8 @@ function campaignAccordiScreen(spectate) {
           const passaPresi = conFin("passa");
           const obiettivi = ACCORDO_OBIETTIVI.filter((o) => (!o.rivalOnly || rivalRunning)   // "marca la rivale" solo se corre
             && !(o.id === "interno" && internoPresi >= 1)                                    // max 1 Contrada a pararti andando interno
-            && !(o.id === "passa" && passaPresi >= 1));                                      // max 1 Contrada a lasciarti passare
+            && !(o.id === "passa" && passaPresi >= 1)                                       // max 1 Contrada a lasciarti passare
+            && !(o.id === "casino" && casinoPresi(cmp) >= CASINO_MAX_PALIO));               // max 2 casino per palio
           openBtn.addEventListener("click", () => {
             // Trattativa a TUTTO SCHERMO (le checkbox inline si sovrapponevano a tutto).
             openFinalitaScreen({
@@ -10260,7 +10271,8 @@ function startMossa(fromTratta = false) {
       // fidarsi no. Deciso UNA volta per palio (questo codice gira all'inizio della
       // mossa), non a ogni frame.
       if (Math.random() >= 0.68) return;
-      if (a.obiettivi && a.obiettivi.indexOf("casino") >= 0) helper.objCasino = true;   // fa casino ai canapi
+      if (a.obiettivi && a.obiettivi.indexOf("casino") >= 0
+          && state.horses.filter((o) => o.objCasino).length < CASINO_MAX_PALIO) helper.objCasino = true;   // fa casino ai canapi (max 2)
       if (a.beneficiary === playerId) {          // il GIOCATORE corre: l'alleato aiuta te
         helper.friendlyToPlayer = true;
         if (!a.obiettivi) {                      // accordo classico (senza finalità): aiuto pieno
@@ -10360,7 +10372,8 @@ function startMossa(fromTratta = false) {
       // ce l'ha la RIVALE (è il cavallo-focus in autopilot), e così il ritardo da
       // corruzione non le veniva mai applicato.
       const h = byId[hid]; if (!h || h.id === playerId) return;
-      { const oc = cmp.corruptOrders && cmp.corruptOrders[hid]; if (oc && oc.indexOf("casino") >= 0) h.objCasino = true; }
+      { const oc = cmp.corruptOrders && cmp.corruptOrders[hid];
+        if (oc && oc.indexOf("casino") >= 0 && state.horses.filter((o) => o.objCasino).length < CASINO_MAX_PALIO) h.objCasino = true; }
       if (hid === rivalId) {
         // RIVALE corrotta: il suo fantino "si vende" → aspetta 1,8s alla mossa (non di
         // più) e poi parte (in corsa non ti dà comunque fastidio). Vale sia se corri
