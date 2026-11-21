@@ -190,6 +190,8 @@ const MOSSA_MIN_DURATION = 30.0;
 //  · Passato il minimo entra al primo momento buono, come oggi a mossa lunga.
 //  · A 14:30 si forza come allo scadere dei minuti scelti (fila schierata + 10 s);
 //    a 14:50 si forza comunque, anche con la fila non schierata: mai oltre 15 minuti.
+// Casino a pagamento ai canapi (Simone 21/11): raffiche di 8-12 s, pause di 5-9 s.
+const CASINO_RAFFICA_S = 8, CASINO_PAUSA_S = 5;
 const MOSSA_CAMPAGNA_MIN = 600, MOSSA_CAMPAGNA_MIN_ALTO = 840;
 const MOSSA_CAMPAGNA_FORZA = 870, MOSSA_CAMPAGNA_TETTO = 890;
 function mossaDiCampagna() { return !!(state.campaign && state.campaign.active && !state.campaign.quick); }
@@ -7032,6 +7034,7 @@ const CORRUZIONE_OBIETTIVI = [
   { id: "perdi",   label: "Non provare a vincere" },
   { id: "buttati", label: "Buttati sulla mia rivale in curva", rivalOnly: true },
   { id: "noMossa", label: "Se vai di rincorsa, non dare la mossa alla mia rivale", rivalOnly: true },
+  { id: "casino",  label: "Fai casino ai canapi: gira il cavallo e vai addosso a tutti" },
   // "fammi passare" ha senso solo se la mia Contrada corre (in ASSISTI non corro).
   { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare", playOnly: true },
 ];
@@ -7199,6 +7202,7 @@ const ACCORDO_OBIETTIVI = [
   { id: "spingi", label: "Spingi forte ai canapi per me" },
   { id: "passa",  label: "Lasciami passare e para gli altri in corsa" },
   { id: "mossa",  label: "Se vai di rincorsa, la mossa la dai a me" },
+  { id: "casino", label: "Fai casino ai canapi: gira il cavallo e vai addosso a tutti" },
   { id: "interno", label: "Para le altre contrade andando interno; se ti sono dietro, fammi passare" },
 ];
 function accordoMult(n) { return 1 + 0.5 * Math.max(0, (n || 1) - 1); }   // +50% del base per finalità extra
@@ -10143,6 +10147,7 @@ function startMossa(fromTratta = false) {
     horse.friendlyToPlayer = false;               // alleato/corrotto: non dà fastidio al giocatore
     horse.paraInRace = null;                       // (assisti) va davanti a questa Contrada per pararla in corsa
     horse.noMossaTarget = null;                    // fantino corrotto: a chi NON deve dare la mossa se va di rincorsa
+    horse.objCasino = false; horse.casinoOn = false; horse.casinoT = undefined; horse.casinoBersaglio = null;   // casino a pagamento
     horse.corruptDelay = 0;                        // ritardo extra al via (rivale corrotta in assisti)
     horse.vendettaAt = 4 + Math.random() * 24;   // quando scatta (secondi di tensione)
     horse.vendettaLife = 0;
@@ -10247,6 +10252,7 @@ function startMossa(fromTratta = false) {
       // fidarsi no. Deciso UNA volta per palio (questo codice gira all'inizio della
       // mossa), non a ogni frame.
       if (Math.random() >= 0.68) return;
+      if (a.obiettivi && a.obiettivi.indexOf("casino") >= 0) helper.objCasino = true;   // fa casino ai canapi
       if (a.beneficiary === playerId) {          // il GIOCATORE corre: l'alleato aiuta te
         helper.friendlyToPlayer = true;
         if (!a.obiettivi) {                      // accordo classico (senza finalità): aiuto pieno
@@ -10346,6 +10352,7 @@ function startMossa(fromTratta = false) {
       // ce l'ha la RIVALE (è il cavallo-focus in autopilot), e così il ritardo da
       // corruzione non le veniva mai applicato.
       const h = byId[hid]; if (!h || h.id === playerId) return;
+      { const oc = cmp.corruptOrders && cmp.corruptOrders[hid]; if (oc && oc.indexOf("casino") >= 0) h.objCasino = true; }
       if (hid === rivalId) {
         // RIVALE corrotta: il suo fantino "si vende" → aspetta 1,8s alla mossa (non di
         // più) e poi parte (in corsa non ti dà comunque fastidio). Vale sia se corri
@@ -12193,6 +12200,43 @@ function updateMossa(dt, time) {
             horse.shoveTimer = 0.4;       // breve: si rinnova solo finche' il varco e' stretto
           }
           progGoal = Math.min(progGoal, frontLine - 0.2);       // e non gli sta davanti
+        }
+      }
+
+      // ── CASINO A PAGAMENTO (Simone 21/11: «si può pagare i fantini e le contrade per
+      // fare casino ai canapi girando il cavallo e andando addosso a tutti»). Chi ha
+      // preso i denari per questo (accordo con la Contrada o fantino corrotto) a RAFFICHE
+      // si GIRA, anche di traverso, e va ADDOSSO a uno dei vicini, poi a un altro: spinge
+      // con forza (shoveDir: nella contesa vale ×3), la fila non si compone e chi prende
+      // le botte si innervosisce. Fra una raffica e l'altra una pausa, se no la mossa non
+      // partirebbe mai; il richiamo del Mossiere ha la precedenza.
+      if (horse.objCasino && tension && !((horse.recallTimer || 0) > 0)) {
+        horse.casinoT = (horse.casinoT ?? (2 + Math.random() * 4)) - dt;
+        if (horse.casinoT <= 0) {
+          horse.casinoOn = !horse.casinoOn;
+          horse.casinoT = horse.casinoOn ? CASINO_RAFFICA_S + Math.random() * 4 : CASINO_PAUSA_S + Math.random() * 4;
+          horse.casinoBersaglio = null;
+        }
+        if (horse.casinoOn) {
+          horse.casinoCambio = (horse.casinoCambio || 0) - dt;
+          let bers = horse.casinoBersaglio
+            ? state.horses.find((o) => o.id === horse.casinoBersaglio && o.called && !o.entering && !o.isRincorsa) : null;
+          if (!bers || horse.casinoCambio <= 0) {
+            const vicini = state.horses.filter((o) => o !== horse && o.called && !o.entering && !o.isRincorsa)
+              .sort((x, y) => Math.abs((x.mossaLane ?? 0) - horse.mossaLane) - Math.abs((y.mossaLane ?? 0) - horse.mossaLane));
+            bers = vicini[Math.floor(Math.random() * Math.min(3, vicini.length))] || null;   // uno dei tre più vicini
+            horse.casinoBersaglio = bers ? bers.id : null;
+            horse.casinoCambio = 2 + Math.random() * 1.5;
+          }
+          if (bers) {
+            const lato = Math.sign((bers.mossaLane ?? 0) - horse.mossaLane) || 1;
+            laneGoal = (bers.mossaLane ?? 0) - lato * 0.4;                 // gli va addosso (la calca li separa)
+            progGoal = (bers.mossaProgress ?? frontLine) - 0.6 + Math.sin(time * 0.9 + horse.phase) * 0.8;
+            horse.shoveDir = lato; horse.shoveTimer = 0.5;
+            if (Math.abs((bers.mossaLane ?? 0) - horse.mossaLane) < 1.8
+                && Math.abs((bers.mossaProgress ?? 0) - (horse.mossaProgress ?? 0)) < 2.2) nervPress(bers, horse.id);
+          }
+          turnGoal = Math.sin(time * 0.7 + horse.phase * 1.9) * 1.6;      // si gira, anche di traverso
         }
       }
 
